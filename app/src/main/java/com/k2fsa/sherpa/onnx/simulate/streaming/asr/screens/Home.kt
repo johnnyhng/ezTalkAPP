@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.util.Log
 import android.widget.Toast
@@ -27,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -44,8 +46,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.R
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.RecognitionResult
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveAsWav
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -56,6 +60,7 @@ private var audioRecord: AudioRecord? = null
 
 private const val sampleRateInHz = 16000
 private var samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
+private var mediaPlayer: MediaPlayer? = null
 
 @Composable
 fun HomeScreen() {
@@ -64,12 +69,22 @@ fun HomeScreen() {
 
     val activity = LocalContext.current as Activity
     var isStarted by remember { mutableStateOf(false) }
-    val resultList: MutableList<String> = remember { mutableStateListOf() }
+    // ★ Change resultList to hold RecognitionResult objects
+    val resultList: MutableList<RecognitionResult> = remember { mutableStateListOf() }
     val lazyColumnListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
     var lingerMs by remember { mutableFloatStateOf(3000f) }
     var partialIntervalMs by remember { mutableFloatStateOf(300f) }
+    var isPlaying by remember { mutableStateOf(false) }
+
+    // ★ Handle MediaPlayer lifecycle
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayer?.release()
+            mediaPlayer = null
+        }
+    }
 
     val onRecordingButtonClick: () -> Unit = {
         isStarted = !isStarted
@@ -80,6 +95,7 @@ fun HomeScreen() {
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 Log.i(TAG, "Recording is not allowed")
+                isStarted = false // Revert state if permission is denied
             } else {
                 // recording is allowed
                 val audioSource = MediaRecorder.AudioSource.MIC
@@ -107,6 +123,10 @@ fun HomeScreen() {
                         it.startRecording()
 
                         while (isStarted) {
+                            if (isPlaying) { // If playing, don't read from mic
+                                kotlinx.coroutines.delay(100) // Small delay to prevent busy-waiting
+                                continue
+                            }
                             val ret = audioRecord?.read(buffer, 0, buffer.size)
                             ret?.let { n ->
                                 val samples = FloatArray(n) { buffer[it] / 32768.0f }
@@ -127,11 +147,11 @@ fun HomeScreen() {
                     var lastText = ""
                     var added = false
 
-                    // ★ 使用滑桿狀態
                     val utteranceSegments = mutableListOf<FloatArray>()
                     var lastVadPacketAt = 0L
-                    val LINGER_MS = lingerMs.toLong()          // 可調：靜默多久視為一句話結束
-                    val PARTIAL_INTERVAL_MS = partialIntervalMs.toLong() // 可調：暫時字幕更新頻率
+                    // Use local variables from state
+                    val LINGER_MS = lingerMs.toLong()
+                    val PARTIAL_INTERVAL_MS = partialIntervalMs.toLong()
 
                     fun concatChunks(chunks: List<FloatArray>): FloatArray {
                         val total = chunks.sumOf { it.size }
@@ -147,14 +167,13 @@ fun HomeScreen() {
                     while (isStarted) {
                         for (s in samplesChannel) {
                             if (s.isEmpty()) break
+                            if (isPlaying) continue
 
                             buffer.addAll(s.toList())
 
-                            // 送進 VAD（以 512 為窗）
                             while (offset + windowSize < buffer.size) {
-                                SimulateStreamingAsr.vad.acceptWaveform(
-                                    buffer.subList(offset, offset + windowSize).toFloatArray()
-                                )
+                                val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
+                                SimulateStreamingAsr.vad.acceptWaveform(chunk)
                                 offset += windowSize
                                 if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
                                     isSpeechStarted = true
@@ -162,12 +181,10 @@ fun HomeScreen() {
                                 }
                             }
 
-                            // 暫時字幕：每 PARTIAL_INTERVAL_MS 更新一次
                             val elapsed = System.currentTimeMillis() - startTime
                             if (isSpeechStarted && elapsed > PARTIAL_INTERVAL_MS) {
                                 val stream = SimulateStreamingAsr.recognizer.createStream()
                                 try {
-                                    // 用「目前累積至 offset」的資料做即時解碼
                                     stream.acceptWaveform(
                                         buffer.subList(0, offset).toFloatArray(),
                                         sampleRateInHz
@@ -178,10 +195,11 @@ fun HomeScreen() {
 
                                     if (lastText.isNotBlank()) {
                                         if (!added || resultList.isEmpty()) {
-                                            resultList.add(lastText)
+                                            resultList.add(RecognitionResult(lastText, "")) // Add with empty path for now
                                             added = true
                                         } else {
-                                            resultList[resultList.size - 1] = lastText
+                                            val lastResult = resultList.last()
+                                            resultList[resultList.size - 1] = lastResult.copy(text = lastText)
                                         }
                                         coroutineScope.launch {
                                             lazyColumnListState.animateScrollToItem(resultList.size - 1)
@@ -193,7 +211,6 @@ fun HomeScreen() {
                                 startTime = System.currentTimeMillis()
                             }
 
-                            // ★ 改動點 1：把 VAD 產生的「完成小段」先收集起來，不急著做最終解碼
                             while (!SimulateStreamingAsr.vad.empty()) {
                                 val seg = SimulateStreamingAsr.vad.front().samples
                                 SimulateStreamingAsr.vad.pop()
@@ -201,28 +218,35 @@ fun HomeScreen() {
                                 lastVadPacketAt = System.currentTimeMillis()
                             }
 
-                            // ★ 改動點 2：若一段時間沒有新 VAD 片段，視為一句話結束 → 合併後做最終解碼
                             if (utteranceSegments.isNotEmpty()) {
                                 val since = System.currentTimeMillis() - lastVadPacketAt
                                 if (since >= LINGER_MS) {
                                     val utterance = concatChunks(utteranceSegments)
-
                                     val stream = SimulateStreamingAsr.recognizer.createStream()
                                     try {
                                         stream.acceptWaveform(utterance, sampleRateInHz)
                                         SimulateStreamingAsr.recognizer.decode(stream)
                                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
 
-                                        // 最終結果覆蓋暫時結果或新增一行
+                                        // ★ Save the audio as a WAV file
+                                        val wavPath = saveAsWav(
+                                            context = context,
+                                            samples = utterance,
+                                            sampleRate = sampleRateInHz,
+                                            numChannels = 1,
+                                            filename = "rec_${System.currentTimeMillis()}"
+                                        )
+
+                                        val newResult = RecognitionResult(result.text, wavPath ?: "")
+
                                         if (lastText.isNotBlank()) {
                                             if (added && resultList.isNotEmpty()) {
-                                                resultList[resultList.size - 1] = result.text
+                                                resultList[resultList.size - 1] = newResult
                                             } else {
-                                                resultList.add(result.text)
+                                                resultList.add(newResult)
                                             }
                                         } else {
-                                            // 沒有暫時結果也直接新增
-                                            resultList.add(result.text)
+                                            resultList.add(newResult)
                                         }
                                         coroutineScope.launch {
                                             lazyColumnListState.animateScrollToItem(resultList.size - 1)
@@ -230,8 +254,6 @@ fun HomeScreen() {
                                     } finally {
                                         stream.release()
                                     }
-
-                                    // Reset for next utterance
                                     utteranceSegments.clear()
                                     isSpeechStarted = false
                                     buffer = arrayListOf()
@@ -243,12 +265,15 @@ fun HomeScreen() {
                         }
                     }
                 }
-
             }
         } else {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
+            isPlaying = false
         }
     }
     Box(
@@ -285,24 +310,12 @@ fun HomeScreen() {
                 onRecordingButtonClick = onRecordingButtonClick,
                 onCopyButtonClick = {
                     if (resultList.isNotEmpty()) {
-                        val s = resultList.mapIndexed { i, s -> "${i + 1}: $s" }
+                        val s = resultList.mapIndexed { i, result -> "${i + 1}: ${result.text}" }
                             .joinToString(separator = "\n")
                         clipboardManager.setText(AnnotatedString(s))
-
-                        Toast.makeText(
-                            context,
-                            "Copied to clipboard",
-                            Toast.LENGTH_SHORT
-                        )
-                            .show()
+                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(
-                            context,
-                            "Nothing to copy",
-                            Toast.LENGTH_SHORT
-                        )
-                            .show()
-
+                        Toast.makeText(context, "Nothing to copy", Toast.LENGTH_SHORT).show()
                     }
                 },
                 onClearButtonClick = {
@@ -310,20 +323,57 @@ fun HomeScreen() {
                 }
             )
 
-            if (resultList.size > 0) {
+            if (resultList.isNotEmpty()) {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
                     contentPadding = PaddingValues(16.dp),
                     state = lazyColumnListState
                 ) {
-                    itemsIndexed(resultList) { index, line ->
-                        Text(text = "${index+1}: $line")
+                    itemsIndexed(resultList) { index, result ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(text = "${index + 1}: ${result.text}", modifier = Modifier.weight(1f))
+                            if (result.wavFilePath.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        if (isPlaying) {
+                                            mediaPlayer?.stop()
+                                            mediaPlayer?.release()
+                                            mediaPlayer = null
+                                            isPlaying = false
+                                        } else {
+                                            isPlaying = true
+                                            mediaPlayer = MediaPlayer().apply {
+                                                try {
+                                                    setDataSource(result.wavFilePath)
+                                                    prepare()
+                                                    start()
+                                                    setOnCompletionListener {
+                                                        it.release()
+                                                        mediaPlayer = null
+                                                        isPlaying = false
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e(TAG, "MediaPlayer failed for ${result.wavFilePath}", e)
+                                                    release()
+                                                    mediaPlayer = null
+                                                    isPlaying = false
+                                                }
+                                            }
+                                        }
+                                    },
+                                    enabled = !isStarted || (isStarted && !isPlaying) || (isStarted && isPlaying && mediaPlayer?.isPlaying == true)
+                                ) {
+                                    Text(text = if (isPlaying && mediaPlayer?.isPlaying == true) "Stop" else "Play")
+                                }
+                            }
+                        }
                     }
                 }
             }
-
         }
     }
 }
@@ -341,20 +391,14 @@ private fun HomeButtonRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
     ) {
-        Button(
-            onClick = onRecordingButtonClick
-        ) {
+        Button(onClick = onRecordingButtonClick) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
-
         Spacer(modifier = Modifier.width(24.dp))
-
         Button(onClick = onCopyButtonClick) {
             Text(text = stringResource(id = R.string.copy))
         }
-
         Spacer(modifier = Modifier.width(24.dp))
-
         Button(onClick = onClearButtonClick) {
             Text(text = stringResource(id = R.string.clear))
         }
