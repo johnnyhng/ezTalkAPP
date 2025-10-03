@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -70,7 +71,6 @@ fun HomeScreen() {
 
     val activity = LocalContext.current as Activity
     var isStarted by remember { mutableStateOf(false) }
-    // ★ Change resultList to hold RecognitionResult objects
     val resultList: MutableList<RecognitionResult> = remember { mutableStateListOf() }
     val lazyColumnListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -78,11 +78,12 @@ fun HomeScreen() {
     var lingerMs by remember { mutableFloatStateOf(3000f) }
     var partialIntervalMs by remember { mutableFloatStateOf(300f) }
 
-    // ★ Refined state for playback control
+    // ★ New state for the switch
+    var saveVadSegmentsOnly by remember { mutableStateOf(false) }
+
     var currentlyPlayingPath by remember { mutableStateOf<String?>(null) }
     val isPlaying = currentlyPlayingPath != null
 
-    // ★ Handle MediaPlayer lifecycle
     DisposableEffect(Unit) {
         onDispose {
             mediaPlayer?.release()
@@ -106,9 +107,8 @@ fun HomeScreen() {
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 Log.i(TAG, "Recording is not allowed")
-                isStarted = false // Revert state if permission is denied
+                isStarted = false
             } else {
-                // recording is allowed
                 val audioSource = MediaRecorder.AudioSource.MIC
                 val channelConfig = AudioFormat.CHANNEL_IN_MONO
                 val audioFormat = AudioFormat.ENCODING_PCM_16BIT
@@ -119,23 +119,23 @@ fun HomeScreen() {
                     sampleRateInHz,
                     AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT,
-                    numBytes * 2 // a sample has two bytes as we are using 16-bit PCM
+                    numBytes * 2
                 )
 
                 SimulateStreamingAsr.vad.reset()
 
                 CoroutineScope(Dispatchers.IO).launch {
                     Log.i(TAG, "processing samples")
-                    val interval = 0.1 // i.e., 100 ms
-                    val bufferSize = (interval * sampleRateInHz).toInt() // in samples
+                    val interval = 0.1
+                    val bufferSize = (interval * sampleRateInHz).toInt()
                     val buffer = ShortArray(bufferSize)
 
                     audioRecord?.let { it ->
                         it.startRecording()
 
                         while (isStarted) {
-                            if (isPlaying) { // If playing, don't read from mic
-                                delay(100) // Small delay to prevent busy-waiting
+                            if (isPlaying) {
+                                delay(100)
                                 continue
                             }
                             val ret = audioRecord?.read(buffer, 0, buffer.size)
@@ -161,6 +161,9 @@ fun HomeScreen() {
                     val utteranceSegments = mutableListOf<FloatArray>()
                     var lastVadPacketAt = 0L
 
+                    // ★ Buffer for saving the entire audio stream for an utterance
+                    var fullRecordingBuffer = arrayListOf<Float>()
+
                     fun concatChunks(chunks: List<FloatArray>): FloatArray {
                         val total = chunks.sumOf { it.size }
                         val out = FloatArray(total)
@@ -173,7 +176,6 @@ fun HomeScreen() {
                     }
 
                     while (isStarted) {
-                        // Use latest values from state inside the loop
                         val LINGER_MS = lingerMs.toLong()
                         val PARTIAL_INTERVAL_MS = partialIntervalMs.toLong()
 
@@ -183,6 +185,11 @@ fun HomeScreen() {
 
                             buffer.addAll(s.toList())
 
+                            // ★ If speech has started and we need to save the full stream, add samples to the full buffer
+                            if (isSpeechStarted && !saveVadSegmentsOnly) {
+                                fullRecordingBuffer.addAll(s.toList())
+                            }
+
                             while (offset + windowSize < buffer.size) {
                                 val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
                                 SimulateStreamingAsr.vad.acceptWaveform(chunk)
@@ -190,6 +197,13 @@ fun HomeScreen() {
                                 if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
                                     isSpeechStarted = true
                                     startTime = System.currentTimeMillis()
+
+                                    // ★ Start capturing full audio stream if needed
+                                    if (!saveVadSegmentsOnly) {
+                                        fullRecordingBuffer.clear()
+                                        // Add the buffer content that triggered the speech detection
+                                        fullRecordingBuffer.addAll(buffer)
+                                    }
                                 }
                             }
 
@@ -207,7 +221,7 @@ fun HomeScreen() {
 
                                     if (lastText.isNotBlank()) {
                                         if (!added || resultList.isEmpty()) {
-                                            resultList.add(RecognitionResult(lastText, "")) // Add with empty path for now
+                                            resultList.add(RecognitionResult(lastText, ""))
                                             added = true
                                         } else {
                                             val lastResult = resultList.last()
@@ -233,17 +247,25 @@ fun HomeScreen() {
                             if (utteranceSegments.isNotEmpty()) {
                                 val since = System.currentTimeMillis() - lastVadPacketAt
                                 if (since >= LINGER_MS) {
-                                    val utterance = concatChunks(utteranceSegments)
+                                    // ★ Determine which audio data to save
+                                    val audioToSave = if (saveVadSegmentsOnly) {
+                                        concatChunks(utteranceSegments)
+                                    } else {
+                                        fullRecordingBuffer.toFloatArray()
+                                    }
+
+                                    // Use the VAD segments for final recognition, as it's cleaner
+                                    val utteranceForRecognition = concatChunks(utteranceSegments)
+
                                     val stream = SimulateStreamingAsr.recognizer.createStream()
                                     try {
-                                        stream.acceptWaveform(utterance, sampleRateInHz)
+                                        stream.acceptWaveform(utteranceForRecognition, sampleRateInHz)
                                         SimulateStreamingAsr.recognizer.decode(stream)
                                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
 
-                                        // ★ Save the audio as a WAV file
                                         val wavPath = saveAsWav(
                                             context = context,
-                                            samples = utterance,
+                                            samples = audioToSave,
                                             sampleRate = sampleRateInHz,
                                             numChannels = 1,
                                             filename = "rec_${System.currentTimeMillis()}"
@@ -266,7 +288,9 @@ fun HomeScreen() {
                                     } finally {
                                         stream.release()
                                     }
+                                    // Reset for next utterance
                                     utteranceSegments.clear()
+                                    fullRecordingBuffer.clear()
                                     isSpeechStarted = false
                                     buffer = arrayListOf()
                                     offset = 0
@@ -282,7 +306,7 @@ fun HomeScreen() {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
-            stopPlayback() // Stop any playback when recording stops
+            stopPlayback()
         }
     }
     Box(
@@ -291,28 +315,48 @@ fun HomeScreen() {
     ) {
         Column(modifier = Modifier) {
             // Delay Slider
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 Text(text = "Delay: ${lingerMs.roundToInt()} ms", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 Slider(
                     value = lingerMs,
                     onValueChange = { lingerMs = it },
                     valueRange = 0f..10000f,
                     steps = ((10000f - 0f) / 100f).toInt() - 1,
-                    enabled = !isStarted && !isPlaying // ★ Disable when recording or playing
+                    enabled = !isStarted && !isPlaying
                 )
             }
 
             // Recognize Time Slider
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                 Text(text = "Recognize Time: ${partialIntervalMs.roundToInt()} ms", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 Slider(
                     value = partialIntervalMs,
                     onValueChange = { partialIntervalMs = it },
                     valueRange = 200f..1000f,
                     steps = ((1000f - 200f) / 50f).toInt() - 1,
-                    enabled = !isStarted && !isPlaying // ★ Disable when recording or playing
+                    enabled = !isStarted && !isPlaying
                 )
             }
+
+            // ★ Save Mode Switch
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(text = "Save VAD Segments")
+                Spacer(modifier = Modifier.width(8.dp))
+                Switch(
+                    checked = !saveVadSegmentsOnly,
+                    onCheckedChange = { saveVadSegmentsOnly = !it },
+                    enabled = !isStarted && !isPlaying
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "Save Full Audio")
+            }
+
 
             HomeButtonRow(
                 isStarted = isStarted,
@@ -330,7 +374,7 @@ fun HomeScreen() {
                 onClearButtonClick = {
                     resultList.clear()
                 },
-                isPlaybackActive = isPlaying // ★ Pass playback state
+                isPlaybackActive = isPlaying
             )
 
             if (resultList.isNotEmpty()) {
@@ -349,13 +393,10 @@ fun HomeScreen() {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Button(
                                     onClick = {
-                                        // ★ Centralized playback logic
                                         if (currentlyPlayingPath == result.wavFilePath) {
-                                            // This button is the "Stop" button, so stop playback
                                             stopPlayback()
                                         } else {
-                                            // This is a "Play" button
-                                            stopPlayback() // Stop any previous playback first
+                                            stopPlayback()
                                             currentlyPlayingPath = result.wavFilePath
                                             mediaPlayer = MediaPlayer().apply {
                                                 try {
@@ -363,20 +404,17 @@ fun HomeScreen() {
                                                     prepare()
                                                     start()
                                                     setOnCompletionListener {
-                                                        // Automatically stop when finished
                                                         stopPlayback()
                                                     }
                                                 } catch (e: Exception) {
                                                     Log.e(TAG, "MediaPlayer failed for ${result.wavFilePath}", e)
-                                                    stopPlayback() // Clean up on error
+                                                    stopPlayback()
                                                 }
                                             }
                                         }
                                     },
-                                    // ★ Enable only if not recording AND (it's the active player OR no player is active)
                                     enabled = !isStarted && (!isPlaying || currentlyPlayingPath == result.wavFilePath)
                                 ) {
-                                    // ★ Text depends on whether this specific item is playing
                                     Text(text = if (currentlyPlayingPath == result.wavFilePath) "Stop" else "Play")
                                 }
                             }
@@ -396,7 +434,7 @@ private fun HomeButtonRow(
     onRecordingButtonClick: () -> Unit,
     onCopyButtonClick: () -> Unit,
     onClearButtonClick: () -> Unit,
-    isPlaybackActive: Boolean // ★ New parameter to control enabled state
+    isPlaybackActive: Boolean
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -404,21 +442,21 @@ private fun HomeButtonRow(
     ) {
         Button(
             onClick = onRecordingButtonClick,
-            enabled = !isPlaybackActive // ★ Disable if playback is active
+            enabled = !isPlaybackActive
         ) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
         Spacer(modifier = Modifier.width(24.dp))
         Button(
             onClick = onCopyButtonClick,
-            enabled = !isPlaybackActive // ★ Disable if playback is active
+            enabled = !isPlaybackActive
         ) {
             Text(text = stringResource(id = R.string.copy))
         }
         Spacer(modifier = Modifier.width(24.dp))
         Button(
             onClick = onClearButtonClick,
-            enabled = !isPlaybackActive // ★ Disable if playback is active
+            enabled = !isPlaybackActive
         ) {
             Text(text = stringResource(id = R.string.clear))
         }
