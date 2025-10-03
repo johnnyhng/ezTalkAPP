@@ -53,6 +53,7 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveAsWav
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -76,7 +77,10 @@ fun HomeScreen() {
 
     var lingerMs by remember { mutableFloatStateOf(3000f) }
     var partialIntervalMs by remember { mutableFloatStateOf(300f) }
-    var isPlaying by remember { mutableStateOf(false) }
+
+    // ★ Refined state for playback control
+    var currentlyPlayingPath by remember { mutableStateOf<String?>(null) }
+    val isPlaying = currentlyPlayingPath != null
 
     // ★ Handle MediaPlayer lifecycle
     DisposableEffect(Unit) {
@@ -84,6 +88,13 @@ fun HomeScreen() {
             mediaPlayer?.release()
             mediaPlayer = null
         }
+    }
+
+    fun stopPlayback() {
+        mediaPlayer?.stop()
+        mediaPlayer?.release()
+        mediaPlayer = null
+        currentlyPlayingPath = null
     }
 
     val onRecordingButtonClick: () -> Unit = {
@@ -124,7 +135,7 @@ fun HomeScreen() {
 
                         while (isStarted) {
                             if (isPlaying) { // If playing, don't read from mic
-                                kotlinx.coroutines.delay(100) // Small delay to prevent busy-waiting
+                                delay(100) // Small delay to prevent busy-waiting
                                 continue
                             }
                             val ret = audioRecord?.read(buffer, 0, buffer.size)
@@ -149,9 +160,6 @@ fun HomeScreen() {
 
                     val utteranceSegments = mutableListOf<FloatArray>()
                     var lastVadPacketAt = 0L
-                    // Use local variables from state
-                    val LINGER_MS = lingerMs.toLong()
-                    val PARTIAL_INTERVAL_MS = partialIntervalMs.toLong()
 
                     fun concatChunks(chunks: List<FloatArray>): FloatArray {
                         val total = chunks.sumOf { it.size }
@@ -165,6 +173,10 @@ fun HomeScreen() {
                     }
 
                     while (isStarted) {
+                        // Use latest values from state inside the loop
+                        val LINGER_MS = lingerMs.toLong()
+                        val PARTIAL_INTERVAL_MS = partialIntervalMs.toLong()
+
                         for (s in samplesChannel) {
                             if (s.isEmpty()) break
                             if (isPlaying) continue
@@ -270,10 +282,7 @@ fun HomeScreen() {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
-            mediaPlayer?.stop()
-            mediaPlayer?.release()
-            mediaPlayer = null
-            isPlaying = false
+            stopPlayback() // Stop any playback when recording stops
         }
     }
     Box(
@@ -289,7 +298,7 @@ fun HomeScreen() {
                     onValueChange = { lingerMs = it },
                     valueRange = 0f..10000f,
                     steps = ((10000f - 0f) / 100f).toInt() - 1,
-                    enabled = !isStarted // Disable when recording
+                    enabled = !isStarted && !isPlaying // ★ Disable when recording or playing
                 )
             }
 
@@ -301,7 +310,7 @@ fun HomeScreen() {
                     onValueChange = { partialIntervalMs = it },
                     valueRange = 200f..1000f,
                     steps = ((1000f - 200f) / 50f).toInt() - 1,
-                    enabled = !isStarted // Disable when recording
+                    enabled = !isStarted && !isPlaying // ★ Disable when recording or playing
                 )
             }
 
@@ -320,7 +329,8 @@ fun HomeScreen() {
                 },
                 onClearButtonClick = {
                     resultList.clear()
-                }
+                },
+                isPlaybackActive = isPlaying // ★ Pass playback state
             )
 
             if (resultList.isNotEmpty()) {
@@ -339,35 +349,35 @@ fun HomeScreen() {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Button(
                                     onClick = {
-                                        if (isPlaying) {
-                                            mediaPlayer?.stop()
-                                            mediaPlayer?.release()
-                                            mediaPlayer = null
-                                            isPlaying = false
+                                        // ★ Centralized playback logic
+                                        if (currentlyPlayingPath == result.wavFilePath) {
+                                            // This button is the "Stop" button, so stop playback
+                                            stopPlayback()
                                         } else {
-                                            isPlaying = true
+                                            // This is a "Play" button
+                                            stopPlayback() // Stop any previous playback first
+                                            currentlyPlayingPath = result.wavFilePath
                                             mediaPlayer = MediaPlayer().apply {
                                                 try {
                                                     setDataSource(result.wavFilePath)
                                                     prepare()
                                                     start()
                                                     setOnCompletionListener {
-                                                        it.release()
-                                                        mediaPlayer = null
-                                                        isPlaying = false
+                                                        // Automatically stop when finished
+                                                        stopPlayback()
                                                     }
                                                 } catch (e: Exception) {
                                                     Log.e(TAG, "MediaPlayer failed for ${result.wavFilePath}", e)
-                                                    release()
-                                                    mediaPlayer = null
-                                                    isPlaying = false
+                                                    stopPlayback() // Clean up on error
                                                 }
                                             }
                                         }
                                     },
-                                    enabled = !isStarted || (isStarted && !isPlaying) || (isStarted && isPlaying && mediaPlayer?.isPlaying == true)
+                                    // ★ Enable only if not recording AND (it's the active player OR no player is active)
+                                    enabled = !isStarted && (!isPlaying || currentlyPlayingPath == result.wavFilePath)
                                 ) {
-                                    Text(text = if (isPlaying && mediaPlayer?.isPlaying == true) "Stop" else "Play")
+                                    // ★ Text depends on whether this specific item is playing
+                                    Text(text = if (currentlyPlayingPath == result.wavFilePath) "Stop" else "Play")
                                 }
                             }
                         }
@@ -386,20 +396,30 @@ private fun HomeButtonRow(
     onRecordingButtonClick: () -> Unit,
     onCopyButtonClick: () -> Unit,
     onClearButtonClick: () -> Unit,
+    isPlaybackActive: Boolean // ★ New parameter to control enabled state
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
     ) {
-        Button(onClick = onRecordingButtonClick) {
+        Button(
+            onClick = onRecordingButtonClick,
+            enabled = !isPlaybackActive // ★ Disable if playback is active
+        ) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
         Spacer(modifier = Modifier.width(24.dp))
-        Button(onClick = onCopyButtonClick) {
+        Button(
+            onClick = onCopyButtonClick,
+            enabled = !isPlaybackActive // ★ Disable if playback is active
+        ) {
             Text(text = stringResource(id = R.string.copy))
         }
         Spacer(modifier = Modifier.width(24.dp))
-        Button(onClick = onClearButtonClick) {
+        Button(
+            onClick = onClearButtonClick,
+            enabled = !isPlaybackActive // ★ Disable if playback is active
+        ) {
             Text(text = stringResource(id = R.string.clear))
         }
     }
