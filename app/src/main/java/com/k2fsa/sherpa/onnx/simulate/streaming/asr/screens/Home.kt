@@ -30,8 +30,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.R
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.RecognitionResult
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
@@ -59,37 +62,32 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
-
-private const val sampleRateInHz = 16000
-private var samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
 private var mediaPlayer: MediaPlayer? = null
+// Recreate the channel inside the effect to ensure it's fresh on each start
+// private val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
+private const val sampleRateInHz = 16000
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    // Inject the ViewModel. It will be automatically created and retained across config changes.
+    homeViewModel: HomeViewModel = viewModel()
+) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-
     val activity = LocalContext.current as Activity
-    var isStarted by remember { mutableStateOf(false) }
-    val resultList: MutableList<RecognitionResult> = remember { mutableStateListOf() }
-    val lazyColumnListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    var lingerMs by remember { mutableFloatStateOf(3000f) }
-    var partialIntervalMs by remember { mutableFloatStateOf(300f) }
+    // UI state
+    var isStarted by remember { mutableStateOf(false) }
+    val resultList = remember { mutableStateListOf<RecognitionResult>() }
+    val lazyColumnListState = rememberLazyListState()
 
-    // ★ New state for the switch
-    var saveVadSegmentsOnly by remember { mutableStateOf(false) }
+    // Collect settings from the ViewModel. `collectAsState` makes the UI react to changes.
+    val userSettings by homeViewModel.userSettings.collectAsState()
 
+    // Playback state
     var currentlyPlayingPath by remember { mutableStateOf<String?>(null) }
-    val isPlaying = currentlyPlayingPath != null
-
-    DisposableEffect(Unit) {
-        onDispose {
-            mediaPlayer?.release()
-            mediaPlayer = null
-        }
-    }
+    val isPlaying by remember { derivedStateOf { currentlyPlayingPath != null } }
 
     fun stopPlayback() {
         mediaPlayer?.stop()
@@ -98,8 +96,20 @@ fun HomeScreen() {
         currentlyPlayingPath = null
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            audioRecord?.release()
+            audioRecord = null
+            mediaPlayer?.release()
+            mediaPlayer = null
+        }
+    }
+
     val onRecordingButtonClick: () -> Unit = {
         isStarted = !isStarted
+    }
+
+    LaunchedEffect(isStarted, userSettings) {
         if (isStarted) {
             if (ActivityCompat.checkSelfPermission(
                     activity,
@@ -109,6 +119,9 @@ fun HomeScreen() {
                 Log.i(TAG, "Recording is not allowed")
                 isStarted = false
             } else {
+                // Create a new channel every time we start recording
+                val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
+
                 val audioSource = MediaRecorder.AudioSource.MIC
                 val channelConfig = AudioFormat.CHANNEL_IN_MONO
                 val audioFormat = AudioFormat.ENCODING_PCM_16BIT
@@ -121,35 +134,38 @@ fun HomeScreen() {
                     AudioFormat.ENCODING_PCM_16BIT,
                     numBytes * 2
                 )
-
                 SimulateStreamingAsr.vad.reset()
 
-                CoroutineScope(Dispatchers.IO).launch {
-                    Log.i(TAG, "processing samples")
-                    val interval = 0.1
+                // --- Coroutine to record audio ---
+                val recordingJob = CoroutineScope(Dispatchers.IO).launch {
+                    Log.i(TAG, "Audio recording started")
+                    val interval = 0.1 // 100ms
                     val bufferSize = (interval * sampleRateInHz).toInt()
                     val buffer = ShortArray(bufferSize)
 
-                    audioRecord?.let { it ->
-                        it.startRecording()
-
-                        while (isStarted) {
-                            if (isPlaying) {
-                                delay(100)
-                                continue
-                            }
-                            val ret = audioRecord?.read(buffer, 0, buffer.size)
-                            ret?.let { n ->
-                                val samples = FloatArray(n) { buffer[it] / 32768.0f }
-                                samplesChannel.send(samples)
-                            }
+                    audioRecord?.startRecording()
+                    while (isStarted) {
+                        if (isPlaying) {
+                            delay(100)
+                            continue
                         }
-                        val samples = FloatArray(0)
-                        samplesChannel.send(samples)
+                        val ret = audioRecord?.read(buffer, 0, buffer.size)
+                        if (ret != null && ret > 0) {
+                            val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
+                            samplesChannel.send(samples)
+                        }
                     }
+                    samplesChannel.close() // Close the channel to signal the end
+                    Log.i(TAG, "Audio recording stopped")
                 }
 
-                CoroutineScope(Dispatchers.Default).launch {
+                // --- Coroutine to process audio ---
+                val processingJob = CoroutineScope(Dispatchers.Default).launch {
+                    // Use settings from the ViewModel's state
+                    val LINGER_MS = userSettings.lingerMs
+                    val PARTIAL_INTERVAL_MS = userSettings.partialIntervalMs
+                    val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
+
                     var buffer = arrayListOf<Float>()
                     var offset = 0
                     val windowSize = 512
@@ -161,154 +177,152 @@ fun HomeScreen() {
                     val utteranceSegments = mutableListOf<FloatArray>()
                     var lastVadPacketAt = 0L
 
-                    // ★ Buffer for saving the entire audio stream for an utterance
                     var fullRecordingBuffer = arrayListOf<Float>()
 
-                    fun concatChunks(chunks: List<FloatArray>): FloatArray {
-                        val total = chunks.sumOf { it.size }
-                        val out = FloatArray(total)
-                        var pos = 0
-                        for (c in chunks) {
-                            c.copyInto(out, pos)
-                            pos += c.size
+                    // Process audio from the channel
+                    for (s in samplesChannel) { // This loop will now correctly terminate when channel is closed
+                        if (!isStarted) break // Exit loop
+                        if (isPlaying) continue
+
+                        buffer.addAll(s.toList())
+
+                        if (isSpeechStarted && !saveVadSegmentsOnly) {
+                            fullRecordingBuffer.addAll(s.toList())
                         }
-                        return out
-                    }
 
-                    while (isStarted) {
-                        val LINGER_MS = lingerMs.toLong()
-                        val PARTIAL_INTERVAL_MS = partialIntervalMs.toLong()
+                        while (offset + windowSize < buffer.size) {
+                            val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
+                            SimulateStreamingAsr.vad.acceptWaveform(chunk)
+                            offset += windowSize
+                            if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
+                                isSpeechStarted = true
+                                startTime = System.currentTimeMillis()
 
-                        for (s in samplesChannel) {
-                            if (s.isEmpty()) break
-                            if (isPlaying) continue
-
-                            buffer.addAll(s.toList())
-
-                            // ★ If speech has started and we need to save the full stream, add samples to the full buffer
-                            if (isSpeechStarted && !saveVadSegmentsOnly) {
-                                fullRecordingBuffer.addAll(s.toList())
-                            }
-
-                            while (offset + windowSize < buffer.size) {
-                                val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
-                                SimulateStreamingAsr.vad.acceptWaveform(chunk)
-                                offset += windowSize
-                                if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
-                                    isSpeechStarted = true
-                                    startTime = System.currentTimeMillis()
-
-                                    // ★ Start capturing full audio stream if needed
-                                    if (!saveVadSegmentsOnly) {
-                                        fullRecordingBuffer.clear()
-                                        // Add the buffer content that triggered the speech detection
-                                        fullRecordingBuffer.addAll(buffer)
-                                    }
+                                if (!saveVadSegmentsOnly) {
+                                    fullRecordingBuffer.clear()
+                                    fullRecordingBuffer.addAll(buffer)
                                 }
                             }
+                        }
 
-                            val elapsed = System.currentTimeMillis() - startTime
-                            if (isSpeechStarted && elapsed > PARTIAL_INTERVAL_MS) {
+                        val elapsed = System.currentTimeMillis() - startTime
+                        if (isSpeechStarted && elapsed > PARTIAL_INTERVAL_MS) {
+                            val stream = SimulateStreamingAsr.recognizer.createStream()
+                            try {
+                                stream.acceptWaveform(
+                                    buffer.subList(0, offset).toFloatArray(),
+                                    sampleRateInHz
+                                )
+                                SimulateStreamingAsr.recognizer.decode(stream)
+                                val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                lastText = result.text
+
+                                if (lastText.isNotBlank()) {
+                                    if (!added || resultList.isEmpty()) {
+                                        resultList.add(RecognitionResult(lastText, ""))
+                                        added = true
+                                    } else {
+                                        val lastResult = resultList.last()
+                                        resultList[resultList.size - 1] =
+                                            lastResult.copy(text = lastText)
+                                    }
+                                    coroutineScope.launch {
+                                        lazyColumnListState.animateScrollToItem(resultList.size - 1)
+                                    }
+                                }
+                            } finally {
+                                stream.release()
+                            }
+                            startTime = System.currentTimeMillis()
+                        }
+
+                        while (!SimulateStreamingAsr.vad.empty()) {
+                            val seg = SimulateStreamingAsr.vad.front().samples
+                            SimulateStreamingAsr.vad.pop()
+                            utteranceSegments.add(seg)
+                            lastVadPacketAt = System.currentTimeMillis()
+                        }
+
+                        if (utteranceSegments.isNotEmpty()) {
+                            val since = System.currentTimeMillis() - lastVadPacketAt
+                            if (since >= LINGER_MS) {
+                                // Manual concatenation of FloatArray chunks
+                                val totalSize = utteranceSegments.sumOf { it.size }
+                                val concatenated = FloatArray(totalSize)
+                                var currentPos = 0
+                                for (segment in utteranceSegments) {
+                                    System.arraycopy(
+                                        segment,
+                                        0,
+                                        concatenated,
+                                        currentPos,
+                                        segment.size
+                                    )
+                                    currentPos += segment.size
+                                }
+                                val utteranceForRecognition = concatenated
+
+                                val audioToSave = if (saveVadSegmentsOnly) {
+                                    utteranceForRecognition
+                                } else {
+                                    fullRecordingBuffer.toFloatArray()
+                                }
+
                                 val stream = SimulateStreamingAsr.recognizer.createStream()
                                 try {
                                     stream.acceptWaveform(
-                                        buffer.subList(0, offset).toFloatArray(),
+                                        utteranceForRecognition,
                                         sampleRateInHz
                                     )
                                     SimulateStreamingAsr.recognizer.decode(stream)
                                     val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                    lastText = result.text
+
+                                    val wavPath = saveAsWav(
+                                        context = context,
+                                        samples = audioToSave,
+                                        sampleRate = sampleRateInHz,
+                                        numChannels = 1,
+                                        filename = "rec_${System.currentTimeMillis()}"
+                                    )
+
+                                    val newResult = RecognitionResult(result.text, wavPath ?: "")
 
                                     if (lastText.isNotBlank()) {
-                                        if (!added || resultList.isEmpty()) {
-                                            resultList.add(RecognitionResult(lastText, ""))
-                                            added = true
+                                        if (added && resultList.isNotEmpty()) {
+                                            resultList[resultList.size - 1] = newResult
                                         } else {
-                                            val lastResult = resultList.last()
-                                            resultList[resultList.size - 1] = lastResult.copy(text = lastText)
+                                            resultList.add(newResult)
                                         }
-                                        coroutineScope.launch {
-                                            lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                                        }
+                                    } else {
+                                        resultList.add(newResult)
+                                    }
+                                    coroutineScope.launch {
+                                        lazyColumnListState.animateScrollToItem(resultList.size - 1)
                                     }
                                 } finally {
                                     stream.release()
                                 }
-                                startTime = System.currentTimeMillis()
-                            }
-
-                            while (!SimulateStreamingAsr.vad.empty()) {
-                                val seg = SimulateStreamingAsr.vad.front().samples
-                                SimulateStreamingAsr.vad.pop()
-                                utteranceSegments.add(seg)
-                                lastVadPacketAt = System.currentTimeMillis()
-                            }
-
-                            if (utteranceSegments.isNotEmpty()) {
-                                val since = System.currentTimeMillis() - lastVadPacketAt
-                                if (since >= LINGER_MS) {
-                                    // ★ Determine which audio data to save
-                                    val audioToSave = if (saveVadSegmentsOnly) {
-                                        concatChunks(utteranceSegments)
-                                    } else {
-                                        fullRecordingBuffer.toFloatArray()
-                                    }
-
-                                    // Use the VAD segments for final recognition, as it's cleaner
-                                    val utteranceForRecognition = concatChunks(utteranceSegments)
-
-                                    val stream = SimulateStreamingAsr.recognizer.createStream()
-                                    try {
-                                        stream.acceptWaveform(utteranceForRecognition, sampleRateInHz)
-                                        SimulateStreamingAsr.recognizer.decode(stream)
-                                        val result = SimulateStreamingAsr.recognizer.getResult(stream)
-
-                                        val wavPath = saveAsWav(
-                                            context = context,
-                                            samples = audioToSave,
-                                            sampleRate = sampleRateInHz,
-                                            numChannels = 1,
-                                            filename = "rec_${System.currentTimeMillis()}"
-                                        )
-
-                                        val newResult = RecognitionResult(result.text, wavPath ?: "")
-
-                                        if (lastText.isNotBlank()) {
-                                            if (added && resultList.isNotEmpty()) {
-                                                resultList[resultList.size - 1] = newResult
-                                            } else {
-                                                resultList.add(newResult)
-                                            }
-                                        } else {
-                                            resultList.add(newResult)
-                                        }
-                                        coroutineScope.launch {
-                                            lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                                        }
-                                    } finally {
-                                        stream.release()
-                                    }
-                                    // Reset for next utterance
-                                    utteranceSegments.clear()
-                                    fullRecordingBuffer.clear()
-                                    isSpeechStarted = false
-                                    buffer = arrayListOf()
-                                    offset = 0
-                                    lastText = ""
-                                    added = false
-                                }
+                                utteranceSegments.clear()
+                                fullRecordingBuffer.clear()
+                                isSpeechStarted = false
+                                buffer = arrayListOf()
+                                offset = 0
+                                lastText = ""
+                                added = false
                             }
                         }
                     }
                 }
             }
         } else {
+            // This block runs when isStarted becomes false
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
             stopPlayback()
         }
     }
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter,
@@ -316,10 +330,14 @@ fun HomeScreen() {
         Column(modifier = Modifier) {
             // Delay Slider
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text(text = "Delay: ${lingerMs.roundToInt()} ms", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text(
+                    text = "Delay: ${userSettings.lingerMs.roundToInt()} ms",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
                 Slider(
-                    value = lingerMs,
-                    onValueChange = { lingerMs = it },
+                    value = userSettings.lingerMs,
+                    onValueChange = { homeViewModel.updateLingerMs(it) },
                     valueRange = 0f..10000f,
                     steps = ((10000f - 0f) / 100f).toInt() - 1,
                     enabled = !isStarted && !isPlaying
@@ -328,17 +346,21 @@ fun HomeScreen() {
 
             // Recognize Time Slider
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text(text = "Recognize Time: ${partialIntervalMs.roundToInt()} ms", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                Text(
+                    text = "Recognize Time: ${userSettings.partialIntervalMs.roundToInt()} ms",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
                 Slider(
-                    value = partialIntervalMs,
-                    onValueChange = { partialIntervalMs = it },
+                    value = userSettings.partialIntervalMs,
+                    onValueChange = { homeViewModel.updatePartialIntervalMs(it) },
                     valueRange = 200f..1000f,
                     steps = ((1000f - 200f) / 50f).toInt() - 1,
                     enabled = !isStarted && !isPlaying
                 )
             }
 
-            // ★ Save Mode Switch
+            // Save Mode Switch
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -349,14 +371,13 @@ fun HomeScreen() {
                 Text(text = "Save VAD Segments")
                 Spacer(modifier = Modifier.width(8.dp))
                 Switch(
-                    checked = !saveVadSegmentsOnly,
-                    onCheckedChange = { saveVadSegmentsOnly = !it },
+                    checked = !userSettings.saveVadSegmentsOnly,
+                    onCheckedChange = { isChecked -> homeViewModel.updateSaveVadSegmentsOnly(!isChecked) },
                     enabled = !isStarted && !isPlaying
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = "Save Full Audio")
             }
-
 
             HomeButtonRow(
                 isStarted = isStarted,
@@ -377,46 +398,50 @@ fun HomeScreen() {
                 isPlaybackActive = isPlaying
             )
 
-            if (resultList.isNotEmpty()) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-                    contentPadding = PaddingValues(16.dp),
-                    state = lazyColumnListState
-                ) {
-                    itemsIndexed(resultList) { index, result ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(text = "${index + 1}: ${result.text}", modifier = Modifier.weight(1f))
-                            if (result.wavFilePath.isNotEmpty()) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = {
-                                        if (currentlyPlayingPath == result.wavFilePath) {
-                                            stopPlayback()
-                                        } else {
-                                            stopPlayback()
-                                            currentlyPlayingPath = result.wavFilePath
-                                            mediaPlayer = MediaPlayer().apply {
-                                                try {
-                                                    setDataSource(result.wavFilePath)
-                                                    prepare()
-                                                    start()
-                                                    setOnCompletionListener {
-                                                        stopPlayback()
-                                                    }
-                                                } catch (e: Exception) {
-                                                    Log.e(TAG, "MediaPlayer failed for ${result.wavFilePath}", e)
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
+                contentPadding = PaddingValues(16.dp),
+                state = lazyColumnListState
+            ) {
+                itemsIndexed(resultList) { index, result ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = "${index + 1}: ${result.text}", modifier = Modifier.weight(1f))
+                        if (result.wavFilePath.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    if (currentlyPlayingPath == result.wavFilePath) {
+                                        stopPlayback()
+                                    } else {
+                                        stopPlayback()
+                                        currentlyPlayingPath = result.wavFilePath
+                                        mediaPlayer = MediaPlayer().apply {
+                                            try {
+                                                setDataSource(result.wavFilePath)
+                                                prepare()
+                                                start()
+                                                setOnCompletionListener {
                                                     stopPlayback()
                                                 }
+                                            } catch (e: Exception) {
+                                                Log.e(
+                                                    TAG,
+                                                    "MediaPlayer failed for ${result.wavFilePath}",
+                                                    e
+                                                )
+                                                stopPlayback()
                                             }
                                         }
-                                    },
-                                    enabled = !isStarted && (!isPlaying || currentlyPlayingPath == result.wavFilePath)
-                                ) {
-                                    Text(text = if (currentlyPlayingPath == result.wavFilePath) "Stop" else "Play")
-                                }
+                                    }
+                                },
+                                enabled = !isStarted && (!isPlaying || currentlyPlayingPath == result.wavFilePath)
+                            ) {
+                                Text(text = if (currentlyPlayingPath == result.wavFilePath) "Stop" else "Play")
                             }
                         }
                     }
@@ -449,14 +474,14 @@ private fun HomeButtonRow(
         Spacer(modifier = Modifier.width(24.dp))
         Button(
             onClick = onCopyButtonClick,
-            enabled = !isPlaybackActive
+            enabled = !isStarted && !isPlaybackActive
         ) {
             Text(text = stringResource(id = R.string.copy))
         }
         Spacer(modifier = Modifier.width(24.dp))
         Button(
             onClick = onClearButtonClick,
-            enabled = !isPlaybackActive
+            enabled = !isStarted && !isPlaybackActive
         ) {
             Text(text = stringResource(id = R.string.clear))
         }
