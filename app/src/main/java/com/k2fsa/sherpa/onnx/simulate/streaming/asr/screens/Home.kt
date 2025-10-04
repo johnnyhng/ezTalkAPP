@@ -48,12 +48,12 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.R
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.RecognitionResult
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveAsWav
@@ -62,11 +62,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
 private var mediaPlayer: MediaPlayer? = null
 private const val sampleRateInHz = 16000
+
+/**
+ * Data class to store the recognized text, the (potentially) modified text,
+ * and the path to the associated audio file.
+ */
+data class Transcript(
+    val recognizedText: String,
+    var modifiedText: String = recognizedText,
+    val wavFilePath: String,
+)
+
+// This dynamic array will keep records for future feedback implementation.
+private val feedbackRecords = mutableListOf<Transcript>()
 
 @Composable
 fun HomeScreen(
@@ -79,13 +95,15 @@ fun HomeScreen(
 
     // UI state
     var isStarted by remember { mutableStateOf(false) }
-    val resultList = remember { mutableStateListOf<RecognitionResult>() }
+    val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
 
     // State for the Edit Dialog
     var showEditDialog by remember { mutableStateOf(false) }
     var editingItemIndex by remember { mutableStateOf(-1) }
-    var editingText by remember { mutableStateOf("") }
+    var originalTextForDialog by remember { mutableStateOf("") }
+    var modifiedTextForDialog by remember { mutableStateOf("") }
+
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
@@ -221,12 +239,12 @@ fun HomeScreen(
 
                                 if (lastText.isNotBlank()) {
                                     if (!added || resultList.isEmpty()) {
-                                        resultList.add(RecognitionResult(lastText, ""))
+                                        resultList.add(Transcript(recognizedText = lastText, wavFilePath = ""))
                                         added = true
                                     } else {
-                                        val lastResult = resultList.last()
+                                        val lastItem = resultList.last()
                                         resultList[resultList.size - 1] =
-                                            lastResult.copy(text = lastText)
+                                            lastItem.copy(recognizedText = lastText, modifiedText = lastText)
                                     }
                                     coroutineScope.launch {
                                         lazyColumnListState.animateScrollToItem(resultList.size - 1)
@@ -274,25 +292,33 @@ fun HomeScreen(
                                     SimulateStreamingAsr.recognizer.decode(stream)
                                     val result = SimulateStreamingAsr.recognizer.getResult(stream)
 
+                                    val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                                     val wavPath = saveAsWav(
                                         context = context,
                                         samples = audioToSave,
                                         sampleRate = sampleRateInHz,
                                         numChannels = 1,
-                                        filename = "rec_${System.currentTimeMillis()}"
+                                        filename = "rec_${timestamp}"
                                     )
 
-                                    val newResult = RecognitionResult(result.text, wavPath ?: "")
+                                    val newTranscript = Transcript(
+                                        recognizedText = result.text,
+                                        wavFilePath = wavPath ?: ""
+                                    )
 
                                     if (lastText.isNotBlank()) {
                                         if (added && resultList.isNotEmpty()) {
-                                            resultList[resultList.size - 1] = newResult
+                                            resultList[resultList.size - 1] = newTranscript
                                         } else {
-                                            resultList.add(newResult)
+                                            resultList.add(newTranscript)
                                         }
                                     } else {
-                                        resultList.add(newResult)
+                                        resultList.add(newTranscript)
                                     }
+
+                                    // Add the completed record to our feedback list
+                                    feedbackRecords.add(resultList.last())
+
                                     coroutineScope.launch {
                                         lazyColumnListState.animateScrollToItem(resultList.size - 1)
                                     }
@@ -321,15 +347,21 @@ fun HomeScreen(
 
     if (showEditDialog && editingItemIndex != -1) {
         EditRecognitionDialog(
-            currentText = editingText,
+            originalText = originalTextForDialog,
+            currentText = modifiedTextForDialog,
             onDismiss = { showEditDialog = false },
             onConfirm = { newText ->
-                val originalItem = resultList[editingItemIndex]
-                resultList[editingItemIndex] = originalItem.copy(text = newText)
+                // This is the key change:
+                // Create a new copy of the item with the modified text
+                // and replace the old item in the list.
+                val oldItem = resultList[editingItemIndex]
+                resultList[editingItemIndex] = oldItem.copy(modifiedText = newText)
+
                 showEditDialog = false
             }
         )
     }
+
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -392,7 +424,7 @@ fun HomeScreen(
                 onRecordingButtonClick = onRecordingButtonClick,
                 onCopyButtonClick = {
                     if (resultList.isNotEmpty()) {
-                        val s = resultList.mapIndexed { i, result -> "${i + 1}: ${result.text}" }
+                        val s = resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
                             .joinToString(separator = "\n")
                         clipboardManager.setText(AnnotatedString(s))
                         Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
@@ -402,6 +434,8 @@ fun HomeScreen(
                 },
                 onClearButtonClick = {
                     resultList.clear()
+                    feedbackRecords.clear() // Also clear the feedback records
+                    Log.i(TAG, "Feedback records cleared. Count: ${feedbackRecords.size}")
                 },
                 isPlaybackActive = isPlaying
             )
@@ -418,14 +452,15 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(text = "${index + 1}: ${result.text}", modifier = Modifier.weight(1f))
+                        Text(text = "${index + 1}: ${result.modifiedText}", modifier = Modifier.weight(1f))
 
                         if (result.wavFilePath.isNotEmpty()) {
                             // Edit Button
                             Button(
                                 onClick = {
                                     editingItemIndex = index
-                                    editingText = result.text
+                                    originalTextForDialog = result.recognizedText
+                                    modifiedTextForDialog = result.modifiedText
                                     showEditDialog = true
                                 },
                                 enabled = !isStarted && !isPlaying
@@ -474,6 +509,7 @@ fun HomeScreen(
 
 @Composable
 private fun EditRecognitionDialog(
+    originalText: String,
     currentText: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
@@ -484,12 +520,17 @@ private fun EditRecognitionDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Recognition") },
         text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Recognized Text") }
-            )
+            Column {
+                Text("Original:", fontWeight = FontWeight.Bold)
+                Text(originalText)
+                Spacer(modifier = Modifier.padding(vertical = 8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Modified Text") }
+                )
+            }
         },
         confirmButton = {
             TextButton(
