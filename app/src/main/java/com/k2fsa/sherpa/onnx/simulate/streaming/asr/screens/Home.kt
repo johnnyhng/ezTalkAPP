@@ -24,10 +24,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,13 +66,10 @@ import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
 private var mediaPlayer: MediaPlayer? = null
-// Recreate the channel inside the effect to ensure it's fresh on each start
-// private val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
 private const val sampleRateInHz = 16000
 
 @Composable
 fun HomeScreen(
-    // Inject the ViewModel. It will be automatically created and retained across config changes.
     homeViewModel: HomeViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -82,7 +82,12 @@ fun HomeScreen(
     val resultList = remember { mutableStateListOf<RecognitionResult>() }
     val lazyColumnListState = rememberLazyListState()
 
-    // Collect settings from the ViewModel. `collectAsState` makes the UI react to changes.
+    // State for the Edit Dialog
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingItemIndex by remember { mutableStateOf(-1) }
+    var editingText by remember { mutableStateOf("") }
+
+    // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
 
     // Playback state
@@ -119,7 +124,6 @@ fun HomeScreen(
                 Log.i(TAG, "Recording is not allowed")
                 isStarted = false
             } else {
-                // Create a new channel every time we start recording
                 val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
 
                 val audioSource = MediaRecorder.AudioSource.MIC
@@ -137,7 +141,7 @@ fun HomeScreen(
                 SimulateStreamingAsr.vad.reset()
 
                 // --- Coroutine to record audio ---
-                val recordingJob = CoroutineScope(Dispatchers.IO).launch {
+                CoroutineScope(Dispatchers.IO).launch {
                     Log.i(TAG, "Audio recording started")
                     val interval = 0.1 // 100ms
                     val bufferSize = (interval * sampleRateInHz).toInt()
@@ -160,8 +164,7 @@ fun HomeScreen(
                 }
 
                 // --- Coroutine to process audio ---
-                val processingJob = CoroutineScope(Dispatchers.Default).launch {
-                    // Use settings from the ViewModel's state
+                CoroutineScope(Dispatchers.Default).launch {
                     val LINGER_MS = userSettings.lingerMs
                     val PARTIAL_INTERVAL_MS = userSettings.partialIntervalMs
                     val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
@@ -179,9 +182,8 @@ fun HomeScreen(
 
                     var fullRecordingBuffer = arrayListOf<Float>()
 
-                    // Process audio from the channel
-                    for (s in samplesChannel) { // This loop will now correctly terminate when channel is closed
-                        if (!isStarted) break // Exit loop
+                    for (s in samplesChannel) {
+                        if (!isStarted) break
                         if (isPlaying) continue
 
                         buffer.addAll(s.toList())
@@ -246,17 +248,12 @@ fun HomeScreen(
                         if (utteranceSegments.isNotEmpty()) {
                             val since = System.currentTimeMillis() - lastVadPacketAt
                             if (since >= LINGER_MS) {
-                                // Manual concatenation of FloatArray chunks
                                 val totalSize = utteranceSegments.sumOf { it.size }
                                 val concatenated = FloatArray(totalSize)
                                 var currentPos = 0
                                 for (segment in utteranceSegments) {
                                     System.arraycopy(
-                                        segment,
-                                        0,
-                                        concatenated,
-                                        currentPos,
-                                        segment.size
+                                        segment, 0, concatenated, currentPos, segment.size
                                     )
                                     currentPos += segment.size
                                 }
@@ -315,12 +312,23 @@ fun HomeScreen(
                 }
             }
         } else {
-            // This block runs when isStarted becomes false
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
             stopPlayback()
         }
+    }
+
+    if (showEditDialog && editingItemIndex != -1) {
+        EditRecognitionDialog(
+            currentText = editingText,
+            onDismiss = { showEditDialog = false },
+            onConfirm = { newText ->
+                val originalItem = resultList[editingItemIndex]
+                resultList[editingItemIndex] = originalItem.copy(text = newText)
+                showEditDialog = false
+            }
+        )
     }
 
     Box(
@@ -405,14 +413,27 @@ fun HomeScreen(
                 contentPadding = PaddingValues(16.dp),
                 state = lazyColumnListState
             ) {
-                itemsIndexed(resultList) { index, result ->
+                itemsIndexed(resultList, key = { _, item -> item.hashCode() }) { index, result ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(text = "${index + 1}: ${result.text}", modifier = Modifier.weight(1f))
+
                         if (result.wavFilePath.isNotEmpty()) {
+                            // Edit Button
+                            Button(
+                                onClick = {
+                                    editingItemIndex = index
+                                    editingText = result.text
+                                    showEditDialog = true
+                                },
+                                enabled = !isStarted && !isPlaying
+                            ) {
+                                Text("Edit")
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
+                            // Play Button
                             Button(
                                 onClick = {
                                     if (currentlyPlayingPath == result.wavFilePath) {
@@ -449,6 +470,42 @@ fun HomeScreen(
             }
         }
     }
+}
+
+@Composable
+private fun EditRecognitionDialog(
+    currentText: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(currentText) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Recognition") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Recognized Text") }
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(text) }
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @SuppressLint("UnrememberedMutableState")
