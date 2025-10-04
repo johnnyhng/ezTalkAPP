@@ -8,6 +8,9 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +68,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
@@ -112,6 +116,37 @@ fun HomeScreen(
     var currentlyPlayingPath by remember { mutableStateOf<String?>(null) }
     val isPlaying by remember { derivedStateOf { currentlyPlayingPath != null } }
 
+    // TTS state
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var isTtsSpeaking by remember { mutableStateOf(false) }
+
+    // Initialize TTS
+    LaunchedEffect(key1 = context) {
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale.getDefault()
+                Log.i(TAG, "TTS initialized successfully.")
+            } else {
+                Log.e(TAG, "TTS initialization failed.")
+            }
+        }
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                isTtsSpeaking = true
+            }
+
+            override fun onDone(utteranceId: String?) {
+                isTtsSpeaking = false
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                isTtsSpeaking = false
+            }
+        })
+    }
+
+
     fun stopPlayback() {
         mediaPlayer?.stop()
         mediaPlayer?.release()
@@ -125,6 +160,9 @@ fun HomeScreen(
             audioRecord = null
             mediaPlayer?.release()
             mediaPlayer = null
+            tts?.stop()
+            tts?.shutdown()
+            tts = null
         }
     }
 
@@ -167,7 +205,7 @@ fun HomeScreen(
 
                     audioRecord?.startRecording()
                     while (isStarted) {
-                        if (isPlaying) {
+                        if (isPlaying || isTtsSpeaking) { // Pause recording during playback and TTS
                             delay(100)
                             continue
                         }
@@ -292,7 +330,9 @@ fun HomeScreen(
                                     SimulateStreamingAsr.recognizer.decode(stream)
                                     val result = SimulateStreamingAsr.recognizer.getResult(stream)
 
-                                    val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+                                    val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(
+                                        Date()
+                                    )
                                     val wavPath = saveAsWav(
                                         context = context,
                                         samples = audioToSave,
@@ -351,17 +391,12 @@ fun HomeScreen(
             currentText = modifiedTextForDialog,
             onDismiss = { showEditDialog = false },
             onConfirm = { newText ->
-                // This is the key change:
-                // Create a new copy of the item with the modified text
-                // and replace the old item in the list.
                 val oldItem = resultList[editingItemIndex]
                 resultList[editingItemIndex] = oldItem.copy(modifiedText = newText)
-
                 showEditDialog = false
             }
         )
     }
-
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -380,7 +415,7 @@ fun HomeScreen(
                     onValueChange = { homeViewModel.updateLingerMs(it) },
                     valueRange = 0f..10000f,
                     steps = ((10000f - 0f) / 100f).toInt() - 1,
-                    enabled = !isStarted && !isPlaying
+                    enabled = !isStarted && !isPlaying && !isTtsSpeaking
                 )
             }
 
@@ -396,7 +431,7 @@ fun HomeScreen(
                     onValueChange = { homeViewModel.updatePartialIntervalMs(it) },
                     valueRange = 200f..1000f,
                     steps = ((1000f - 200f) / 50f).toInt() - 1,
-                    enabled = !isStarted && !isPlaying
+                    enabled = !isStarted && !isPlaying && !isTtsSpeaking
                 )
             }
 
@@ -413,7 +448,7 @@ fun HomeScreen(
                 Switch(
                     checked = !userSettings.saveVadSegmentsOnly,
                     onCheckedChange = { isChecked -> homeViewModel.updateSaveVadSegmentsOnly(!isChecked) },
-                    enabled = !isStarted && !isPlaying
+                    enabled = !isStarted && !isPlaying && !isTtsSpeaking
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = "Save Full Audio")
@@ -437,7 +472,7 @@ fun HomeScreen(
                     feedbackRecords.clear() // Also clear the feedback records
                     Log.i(TAG, "Feedback records cleared. Count: ${feedbackRecords.size}")
                 },
-                isPlaybackActive = isPlaying
+                isPlaybackActive = isPlaying || isTtsSpeaking
             )
 
             LazyColumn(
@@ -455,6 +490,18 @@ fun HomeScreen(
                         Text(text = "${index + 1}: ${result.modifiedText}", modifier = Modifier.weight(1f))
 
                         if (result.wavFilePath.isNotEmpty()) {
+                            // Talk Button
+                            Button(
+                                onClick = {
+                                    stopPlayback() // Stop any audio playback
+                                    val utteranceId = UUID.randomUUID().toString()
+                                    tts?.speak(result.modifiedText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                                },
+                                enabled = !isStarted && !isPlaying && !isTtsSpeaking
+                            ) {
+                                Text("Talk")
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
                             // Edit Button
                             Button(
                                 onClick = {
@@ -463,11 +510,11 @@ fun HomeScreen(
                                     modifiedTextForDialog = result.modifiedText
                                     showEditDialog = true
                                 },
-                                enabled = !isStarted && !isPlaying
+                                enabled = !isStarted && !isPlaying && !isTtsSpeaking
                             ) {
                                 Text("Edit")
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             // Play Button
                             Button(
                                 onClick = {
@@ -495,7 +542,7 @@ fun HomeScreen(
                                         }
                                     }
                                 },
-                                enabled = !isStarted && (!isPlaying || currentlyPlayingPath == result.wavFilePath)
+                                enabled = !isStarted && !isTtsSpeaking && (!isPlaying || currentlyPlayingPath == result.wavFilePath)
                             ) {
                                 Text(text = if (currentlyPlayingPath == result.wavFilePath) "Stop" else "Play")
                             }
