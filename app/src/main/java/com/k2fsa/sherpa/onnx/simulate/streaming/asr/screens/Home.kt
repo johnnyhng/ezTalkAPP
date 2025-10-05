@@ -493,6 +493,7 @@ fun HomeScreen(
                             // Talk Button
                             Button(
                                 onClick = {
+                                    // TODO: Implement feedback mechanism here in the future
                                     stopPlayback() // Stop any audio playback
                                     val utteranceId = UUID.randomUUID().toString()
                                     tts?.speak(result.modifiedText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
