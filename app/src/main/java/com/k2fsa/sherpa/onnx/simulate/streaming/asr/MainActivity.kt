@@ -32,6 +32,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.FileManagerScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HelpScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HomeScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ui.theme.SimulateStreamingAsrTheme
@@ -127,6 +128,10 @@ fun NavigationHost(navController: NavHostController) {
     NavHost(navController = navController, startDestination = NavRoutes.Home.route) {
         composable(NavRoutes.Home.route) {
             HomeScreen()
+        }
+
+        composable(NavRoutes.FileManager.route) {
+            FileManagerScreen()
         }
 
         composable(NavRoutes.Help.route) {

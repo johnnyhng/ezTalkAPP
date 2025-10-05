@@ -1,6 +1,7 @@
 package com.k2fsa.sherpa.onnx.simulate.streaming.asr
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 
@@ -10,6 +11,11 @@ object NavBarItems {
             title = "Home",
             image = Icons.Filled.Home,
             route = "home",
+        ),
+        BarItem(
+            title = "File Manager",
+            image = Icons.Filled.Folder,
+            route = "file_manager"
         ),
         BarItem(
             title = "Help",
