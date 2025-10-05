@@ -28,9 +28,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -499,21 +506,23 @@ fun HomeScreen(
                         Text(text = "${index + 1}: ${result.modifiedText}", modifier = Modifier.weight(1f))
 
                         if (result.wavFilePath.isNotEmpty()) {
-                            // Talk Button
-                            Button(
+                            // Talk Button -> IconButton
+                            IconButton(
                                 onClick = {
-                                    // TODO: Implement feedback mechanism here in the future
                                     stopPlayback() // Stop any audio playback
                                     val utteranceId = UUID.randomUUID().toString()
                                     tts?.speak(result.modifiedText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
                                 },
                                 enabled = !isStarted && !isPlaying && !isTtsSpeaking
                             ) {
-                                Text("Talk")
+                                Icon(
+                                    imageVector = Icons.Default.RecordVoiceOver,
+                                    contentDescription = "Talk"
+                                )
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            // Edit Button
-                            Button(
+
+                            // Edit Button -> IconButton
+                            IconButton(
                                 onClick = {
                                     editingItemIndex = index
                                     editingItem = result // Store the whole item
@@ -523,11 +532,14 @@ fun HomeScreen(
                                 },
                                 enabled = !isStarted && !isPlaying && !isTtsSpeaking
                             ) {
-                                Text("Edit")
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit"
+                                )
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            // Play Button
-                            Button(
+
+                            // Play Button -> IconButton
+                            IconButton(
                                 onClick = {
                                     if (currentlyPlayingPath == result.wavFilePath) {
                                         stopPlayback()
@@ -555,7 +567,10 @@ fun HomeScreen(
                                 },
                                 enabled = !isStarted && !isTtsSpeaking && (!isPlaying || currentlyPlayingPath == result.wavFilePath)
                             ) {
-                                Text(text = if (currentlyPlayingPath == result.wavFilePath) "Stop" else "Play")
+                                Icon(
+                                    imageVector = if (currentlyPlayingPath == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                    contentDescription = if (currentlyPlayingPath == result.wavFilePath) "Stop" else "Play"
+                                )
                             }
                         }
                     }
@@ -660,11 +675,15 @@ private fun EditRecognitionDialog(
                                             }
                                             stream.release()
                                         } else {
-                                            recognitionError = "Error: Could not read audio file."
+                                            launch(Dispatchers.Main) {
+                                                recognitionError = "Error: Could not read audio file."
+                                            }
                                         }
                                     } catch (e: Exception) {
                                         Log.e(TAG, "Re-recognition failed", e)
-                                        recognitionError = "Error: Recognition failed."
+                                        launch(Dispatchers.Main) {
+                                            recognitionError = "Error: Recognition failed."
+                                        }
                                     } finally {
                                         launch(Dispatchers.Main) {
                                             isRecognizing = false
