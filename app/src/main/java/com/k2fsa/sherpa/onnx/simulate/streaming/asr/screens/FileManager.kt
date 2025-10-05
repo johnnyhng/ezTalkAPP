@@ -1,6 +1,5 @@
 package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 
-import android.content.Context
 import android.media.MediaPlayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,7 +9,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -69,7 +74,7 @@ fun FileManagerScreen() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(file.name, modifier = Modifier.weight(1f))
-                    Button(
+                    IconButton(
                         onClick = {
                             if (isPlaying) {
                                 mediaPlayer.stop()
@@ -91,7 +96,22 @@ fun FileManagerScreen() {
                         },
                         enabled = currentlyPlaying == null || isPlaying
                     ) {
-                        Text(if (isPlaying) "Stop" else "Playback")
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                            contentDescription = if (isPlaying) "Stop" else "Playback"
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            file.delete()
+                            listWavFiles()
+                        },
+                        enabled = currentlyPlaying == null
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Delete"
+                        )
                     }
                 }
             }
