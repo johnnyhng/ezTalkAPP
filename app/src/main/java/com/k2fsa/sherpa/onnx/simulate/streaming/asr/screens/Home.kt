@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -56,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.R
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
@@ -65,6 +68,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -104,6 +111,7 @@ fun HomeScreen(
 
     // State for the Edit Dialog
     var showEditDialog by remember { mutableStateOf(false) }
+    var editingItem by remember { mutableStateOf<Transcript?>(null) }
     var editingItemIndex by remember { mutableStateOf(-1) }
     var originalTextForDialog by remember { mutableStateOf("") }
     var modifiedTextForDialog by remember { mutableStateOf("") }
@@ -389,6 +397,7 @@ fun HomeScreen(
         EditRecognitionDialog(
             originalText = originalTextForDialog,
             currentText = modifiedTextForDialog,
+            wavFilePath = editingItem?.wavFilePath ?: "", // Pass the wav file path
             onDismiss = { showEditDialog = false },
             onConfirm = { newText ->
                 val oldItem = resultList[editingItemIndex]
@@ -507,6 +516,7 @@ fun HomeScreen(
                             Button(
                                 onClick = {
                                     editingItemIndex = index
+                                    editingItem = result // Store the whole item
                                     originalTextForDialog = result.recognizedText
                                     modifiedTextForDialog = result.modifiedText
                                     showEditDialog = true
@@ -555,14 +565,63 @@ fun HomeScreen(
     }
 }
 
+/**
+ * Reads a WAV file and returns its audio data as a FloatArray.
+ * Note: This makes a simplifying assumption that the WAV file is 16-bit PCM.
+ *
+ * @param path The absolute path to the WAV file.
+ * @return A FloatArray containing the audio samples normalized to [-1, 1], or null on error.
+ */
+private fun readWavFileToFloatArray(path: String): FloatArray? {
+    try {
+        val file = File(path)
+        val fileInputStream = FileInputStream(file)
+        val byteBuffer = fileInputStream.readBytes()
+        fileInputStream.close()
+
+        // The first 44 bytes of a standard WAV file are the header. We skip it.
+        val headerSize = 44
+        if (byteBuffer.size <= headerSize) {
+            Log.e(TAG, "WAV file is too small to contain audio data: ${file.name}")
+            return null
+        }
+
+        // We assume the audio data is 16-bit PCM, little-endian.
+        val shortBuffer = ByteBuffer.wrap(byteBuffer, headerSize, byteBuffer.size - headerSize)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .asShortBuffer()
+
+        val numSamples = shortBuffer.remaining()
+        val floatArray = FloatArray(numSamples)
+
+        for (i in 0 until numSamples) {
+            // Convert 16-bit short to float in the range [-1.0, 1.0]
+            floatArray[i] = shortBuffer.get(i) / 32768.0f
+        }
+        return floatArray
+    } catch (e: Exception) {
+        Log.e(TAG, "Error reading WAV file: $path", e)
+        return null
+    }
+}
+
+
 @Composable
 private fun EditRecognitionDialog(
     originalText: String,
     currentText: String,
+    wavFilePath: String, // We need the path to the audio file
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
     var text by remember { mutableStateOf(currentText) }
+    var newRecognitionResult by remember { mutableStateOf<String?>(null) }
+    var isRecognizing by remember { mutableStateOf(false) }
+    var recognitionError by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Use the non-streaming (offline) recognizer for whole-file recognition
+    val recognizer: OfflineRecognizer = remember { SimulateStreamingAsr.recognizer }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -578,6 +637,67 @@ private fun EditRecognitionDialog(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Modified Text") }
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // "Recognize again" functionality
+                if (wavFilePath.isNotEmpty()) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = {
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    isRecognizing = true
+                                    newRecognitionResult = null
+                                    recognitionError = null
+                                    try {
+                                        val audioData = readWavFileToFloatArray(wavFilePath)
+                                        if (audioData != null) {
+                                            val stream = recognizer.createStream()
+                                            stream.acceptWaveform(audioData, sampleRateInHz)
+                                            recognizer.decode(stream)
+                                            val result = recognizer.getResult(stream).text
+                                            launch(Dispatchers.Main) {
+                                                newRecognitionResult = result
+                                            }
+                                            stream.release()
+                                        } else {
+                                            recognitionError = "Error: Could not read audio file."
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Re-recognition failed", e)
+                                        recognitionError = "Error: Recognition failed."
+                                    } finally {
+                                        launch(Dispatchers.Main) {
+                                            isRecognizing = false
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !isRecognizing
+                        ) {
+                            Text(text = "Recognize again")
+                        }
+
+                        if (isRecognizing) {
+                            CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
+                        }
+
+                        recognitionError?.let { error ->
+                            Text(error, color = androidx.compose.ui.graphics.Color.Red, modifier = Modifier.padding(top = 8.dp))
+                        }
+
+                        newRecognitionResult?.let { result ->
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("New Result:", fontWeight = FontWeight.Bold)
+                            Text(result)
+                            TextButton(onClick = {
+                                text = result
+                                newRecognitionResult = null // Clear after applying
+                            }) {
+                                Text("Replace with new result")
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
