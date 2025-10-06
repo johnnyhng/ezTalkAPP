@@ -12,12 +12,15 @@ import java.nio.ByteOrder
 data class RecognitionResult(val text: String, val wavFilePath: String)
 
 /**
- * Saves a FloatArray of audio samples to a WAV file in the app's cache directory.
+ * Saves a FloatArray of audio samples to a WAV file in a structured directory.
+ * The path will be: files/wavs/<userId>/<sanitized_text>/<filename>.wav
  *
- * @param context The application context to get the cache directory.
+ * @param context The application context to get the files directory.
  * @param samples The FloatArray of audio samples (normalized between -1.0 and 1.0).
  * @param sampleRate The sample rate of the audio (e.g., 16000).
  * @param numChannels The number of channels (1 for mono, 2 for stereo).
+ * @param userId The ID of the user.
+ * @param text The recognized text, used for the sub-directory.
  * @param filename The desired name for the WAV file (without the .wav extension).
  * @return The absolute path to the saved WAV file, or null on failure.
  */
@@ -26,9 +29,20 @@ fun saveAsWav(
     samples: FloatArray,
     sampleRate: Int,
     numChannels: Int,
+    userId: String,
+    text: String,
     filename: String
 ): String? {
-    val file = File(context.cacheDir, "$filename.wav")
+    val dir = File(context.filesDir, "wavs/$userId/$text")
+
+    if (!dir.exists()) {
+        if (!dir.mkdirs()) {
+            Log.e(TAG, "Failed to create directory: ${dir.absolutePath}")
+            return null
+        }
+    }
+
+    val file = File(dir, "$filename.wav")
     try {
         FileOutputStream(file).use { out ->
             // Convert float samples to 16-bit PCM byte array

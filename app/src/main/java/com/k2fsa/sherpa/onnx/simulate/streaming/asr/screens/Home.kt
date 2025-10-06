@@ -3,6 +3,7 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -23,6 +24,8 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,6 +54,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.io.path.exists
 import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
@@ -64,7 +68,7 @@ private const val sampleRateInHz = 16000
 data class Transcript(
     val recognizedText: String,
     var modifiedText: String = recognizedText,
-    val wavFilePath: String,
+    var wavFilePath: String, // Made this a 'var' to allow updates
 )
 
 // This dynamic array will keep records for future feedback implementation.
@@ -94,6 +98,14 @@ fun HomeScreen(
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
+
+    // *** MODIFIED: Initialize userId and store it if it's new ***
+    LaunchedEffect(userSettings.userId) {
+        if (userSettings.userId == null) {
+            homeViewModel.updateUserId("user")
+        }
+    }
+    val userId = userSettings.userId ?: "user" // Use "user" as a fallback
 
     // Playback state
     var currentlyPlayingPath by remember { mutableStateOf<String?>(null) }
@@ -349,12 +361,16 @@ fun HomeScreen(
                                     ).format(
                                         Date()
                                     )
+
+                                    // *** MODIFIED: Use the new saveAsWav from WavUtil.kt with structured path ***
                                     val wavPath = saveAsWav(
                                         context = context,
                                         samples = audioToSave,
                                         sampleRate = sampleRateInHz,
                                         numChannels = 1,
-                                        filename = "rec_${timestamp}"
+                                        userId = userId,
+                                        text = result.text, // Use recognized text for initial directory
+                                        filename = "${result.text}-rec_${timestamp}"
                                     )
 
                                     val newTranscript = Transcript(
@@ -517,6 +533,19 @@ fun HomeScreen(
                             IconButton(
                                 onClick = {
                                     stopPlayback() // Stop any audio playback
+
+                                    // *** MODIFIED: Logic to rename/move the WAV file ***
+                                    val oldPath = result.wavFilePath
+                                    val newFilePath = moveWavFile(context, oldPath, userId, result.modifiedText)
+                                    if (newFilePath != null) {
+                                        // Update the item in the list with the new path
+                                        val updatedItem = result.copy(wavFilePath = newFilePath)
+                                        resultList[index] = updatedItem
+                                        Log.i(TAG, "WAV file moved to $newFilePath")
+                                    } else {
+                                        Log.w(TAG, "Could not move WAV file for text: ${result.modifiedText}")
+                                    }
+
                                     val utteranceId = UUID.randomUUID().toString()
                                     tts?.speak(
                                         result.modifiedText,
@@ -591,6 +620,51 @@ fun HomeScreen(
         }
     }
 }
+
+/**
+ * *** ADDED: Helper function to move the WAV file to a new directory based on modified text. ***
+ */
+private fun moveWavFile(context: Context, oldPath: String, userId: String, newText: String): String? {
+    val oldFile = File(oldPath)
+    if (!oldFile.exists()) {
+        Log.e(TAG, "Original WAV file not found at: $oldPath")
+        return null
+    }
+
+    val newDir = File(context.filesDir, "wavs/$userId/$newText")
+
+    if (!newDir.exists()) {
+        if (!newDir.mkdirs()) {
+            Log.e(TAG, "Failed to create new directory: ${newDir.absolutePath}")
+            return null
+        }
+    }
+
+    val newFile = File(newDir, oldFile.name)
+
+    // If the file is already in the correct location, do nothing.
+    if (oldFile.absolutePath == newFile.absolutePath) {
+        return oldFile.absolutePath
+    }
+
+    return try {
+        if (oldFile.renameTo(newFile)) {
+            // Delete the old parent directory if it's empty
+            val oldParentDir = oldFile.parentFile
+            if (oldParentDir != null && oldParentDir.isDirectory && oldParentDir.listFiles()?.isEmpty() == true) {
+                oldParentDir.delete()
+            }
+            newFile.absolutePath
+        } else {
+            Log.e(TAG, "Failed to rename file from $oldPath to ${newFile.absolutePath}")
+            null
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Error moving file", e)
+        null
+    }
+}
+
 
 /**
  * Reads a WAV file and returns its audio data as a FloatArray.

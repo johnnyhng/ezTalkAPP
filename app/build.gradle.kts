@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.k2fsa.sherpa.onnx.simulate.streaming.asr"
-        minSdk = 21
+        minSdk = 26
         targetSdk = 34
         versionCode = 20250918
         versionName = "1.12.14"

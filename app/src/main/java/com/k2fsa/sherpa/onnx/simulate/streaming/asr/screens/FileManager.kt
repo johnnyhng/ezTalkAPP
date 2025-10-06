@@ -38,8 +38,15 @@ fun FileManagerScreen() {
     val mediaPlayer by remember { mutableStateOf(MediaPlayer()) }
 
     fun listWavFiles() {
-        val cacheDir = context.cacheDir
-        wavFiles = cacheDir.listFiles { _, name -> name.endsWith(".wav") }?.toList() ?: emptyList()
+        val wavsDir = File(context.filesDir, "wavs")
+        if (wavsDir.exists()) {
+            // Recursively find all files ending with .wav
+            wavFiles = wavsDir.walkTopDown().filter { it.isFile && it.name.endsWith(".wav") }
+                .sortedByDescending { it.lastModified() }
+                .toList()
+        } else {
+            wavFiles = emptyList()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -59,10 +66,13 @@ fun FileManagerScreen() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Button(onClick = {
-            wavFiles.forEach { it.delete() }
+            val wavsDir = File(context.filesDir, "wavs")
+            if (wavsDir.exists()) {
+                wavsDir.deleteRecursively()
+            }
             listWavFiles()
         }, enabled = currentlyPlaying == null) {
-            Text("Delete all wav files")
+            Text("Delete all wavs")
         }
 
         LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
@@ -73,7 +83,10 @@ fun FileManagerScreen() {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(file.name, modifier = Modifier.weight(1f))
+                    Text(
+                        file.path.substringAfter(context.filesDir.path + "/"),
+                        modifier = Modifier.weight(1f)
+                    ) // Show relative path
                     IconButton(
                         onClick = {
                             if (isPlaying) {
@@ -104,6 +117,14 @@ fun FileManagerScreen() {
                     IconButton(
                         onClick = {
                             file.delete()
+                            // Also delete parent directories if they become empty
+                            var parent = file.parentFile
+                            while (parent != null && parent.name != "wavs" && parent.listFiles()
+                                    ?.isEmpty() == true
+                            ) {
+                                parent.delete()
+                                parent = parent.parentFile
+                            }
                             listWavFiles()
                         },
                         enabled = currentlyPlaying == null

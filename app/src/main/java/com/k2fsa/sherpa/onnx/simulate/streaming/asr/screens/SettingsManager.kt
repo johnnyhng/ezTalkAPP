@@ -7,11 +7,13 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -25,7 +27,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 data class UserSettings(
     val lingerMs: Float,
     val partialIntervalMs: Float,
-    val saveVadSegmentsOnly: Boolean
+    val saveVadSegmentsOnly: Boolean,
+    val userId: String?
 )
 
 /**
@@ -39,14 +42,17 @@ class SettingsManager(context: Context) {
         val LINGER_MS_KEY = floatPreferencesKey("linger_ms")
         val PARTIAL_INTERVAL_MS_KEY = floatPreferencesKey("partial_interval_ms")
         val SAVE_VAD_SEGMENTS_ONLY_KEY = booleanPreferencesKey("save_vad_segments_only")
+        val USER_ID_KEY = stringPreferencesKey("user_id")
     }
 
     // Flow to read the settings from DataStore, providing default values if none are set.
     val settingsFlow = appContext.dataStore.data.map { preferences ->
         val lingerMs = preferences[LINGER_MS_KEY] ?: 800f // Default: 800ms
         val partialIntervalMs = preferences[PARTIAL_INTERVAL_MS_KEY] ?: 500f // Default: 500ms
-        val saveVadSegmentsOnly = preferences[SAVE_VAD_SEGMENTS_ONLY_KEY] ?: false // Default: false (Save Full Audio)
-        UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly)
+        val saveVadSegmentsOnly =
+            preferences[SAVE_VAD_SEGMENTS_ONLY_KEY] ?: false // Default: false (Save Full Audio)
+        val userId = preferences[USER_ID_KEY]
+        UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly, userId)
     }
 
     // Functions to update the settings in DataStore. These are suspend functions.
@@ -67,6 +73,12 @@ class SettingsManager(context: Context) {
             settings[SAVE_VAD_SEGMENTS_ONLY_KEY] = value
         }
     }
+
+    suspend fun updateUserId(userId: String) {
+        appContext.dataStore.edit { settings ->
+            settings[USER_ID_KEY] = userId
+        }
+    }
 }
 
 /**
@@ -80,7 +92,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false) // Initial default values
+        initialValue = UserSettings(800f, 500f, false, null) // Initial default values
     )
 
     // Public functions to be called from the UI to update the settings.
@@ -99,6 +111,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSaveVadSegmentsOnly(value: Boolean) {
         viewModelScope.launch {
             settingsManager.updateSaveVadSegmentsOnly(value)
+        }
+    }
+
+    fun updateUserId(userId: String) {
+        viewModelScope.launch {
+            settingsManager.updateUserId(userId)
         }
     }
 }
