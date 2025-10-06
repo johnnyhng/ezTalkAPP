@@ -8,23 +8,11 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
-import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,29 +21,11 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -80,9 +50,7 @@ import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
+import java.util.*
 import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
@@ -135,6 +103,9 @@ fun HomeScreen(
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsSpeaking by remember { mutableStateOf(false) }
 
+    // Channel to signal the audio processor to flush remaining buffers
+    val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
+
     // Initialize TTS
     LaunchedEffect(key1 = context) {
         tts = TextToSpeech(context) { status ->
@@ -182,6 +153,11 @@ fun HomeScreen(
     }
 
     val onRecordingButtonClick: () -> Unit = {
+        if (isStarted) { // User is clicking "Stop"
+            coroutineScope.launch {
+                flushChannel.send(Unit) // Signal the processor to flush
+            }
+        }
         isStarted = !isStarted
     }
 
@@ -253,14 +229,25 @@ fun HomeScreen(
 
                     var fullRecordingBuffer = arrayListOf<Float>()
 
-                    for (s in samplesChannel) {
-                        if (!isStarted) break
-                        if (isPlaying) continue
+                    var done = false
+                    while (!done) {
+                        val s = samplesChannel.tryReceive().getOrNull()
+                        val flushRequest = flushChannel.tryReceive().getOrNull()
 
-                        buffer.addAll(s.toList())
+                        if (s == null) {
+                            if (flushRequest != null || (samplesChannel.isClosedForReceive && buffer.isEmpty())) {
+                                done =
+                                    true // Stop signal or closed channel, prepare for final processing
+                            } else {
+                                delay(10) // No data, wait briefly
+                                // continue
+                            }
+                        } else {
+                            buffer.addAll(s.toList())
 
-                        if (isSpeechStarted && !saveVadSegmentsOnly) {
-                            fullRecordingBuffer.addAll(s.toList())
+                            if (isSpeechStarted && !saveVadSegmentsOnly) {
+                                fullRecordingBuffer.addAll(s.toList())
+                            }
                         }
 
                         while (offset + windowSize < buffer.size) {
@@ -278,35 +265,45 @@ fun HomeScreen(
                             }
                         }
 
-                        val elapsed = System.currentTimeMillis() - startTime
-                        if (isSpeechStarted && elapsed > PARTIAL_INTERVAL_MS) {
-                            val stream = SimulateStreamingAsr.recognizer.createStream()
-                            try {
-                                stream.acceptWaveform(
-                                    buffer.subList(0, offset).toFloatArray(),
-                                    sampleRateInHz
-                                )
-                                SimulateStreamingAsr.recognizer.decode(stream)
-                                val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                lastText = result.text
+                        if (isSpeechStarted) {
+                            val elapsed = System.currentTimeMillis() - startTime
+                            if (elapsed > PARTIAL_INTERVAL_MS) {
+                                val stream = SimulateStreamingAsr.recognizer.createStream()
+                                try {
+                                    stream.acceptWaveform(
+                                        buffer.subList(0, offset).toFloatArray(),
+                                        sampleRateInHz
+                                    )
+                                    SimulateStreamingAsr.recognizer.decode(stream)
+                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                    lastText = result.text
 
-                                if (lastText.isNotBlank()) {
-                                    if (!added || resultList.isEmpty()) {
-                                        resultList.add(Transcript(recognizedText = lastText, wavFilePath = ""))
-                                        added = true
-                                    } else {
-                                        val lastItem = resultList.last()
-                                        resultList[resultList.size - 1] =
-                                            lastItem.copy(recognizedText = lastText, modifiedText = lastText)
+                                    if (lastText.isNotBlank()) {
+                                        if (!added || resultList.isEmpty()) {
+                                            resultList.add(
+                                                Transcript(
+                                                    recognizedText = lastText,
+                                                    wavFilePath = ""
+                                                )
+                                            )
+                                            added = true
+                                        } else {
+                                            val lastItem = resultList.last()
+                                            resultList[resultList.size - 1] =
+                                                lastItem.copy(
+                                                    recognizedText = lastText,
+                                                    modifiedText = lastText
+                                                )
+                                        }
+                                        coroutineScope.launch {
+                                            lazyColumnListState.animateScrollToItem(resultList.size - 1)
+                                        }
                                     }
-                                    coroutineScope.launch {
-                                        lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                                    }
+                                } finally {
+                                    stream.release()
                                 }
-                            } finally {
-                                stream.release()
+                                startTime = System.currentTimeMillis()
                             }
-                            startTime = System.currentTimeMillis()
                         }
 
                         while (!SimulateStreamingAsr.vad.empty()) {
@@ -318,7 +315,8 @@ fun HomeScreen(
 
                         if (utteranceSegments.isNotEmpty()) {
                             val since = System.currentTimeMillis() - lastVadPacketAt
-                            if (since >= LINGER_MS) {
+                            // Process if silence duration is met OR if it's the final flush
+                            if (since >= LINGER_MS || (done && utteranceSegments.isNotEmpty())) {
                                 val totalSize = utteranceSegments.sumOf { it.size }
                                 val concatenated = FloatArray(totalSize)
                                 var currentPos = 0
@@ -345,7 +343,10 @@ fun HomeScreen(
                                     SimulateStreamingAsr.recognizer.decode(stream)
                                     val result = SimulateStreamingAsr.recognizer.getResult(stream)
 
-                                    val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(
+                                    val timestamp = SimpleDateFormat(
+                                        "yyyyMMdd-HHmmss",
+                                        Locale.getDefault()
+                                    ).format(
                                         Date()
                                     )
                                     val wavPath = saveAsWav(
@@ -361,21 +362,23 @@ fun HomeScreen(
                                         wavFilePath = wavPath ?: ""
                                     )
 
-                                    if (lastText.isNotBlank()) {
+                                    if (result.text.isNotBlank()) {
                                         if (added && resultList.isNotEmpty()) {
                                             resultList[resultList.size - 1] = newTranscript
                                         } else {
                                             resultList.add(newTranscript)
                                         }
-                                    } else {
-                                        resultList.add(newTranscript)
                                     }
 
                                     // Add the completed record to our feedback list
-                                    feedbackRecords.add(resultList.last())
+                                    if (result.text.isNotBlank() && resultList.isNotEmpty()) {
+                                        feedbackRecords.add(resultList.last())
+                                    }
 
                                     coroutineScope.launch {
-                                        lazyColumnListState.animateScrollToItem(resultList.size - 1)
+                                        if (resultList.isNotEmpty()) {
+                                            lazyColumnListState.animateScrollToItem(resultList.size - 1)
+                                        }
                                     }
                                 } finally {
                                     stream.release()
@@ -475,8 +478,9 @@ fun HomeScreen(
                 onRecordingButtonClick = onRecordingButtonClick,
                 onCopyButtonClick = {
                     if (resultList.isNotEmpty()) {
-                        val s = resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
-                            .joinToString(separator = "\n")
+                        val s =
+                            resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
+                                .joinToString(separator = "\n")
                         clipboardManager.setText(AnnotatedString(s))
                         Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
                     } else {
@@ -503,7 +507,10 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(text = "${index + 1}: ${result.modifiedText}", modifier = Modifier.weight(1f))
+                        Text(
+                            text = "${index + 1}: ${result.modifiedText}",
+                            modifier = Modifier.weight(1f)
+                        )
 
                         if (result.wavFilePath.isNotEmpty()) {
                             // Talk Button -> IconButton
@@ -511,7 +518,12 @@ fun HomeScreen(
                                 onClick = {
                                     stopPlayback() // Stop any audio playback
                                     val utteranceId = UUID.randomUUID().toString()
-                                    tts?.speak(result.modifiedText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                                    tts?.speak(
+                                        result.modifiedText,
+                                        TextToSpeech.QUEUE_FLUSH,
+                                        null,
+                                        utteranceId
+                                    )
                                 },
                                 enabled = !isStarted && !isPlaying && !isTtsSpeaking
                             ) {
@@ -620,7 +632,6 @@ private fun readWavFileToFloatArray(path: String): FloatArray? {
     }
 }
 
-
 @Composable
 private fun EditRecognitionDialog(
     originalText: String,
@@ -656,7 +667,10 @@ private fun EditRecognitionDialog(
 
                 // "Recognize again" functionality
                 if (wavFilePath.isNotEmpty()) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Button(
                             onClick = {
                                 coroutineScope.launch(Dispatchers.IO) {
@@ -667,7 +681,10 @@ private fun EditRecognitionDialog(
                                         val audioData = readWavFileToFloatArray(wavFilePath)
                                         if (audioData != null) {
                                             val stream = recognizer.createStream()
-                                            stream.acceptWaveform(audioData, sampleRateInHz)
+                                            stream.acceptWaveform(
+                                                audioData,
+                                                sampleRateInHz
+                                            )
                                             recognizer.decode(stream)
                                             val result = recognizer.getResult(stream).text
                                             launch(Dispatchers.Main) {
@@ -676,7 +693,8 @@ private fun EditRecognitionDialog(
                                             stream.release()
                                         } else {
                                             launch(Dispatchers.Main) {
-                                                recognitionError = "Error: Could not read audio file."
+                                                recognitionError =
+                                                    "Error: Could not read audio file."
                                             }
                                         }
                                     } catch (e: Exception) {
@@ -701,7 +719,7 @@ private fun EditRecognitionDialog(
                         }
 
                         recognitionError?.let { error ->
-                            Text(error, color = androidx.compose.ui.graphics.Color.Red, modifier = Modifier.padding(top = 8.dp))
+                            Text(error, color = Color.Red, modifier = Modifier.padding(top = 8.dp))
                         }
 
                         newRecognitionResult?.let { result ->
