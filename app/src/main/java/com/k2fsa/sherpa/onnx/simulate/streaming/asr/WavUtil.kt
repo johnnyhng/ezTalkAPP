@@ -99,8 +99,8 @@ fun saveJsonl(
         }
         val jsonLine = jsonObject.toString() + "\n"
 
-        // Append the new JSON line to the file
-        file.appendText(jsonLine)
+        // Overwrite the file with the new JSON line
+        file.writeText(jsonLine)
 
         Log.i(TAG, "Successfully appended to JSONL file: ${file.absolutePath}")
         return file.absolutePath
