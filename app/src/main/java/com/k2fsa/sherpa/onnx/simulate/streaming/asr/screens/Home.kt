@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -45,7 +44,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
 private const val sampleRateInHz = 16000
@@ -91,10 +89,10 @@ fun HomeScreen(
     // Initialize userId and store it if it's new
     LaunchedEffect(userSettings.userId) {
         if (userSettings.userId == null) {
-            homeViewModel.updateUserId("user")
+            homeViewModel.updateUserId("user@gmail.com")
         }
     }
-    val userId = userSettings.userId ?: "user" // Use "user" as a fallback
+    val userId = userSettings.userId ?: "user@gmail.com" // Use a valid email as a fallback
 
     // Playback state
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
@@ -446,57 +444,6 @@ fun HomeScreen(
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(modifier = Modifier) {
-            // Delay Slider
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text(
-                    text = "Delay: ${userSettings.lingerMs.roundToInt()} ms",
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Slider(
-                    value = userSettings.lingerMs,
-                    onValueChange = { homeViewModel.updateLingerMs(it) },
-                    valueRange = 0f..10000f,
-                    steps = ((10000f - 0f) / 100f).toInt() - 1,
-                    enabled = !isStarted && !isPlaying && !isTtsSpeaking
-                )
-            }
-
-            // Recognize Time Slider
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Text(
-                    text = "Recognize Time: ${userSettings.partialIntervalMs.roundToInt()} ms",
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Slider(
-                    value = userSettings.partialIntervalMs,
-                    onValueChange = { homeViewModel.updatePartialIntervalMs(it) },
-                    valueRange = 200f..1000f,
-                    steps = ((1000f - 200f) / 50f).toInt() - 1,
-                    enabled = !isStarted && !isPlaying && !isTtsSpeaking
-                )
-            }
-
-            // Save Mode Switch
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(text = "Save VAD Segments")
-                Spacer(modifier = Modifier.width(8.dp))
-                Switch(
-                    checked = !userSettings.saveVadSegmentsOnly,
-                    onCheckedChange = { isChecked -> homeViewModel.updateSaveVadSegmentsOnly(!isChecked) },
-                    enabled = !isStarted && !isPlaying && !isTtsSpeaking
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Save Full Audio")
-            }
-
             HomeButtonRow(
                 isStarted = isStarted,
                 onRecordingButtonClick = onRecordingButtonClick,

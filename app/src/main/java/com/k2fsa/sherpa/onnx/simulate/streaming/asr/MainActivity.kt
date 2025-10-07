@@ -35,6 +35,7 @@ import androidx.navigation.compose.rememberNavController
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.FileManagerScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HelpScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HomeScreen
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.SettingsScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ui.theme.SimulateStreamingAsrTheme
 
 const val TAG = "sherpa-onnx-sim-asr"
@@ -132,6 +133,10 @@ fun NavigationHost(navController: NavHostController) {
 
         composable(NavRoutes.FileManager.route) {
             FileManagerScreen()
+        }
+
+        composable(NavRoutes.Settings.route) {
+            SettingsScreen()
         }
 
         composable(NavRoutes.Help.route) {
