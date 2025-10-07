@@ -1,6 +1,5 @@
 package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 
-import android.media.MediaPlayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
@@ -25,9 +25,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,20 +37,32 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveJsonl
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 
 /**
  * Data class to hold a WAV file and the content of its corresponding JSONL file.
  */
-data class WavFileEntry(val wavFile: File, val jsonlContent: List<String>)
+data class WavFileEntry(
+    val wavFile: File,
+    val jsonlContent: List<String>,
+    val originalText: String,
+    val modifiedText: String,
+)
 
 @Composable
 fun FileManagerScreen() {
     val context = LocalContext.current
     var wavFileEntries by remember { mutableStateOf<List<WavFileEntry>>(emptyList()) }
-    var currentlyPlaying by remember { mutableStateOf<File?>(null) }
-    val mediaPlayer by remember { mutableStateOf(MediaPlayer()) }
+    val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Edit dialog state
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingEntry by remember { mutableStateOf<WavFileEntry?>(null) }
+
 
     fun listWavFiles() {
         val wavsDir = File(context.filesDir, "wavs")
@@ -56,24 +70,28 @@ fun FileManagerScreen() {
             wavFileEntries = wavsDir.walkTopDown()
                 .filter { it.isFile && it.name.endsWith(".wav") }
                 .sortedByDescending { it.lastModified() }
-                .map { wavFile ->
+                .mapNotNull { wavFile ->
                     val jsonlFile = File(wavFile.parent, "${wavFile.nameWithoutExtension}.jsonl")
-                    val content = if (jsonlFile.exists()) {
-                        jsonlFile.readLines().mapNotNull { line ->
-                            // Parse JSON and format it for display
-                            try {
-                                val json = JSONObject(line)
-                                val original = json.keys().next()
-                                val modified = json.getString(original)
-                                "Original: $original\nModified: $modified"
-                            } catch (e: Exception) {
-                                null // Ignore malformed lines
-                            }
+                    if (jsonlFile.exists()) {
+                        try {
+                            val line = jsonlFile.readText()
+                            val json = JSONObject(line)
+                            val original = json.keys().next()
+                            val modified = json.getString(original)
+                            val content = "Original: $original\nModified: $modified"
+
+                            WavFileEntry(
+                                wavFile = wavFile,
+                                jsonlContent = listOf(content),
+                                originalText = original,
+                                modifiedText = modified,
+                            )
+                        } catch (e: Exception) {
+                            null // Ignore malformed lines
                         }
                     } else {
-                        emptyList()
+                        null
                     }
-                    WavFileEntry(wavFile, content)
                 }.toList()
         } else {
             wavFileEntries = emptyList()
@@ -86,9 +104,33 @@ fun FileManagerScreen() {
 
     DisposableEffect(Unit) {
         onDispose {
-            mediaPlayer.release()
+            MediaController.stop()
         }
     }
+
+    if (showEditDialog && editingEntry != null) {
+        EditRecognitionDialog(
+            originalText = editingEntry!!.originalText,
+            currentText = editingEntry!!.modifiedText,
+            wavFilePath = editingEntry!!.wavFile.absolutePath,
+            onDismiss = { showEditDialog = false },
+            onConfirm = { newText ->
+                coroutineScope.launch {
+                    val userId = editingEntry!!.wavFile.parentFile.name
+                    saveJsonl(
+                        context = context,
+                        userId = userId,
+                        filename = editingEntry!!.wavFile.nameWithoutExtension,
+                        originalText = editingEntry!!.originalText,
+                        modifiedText = newText
+                    )
+                    listWavFiles() // Refresh the list
+                }
+                showEditDialog = false
+            }
+        )
+    }
+
 
     Column(
         modifier = Modifier
@@ -115,7 +157,7 @@ fun FileManagerScreen() {
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        val isPlaying = currentlyPlaying == entry.wavFile
+                        val isPlaying = currentlyPlaying == entry.wavFile.absolutePath
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -129,22 +171,22 @@ fun FileManagerScreen() {
                             )
                             IconButton(
                                 onClick = {
+                                    editingEntry = entry
+                                    showEditDialog = true
+                                },
+                                enabled = currentlyPlaying == null
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = "Edit"
+                                )
+                            }
+                            IconButton(
+                                onClick = {
                                     if (isPlaying) {
-                                        mediaPlayer.stop()
-                                        mediaPlayer.reset()
-                                        currentlyPlaying = null
+                                        MediaController.stop()
                                     } else {
-                                        currentlyPlaying = entry.wavFile
-                                        mediaPlayer.apply {
-                                            reset()
-                                            setDataSource(entry.wavFile.absolutePath)
-                                            prepare()
-                                            start()
-                                            setOnCompletionListener {
-                                                reset()
-                                                currentlyPlaying = null
-                                            }
-                                        }
+                                        MediaController.play(entry.wavFile.absolutePath)
                                     }
                                 },
                                 enabled = currentlyPlaying == null || isPlaying

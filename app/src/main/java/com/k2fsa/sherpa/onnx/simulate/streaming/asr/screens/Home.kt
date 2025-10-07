@@ -6,7 +6,6 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -23,8 +22,6 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -51,7 +48,6 @@ import java.util.*
 import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
-private var mediaPlayer: MediaPlayer? = null
 private const val sampleRateInHz = 16000
 
 /**
@@ -101,8 +97,8 @@ fun HomeScreen(
     val userId = userSettings.userId ?: "user" // Use "user" as a fallback
 
     // Playback state
-    var currentlyPlayingPath by remember { mutableStateOf<String?>(null) }
-    val isPlaying by remember { derivedStateOf { currentlyPlayingPath != null } }
+    val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
+    val isPlaying = currentlyPlaying != null
 
     // TTS state
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
@@ -138,19 +134,11 @@ fun HomeScreen(
     }
 
 
-    fun stopPlayback() {
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
-        mediaPlayer = null
-        currentlyPlayingPath = null
-    }
-
     DisposableEffect(Unit) {
         onDispose {
             audioRecord?.release()
             audioRecord = null
-            mediaPlayer?.release()
-            mediaPlayer = null
+            MediaController.stop()
             tts?.stop()
             tts?.shutdown()
             tts = null
@@ -420,7 +408,7 @@ fun HomeScreen(
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
-            stopPlayback()
+            MediaController.stop()
         }
     }
 
@@ -552,7 +540,7 @@ fun HomeScreen(
                             // Talk Button -> IconButton
                             IconButton(
                                 onClick = {
-                                    stopPlayback() // Stop any audio playback
+                                    MediaController.stop() // Stop any audio playback
                                     val utteranceId = UUID.randomUUID().toString()
                                     tts?.speak(
                                         result.modifiedText,
@@ -589,35 +577,17 @@ fun HomeScreen(
                             // Play Button -> IconButton
                             IconButton(
                                 onClick = {
-                                    if (currentlyPlayingPath == result.wavFilePath) {
-                                        stopPlayback()
+                                    if (currentlyPlaying == result.wavFilePath) {
+                                        MediaController.stop()
                                     } else {
-                                        stopPlayback()
-                                        currentlyPlayingPath = result.wavFilePath
-                                        mediaPlayer = MediaPlayer().apply {
-                                            try {
-                                                setDataSource(result.wavFilePath)
-                                                prepare()
-                                                start()
-                                                setOnCompletionListener {
-                                                    stopPlayback()
-                                                }
-                                            } catch (e: Exception) {
-                                                Log.e(
-                                                    TAG,
-                                                    "MediaPlayer failed for ${result.wavFilePath}",
-                                                    e
-                                                )
-                                                stopPlayback()
-                                            }
-                                        }
+                                        MediaController.play(result.wavFilePath)
                                     }
                                 },
-                                enabled = !isStarted && !isTtsSpeaking && (!isPlaying || currentlyPlayingPath == result.wavFilePath)
+                                enabled = !isStarted && !isTtsSpeaking && (!isPlaying || currentlyPlaying == result.wavFilePath)
                             ) {
                                 Icon(
-                                    imageVector = if (currentlyPlayingPath == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                    contentDescription = if (currentlyPlayingPath == result.wavFilePath) "Stop" else "Play"
+                                    imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                    contentDescription = if (currentlyPlaying == result.wavFilePath) "Stop" else "Play"
                                 )
                             }
                         }
