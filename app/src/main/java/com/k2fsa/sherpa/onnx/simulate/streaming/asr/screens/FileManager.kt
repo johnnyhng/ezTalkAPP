@@ -1,5 +1,6 @@
 package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -38,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveJsonl
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -55,8 +58,9 @@ data class WavFileEntry(
 )
 
 @Composable
-fun FileManagerScreen() {
+fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
     val context = LocalContext.current
+    val userSettings by homeViewModel.userSettings.collectAsState()
     var wavFileEntries by remember { mutableStateOf<List<WavFileEntry>>(emptyList()) }
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
     val coroutineScope = rememberCoroutineScope()
@@ -65,9 +69,13 @@ fun FileManagerScreen() {
     var showEditDialog by remember { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<WavFileEntry?>(null) }
 
+    fun feedback(selectedFiles: List<WavFileEntry>) {
+        // TODO: Implement feedback submission
+        Toast.makeText(context, "Feedback for ${selectedFiles.size} files submitted", Toast.LENGTH_SHORT).show()
+    }
 
     fun listWavFiles() {
-        val wavsDir = File(context.filesDir, "wavs")
+        val wavsDir = File(context.filesDir, "wavs/${userSettings.userId}")
         if (wavsDir.exists()) {
             wavFileEntries = wavsDir.walkTopDown()
                 .filter { it.isFile && it.name.endsWith(".wav") }
@@ -102,7 +110,7 @@ fun FileManagerScreen() {
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(userSettings.userId) {
         listWavFiles()
     }
 
@@ -120,10 +128,9 @@ fun FileManagerScreen() {
             onDismiss = { showEditDialog = false },
             onConfirm = { newText ->
                 coroutineScope.launch {
-                    val userId = editingEntry!!.wavFile.parentFile.name
                     saveJsonl(
                         context = context,
-                        userId = userId,
+                        userId = userSettings.userId,
                         filename = editingEntry!!.wavFile.nameWithoutExtension,
                         originalText = editingEntry!!.originalText,
                         modifiedText = newText,
@@ -143,15 +150,24 @@ fun FileManagerScreen() {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Button(onClick = {
-            val wavsDir = File(context.filesDir, "wavs")
-            if (wavsDir.exists()) {
-                wavsDir.deleteRecursively()
+        Row {
+            Button(onClick = {
+                val wavsDir = File(context.filesDir, "wavs/${userSettings.userId}")
+                if (wavsDir.exists()) {
+                    wavsDir.deleteRecursively()
+                }
+                listWavFiles()
+            }, enabled = currentlyPlaying == null) {
+                Text("Delete all my wavs")
             }
-            listWavFiles()
-        }, enabled = currentlyPlaying == null) {
-            Text("Delete all wavs")
+            Spacer(modifier = Modifier.width(16.dp))
+            Button(onClick = {
+                feedback(wavFileEntries.filter { it.checked })
+            }, enabled = wavFileEntries.any { it.checked }) {
+                Text("Feedback")
+            }
         }
+
 
         LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
             items(wavFileEntries) { entry ->
@@ -172,10 +188,9 @@ fun FileManagerScreen() {
                                 checked = entry.checked,
                                 onCheckedChange = {
                                     coroutineScope.launch {
-                                        val userId = entry.wavFile.parentFile.name
                                         saveJsonl(
                                             context = context,
-                                            userId = userId,
+                                            userId = userSettings.userId,
                                             filename = entry.wavFile.nameWithoutExtension,
                                             originalText = entry.originalText,
                                             modifiedText = entry.modifiedText,
@@ -186,7 +201,7 @@ fun FileManagerScreen() {
                                 }
                             )
                             Text(
-                                entry.wavFile.path.substringAfter(context.filesDir.path + "/"),
+                                entry.wavFile.name,
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold
@@ -228,15 +243,6 @@ fun FileManagerScreen() {
                                     entry.wavFile.delete()
                                     if (jsonlFile.exists()) {
                                         jsonlFile.delete()
-                                    }
-
-                                    // Also delete parent directories if they become empty
-                                    var parent = entry.wavFile.parentFile
-                                    while (parent != null && parent.name != "wavs" && parent.listFiles()
-                                            ?.isEmpty() == true
-                                    ) {
-                                        parent.delete()
-                                        parent = parent.parentFile
                                     }
                                     listWavFiles()
                                 },
