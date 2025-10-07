@@ -48,16 +48,6 @@ import java.util.*
 private var audioRecord: AudioRecord? = null
 private const val sampleRateInHz = 16000
 
-/**
- * Data class to store the recognized text, the (potentially) modified text,
- * and the path to the associated audio file.
- */
-data class Transcript(
-    val recognizedText: String,
-    var modifiedText: String = recognizedText,
-    var wavFilePath: String, // Made this a 'var' to allow updates
-)
-
 // This dynamic array will keep records for future feedback implementation.
 private val feedbackRecords = mutableListOf<Transcript>()
 
@@ -352,7 +342,8 @@ fun HomeScreen(
                                             userId = userId,
                                             filename = filename,
                                             originalText = result.text,
-                                            modifiedText = result.text // Initially, modified is same as original
+                                            modifiedText = result.text, // Initially, modified is same as original
+                                            checked = false
                                         )
                                     }
 
@@ -423,7 +414,8 @@ fun HomeScreen(
                             userId = userId,
                             filename = filename,
                             originalText = oldItem.recognizedText,
-                            modifiedText = newText
+                            modifiedText = newText,
+                            checked = oldItem.checked
                         )
                     }
                 }
@@ -488,6 +480,23 @@ fun HomeScreen(
                                         null,
                                         utteranceId
                                     )
+                                    // Update the checked status
+                                    val updatedItem = result.copy(checked = true)
+                                    resultList[index] = updatedItem
+
+                                    // Save the updated record to JSONL
+                                    val file = File(updatedItem.wavFilePath)
+                                    val filename = file.nameWithoutExtension
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        saveJsonl(
+                                            context = context,
+                                            userId = userId,
+                                            filename = filename,
+                                            originalText = updatedItem.recognizedText,
+                                            modifiedText = updatedItem.modifiedText,
+                                            checked = updatedItem.checked
+                                        )
+                                    }
                                 },
                                 enabled = !isStarted && !isPlaying && !isTtsSpeaking
                             ) {

@@ -76,6 +76,7 @@ fun saveAsWav(
  * @param filename The base filename (e.g., "rec_20231027-123456").
  * @param originalText The original recognized text.
  * @param modifiedText The (potentially) modified text.
+ * @param checked Whether the user has listened to the audio.
  * @return The absolute path to the saved JSONL file, or null on failure.
  */
 fun saveJsonl(
@@ -83,7 +84,8 @@ fun saveJsonl(
     userId: String,
     filename: String,
     originalText: String,
-    modifiedText: String
+    modifiedText: String,
+    checked: Boolean
 ): String? {
     val dir = File(context.filesDir, "wavs/$userId")
     if (!dir.exists()) {
@@ -95,7 +97,9 @@ fun saveJsonl(
     val file = File(dir, "$filename.jsonl")
     try {
         val jsonObject = JSONObject().apply {
-            put(originalText, modifiedText)
+            put("original", originalText)
+            put("modified", modifiedText)
+            put("checked", checked)
         }
         val jsonLine = jsonObject.toString() + "\n"
 

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +51,7 @@ data class WavFileEntry(
     val jsonlContent: List<String>,
     val originalText: String,
     val modifiedText: String,
+    val checked: Boolean
 )
 
 @Composable
@@ -76,8 +78,9 @@ fun FileManagerScreen() {
                         try {
                             val line = jsonlFile.readText()
                             val json = JSONObject(line)
-                            val original = json.keys().next()
-                            val modified = json.getString(original)
+                            val original = json.getString("original")
+                            val modified = json.getString("modified")
+                            val checked = json.getBoolean("checked")
                             val content = "Original: $original\nModified: $modified"
 
                             WavFileEntry(
@@ -85,6 +88,7 @@ fun FileManagerScreen() {
                                 jsonlContent = listOf(content),
                                 originalText = original,
                                 modifiedText = modified,
+                                checked = checked
                             )
                         } catch (e: Exception) {
                             null // Ignore malformed lines
@@ -122,7 +126,8 @@ fun FileManagerScreen() {
                         userId = userId,
                         filename = editingEntry!!.wavFile.nameWithoutExtension,
                         originalText = editingEntry!!.originalText,
-                        modifiedText = newText
+                        modifiedText = newText,
+                        checked = editingEntry!!.checked
                     )
                     listWavFiles() // Refresh the list
                 }
@@ -163,6 +168,23 @@ fun FileManagerScreen() {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Checkbox(
+                                checked = entry.checked,
+                                onCheckedChange = {
+                                    coroutineScope.launch {
+                                        val userId = entry.wavFile.parentFile.name
+                                        saveJsonl(
+                                            context = context,
+                                            userId = userId,
+                                            filename = entry.wavFile.nameWithoutExtension,
+                                            originalText = entry.originalText,
+                                            modifiedText = entry.modifiedText,
+                                            checked = it
+                                        )
+                                        listWavFiles()
+                                    }
+                                }
+                            )
                             Text(
                                 entry.wavFile.path.substringAfter(context.filesDir.path + "/"),
                                 modifier = Modifier.weight(1f),
