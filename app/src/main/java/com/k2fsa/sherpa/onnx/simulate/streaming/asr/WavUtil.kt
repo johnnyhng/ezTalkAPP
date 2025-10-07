@@ -2,6 +2,7 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr
 
 import android.content.Context
 import android.util.Log
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -13,14 +14,13 @@ data class RecognitionResult(val text: String, val wavFilePath: String)
 
 /**
  * Saves a FloatArray of audio samples to a WAV file in a structured directory.
- * The path will be: files/wavs/<userId>/<sanitized_text>/<filename>.wav
+ * The path will be: files/wavs/<userId>/<filename>.wav
  *
  * @param context The application context to get the files directory.
  * @param samples The FloatArray of audio samples (normalized between -1.0 and 1.0).
  * @param sampleRate The sample rate of the audio (e.g., 16000).
  * @param numChannels The number of channels (1 for mono, 2 for stereo).
  * @param userId The ID of the user.
- * @param text The recognized text, used for the sub-directory.
  * @param filename The desired name for the WAV file (without the .wav extension).
  * @return The absolute path to the saved WAV file, or null on failure.
  */
@@ -30,10 +30,10 @@ fun saveAsWav(
     sampleRate: Int,
     numChannels: Int,
     userId: String,
-    text: String,
     filename: String
 ): String? {
-    val dir = File(context.filesDir, "wavs/$userId/$text")
+    // Directory path is now just based on the user ID
+    val dir = File(context.filesDir, "wavs/$userId")
 
     if (!dir.exists()) {
         if (!dir.mkdirs()) {
@@ -67,6 +67,49 @@ fun saveAsWav(
         return null
     }
 }
+
+/**
+ * Saves or appends a JSON object to a .jsonl file.
+ *
+ * @param context The application context.
+ * @param userId The ID of the user.
+ * @param filename The base filename (e.g., "rec_20231027-123456").
+ * @param originalText The original recognized text.
+ * @param modifiedText The (potentially) modified text.
+ * @return The absolute path to the saved JSONL file, or null on failure.
+ */
+fun saveJsonl(
+    context: Context,
+    userId: String,
+    filename: String,
+    originalText: String,
+    modifiedText: String
+): String? {
+    val dir = File(context.filesDir, "wavs/$userId")
+    if (!dir.exists()) {
+        if (!dir.mkdirs()) {
+            Log.e(TAG, "Failed to create directory for jsonl: ${dir.absolutePath}")
+            return null
+        }
+    }
+    val file = File(dir, "$filename.jsonl")
+    try {
+        val jsonObject = JSONObject().apply {
+            put(originalText, modifiedText)
+        }
+        val jsonLine = jsonObject.toString() + "\n"
+
+        // Append the new JSON line to the file
+        file.appendText(jsonLine)
+
+        Log.i(TAG, "Successfully appended to JSONL file: ${file.absolutePath}")
+        return file.absolutePath
+    } catch (e: Exception) {
+        Log.e(TAG, "Error saving JSONL file", e)
+        return null
+    }
+}
+
 
 private fun writeWavHeader(
     out: FileOutputStream,

@@ -3,7 +3,6 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -43,6 +42,7 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.R
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveAsWav
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveJsonl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -54,7 +54,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.io.path.exists
 import kotlin.math.roundToInt
 
 private var audioRecord: AudioRecord? = null
@@ -99,7 +98,7 @@ fun HomeScreen(
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
 
-    // *** MODIFIED: Initialize userId and store it if it's new ***
+    // Initialize userId and store it if it's new
     LaunchedEffect(userSettings.userId) {
         if (userSettings.userId == null) {
             homeViewModel.updateUserId("user")
@@ -361,17 +360,29 @@ fun HomeScreen(
                                     ).format(
                                         Date()
                                     )
+                                    val filename = "rec_${timestamp}"
 
-                                    // *** MODIFIED: Use the new saveAsWav from WavUtil.kt with structured path ***
+                                    // Save the WAV file
                                     val wavPath = saveAsWav(
                                         context = context,
                                         samples = audioToSave,
                                         sampleRate = sampleRateInHz,
                                         numChannels = 1,
                                         userId = userId,
-                                        text = result.text, // Use recognized text for initial directory
-                                        filename = "${result.text}-rec_${timestamp}"
+                                        filename = filename
                                     )
+
+                                    if (wavPath != null) {
+                                        // Save the initial JSONL entry
+                                        saveJsonl(
+                                            context = context,
+                                            userId = userId,
+                                            filename = filename,
+                                            originalText = result.text,
+                                            modifiedText = result.text // Initially, modified is same as original
+                                        )
+                                    }
+
 
                                     val newTranscript = Transcript(
                                         recognizedText = result.text,
@@ -428,6 +439,21 @@ fun HomeScreen(
             onConfirm = { newText ->
                 val oldItem = resultList[editingItemIndex]
                 resultList[editingItemIndex] = oldItem.copy(modifiedText = newText)
+
+                // *** MODIFIED: Save the edit to the JSONL file ***
+                if (oldItem.wavFilePath.isNotEmpty()) {
+                    val file = File(oldItem.wavFilePath)
+                    val filename = file.nameWithoutExtension
+                    coroutineScope.launch(Dispatchers.IO) {
+                        saveJsonl(
+                            context = context,
+                            userId = userId,
+                            filename = filename,
+                            originalText = oldItem.recognizedText,
+                            modifiedText = newText
+                        )
+                    }
+                }
                 showEditDialog = false
             }
         )
@@ -533,19 +559,6 @@ fun HomeScreen(
                             IconButton(
                                 onClick = {
                                     stopPlayback() // Stop any audio playback
-
-                                    // *** MODIFIED: Logic to rename/move the WAV file ***
-                                    val oldPath = result.wavFilePath
-                                    val newFilePath = moveWavFile(context, oldPath, userId, result.modifiedText)
-                                    if (newFilePath != null) {
-                                        // Update the item in the list with the new path
-                                        val updatedItem = result.copy(wavFilePath = newFilePath)
-                                        resultList[index] = updatedItem
-                                        Log.i(TAG, "WAV file moved to $newFilePath")
-                                    } else {
-                                        Log.w(TAG, "Could not move WAV file for text: ${result.modifiedText}")
-                                    }
-
                                     val utteranceId = UUID.randomUUID().toString()
                                     tts?.speak(
                                         result.modifiedText,
@@ -620,51 +633,6 @@ fun HomeScreen(
         }
     }
 }
-
-/**
- * *** ADDED: Helper function to move the WAV file to a new directory based on modified text. ***
- */
-private fun moveWavFile(context: Context, oldPath: String, userId: String, newText: String): String? {
-    val oldFile = File(oldPath)
-    if (!oldFile.exists()) {
-        Log.e(TAG, "Original WAV file not found at: $oldPath")
-        return null
-    }
-
-    val newDir = File(context.filesDir, "wavs/$userId/$newText")
-
-    if (!newDir.exists()) {
-        if (!newDir.mkdirs()) {
-            Log.e(TAG, "Failed to create new directory: ${newDir.absolutePath}")
-            return null
-        }
-    }
-
-    val newFile = File(newDir, oldFile.name)
-
-    // If the file is already in the correct location, do nothing.
-    if (oldFile.absolutePath == newFile.absolutePath) {
-        return oldFile.absolutePath
-    }
-
-    return try {
-        if (oldFile.renameTo(newFile)) {
-            // Delete the old parent directory if it's empty
-            val oldParentDir = oldFile.parentFile
-            if (oldParentDir != null && oldParentDir.isDirectory && oldParentDir.listFiles()?.isEmpty() == true) {
-                oldParentDir.delete()
-            }
-            newFile.absolutePath
-        } else {
-            Log.e(TAG, "Failed to rename file from $oldPath to ${newFile.absolutePath}")
-            null
-        }
-    } catch (e: Exception) {
-        Log.e(TAG, "Error moving file", e)
-        null
-    }
-}
-
 
 /**
  * Reads a WAV file and returns its audio data as a FloatArray.
