@@ -85,14 +85,7 @@ fun HomeScreen(
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
-
-    // Initialize userId and store it if it's new
-    LaunchedEffect(userSettings.userId) {
-        if (userSettings.userId == null) {
-            homeViewModel.updateUserId("user@gmail.com")
-        }
-    }
-    val userId = userSettings.userId ?: "user@gmail.com" // Use a valid email as a fallback
+    val userId = userSettings.userId
 
     // Playback state
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()

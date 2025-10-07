@@ -37,7 +37,7 @@ fun SettingsScreen(
 
     if (showUserIdDialog) {
         UserIdDialog(
-            currentUserId = userSettings.userId ?: "",
+            currentUserId = userSettings.userId,
             onDismiss = { showUserIdDialog = false },
             onConfirm = { newUserId ->
                 homeViewModel.updateUserId(newUserId)
@@ -51,7 +51,7 @@ fun SettingsScreen(
         Button(onClick = { showUserIdDialog = true }) {
             Text(text = "Edit User ID")
         }
-        Text(text = "Current User ID: ${userSettings.userId ?: "Not set"}")
+        Text(text = "Current User ID: ${userSettings.userId}")
 
         // Delay Slider
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -101,7 +101,6 @@ fun SettingsScreen(
         }
     }
 }
-
 
 @Composable
 private fun UserIdDialog(

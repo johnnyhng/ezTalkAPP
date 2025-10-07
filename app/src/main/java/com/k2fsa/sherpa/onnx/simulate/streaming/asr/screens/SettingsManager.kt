@@ -13,7 +13,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -28,7 +27,7 @@ data class UserSettings(
     val lingerMs: Float,
     val partialIntervalMs: Float,
     val saveVadSegmentsOnly: Boolean,
-    val userId: String?
+    val userId: String
 )
 
 /**
@@ -51,7 +50,7 @@ class SettingsManager(context: Context) {
         val partialIntervalMs = preferences[PARTIAL_INTERVAL_MS_KEY] ?: 500f // Default: 500ms
         val saveVadSegmentsOnly =
             preferences[SAVE_VAD_SEGMENTS_ONLY_KEY] ?: false // Default: false (Save Full Audio)
-        val userId = preferences[USER_ID_KEY]
+        val userId = preferences[USER_ID_KEY] ?: "user@gmail.com"
         UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly, userId)
     }
 
@@ -92,7 +91,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false, null) // Initial default values
+        initialValue = UserSettings(800f, 500f, false, "user@gmail.com") // Initial default values
     )
 
     // Public functions to be called from the UI to update the settings.
