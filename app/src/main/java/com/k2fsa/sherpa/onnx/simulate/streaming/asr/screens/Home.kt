@@ -11,7 +11,6 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -25,12 +24,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -633,56 +626,3 @@ private fun HomeButtonRow(
         }
     }
 }
-
-@Composable
-fun WaveformDisplay(
-    samples: FloatArray,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary
-) {
-    Canvas(modifier = modifier) {
-        drawWaveform(samples, color)
-    }
-}
-
-private fun DrawScope.drawWaveform(samples: FloatArray, color: Color) {
-    if (samples.size < 2) return
-
-    val path = Path()
-    val width = size.width
-    val height = size.height
-    val centerY = height / 2
-
-    // Simple downsampling if there are too many points to draw reasonably
-    val step = (samples.size / (width / 4f)).toInt().coerceAtLeast(1)
-    val drawableSamples = if (step > 1) samples.filterIndexed { index, _ -> index % step == 0 } else samples.toList()
-    if (drawableSamples.size < 2) return
-
-    val points = drawableSamples.mapIndexed { index, sample ->
-        val x = index.toFloat() * width / (drawableSamples.size - 1)
-        val y = centerY - (sample * centerY * 0.8f).coerceIn(-centerY, centerY) // 0.8f to avoid touching edges
-        Offset(x, y)
-    }
-
-    path.moveTo(points.first().x, points.first().y)
-
-    for (i in 1 until points.size) {
-        val midPoint = Offset((points[i].x + points[i - 1].x) / 2, (points[i].y + points[i - 1].y) / 2)
-        path.quadraticBezierTo(
-            points[i - 1].x,
-            points[i - 1].y,
-            midPoint.x,
-            midPoint.y
-        )
-    }
-    // Draw the last segment
-    path.lineTo(points.last().x, points.last().y)
-
-
-    drawPath(
-        path = path,
-        color = color,
-        style = Stroke(width = 3f, cap = StrokeCap.Round)
-    )
-}
-
