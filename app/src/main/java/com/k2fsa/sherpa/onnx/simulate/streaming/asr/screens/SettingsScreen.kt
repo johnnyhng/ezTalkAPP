@@ -1,14 +1,24 @@
 package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 
 import android.util.Patterns
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -23,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -32,8 +43,13 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     homeViewModel: HomeViewModel = viewModel(),
 ) {
+    val context = LocalContext.current
     val userSettings by homeViewModel.userSettings.collectAsState()
     var showUserIdDialog by remember { mutableStateOf(false) }
+    val models = homeViewModel.models
+    val selectedModel = homeViewModel.selectedModel
+    var modelMenuExpanded by remember { mutableStateOf(false) }
+    var modelUrl by remember { mutableStateOf("") }
 
     if (showUserIdDialog) {
         UserIdDialog(
@@ -52,6 +68,60 @@ fun SettingsScreen(
             Text(text = "Edit User ID")
         }
         Text(text = "Current User ID: ${userSettings.userId}")
+
+        // Model Selection
+        Column(modifier = Modifier.padding(vertical = 16.dp)) {
+            Text("ASR Model", style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = selectedModel?.name ?: "No model selected",
+                    onValueChange = { },
+                    readOnly = true,
+                    modifier = Modifier.weight(1f),
+                    trailingIcon = {
+                        IconButton(onClick = { modelMenuExpanded = true }) {
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Select model")
+                        }
+                    }
+                )
+                DropdownMenu(
+                    expanded = modelMenuExpanded,
+                    onDismissRequest = { modelMenuExpanded = false }
+                ) {
+                    models.forEach { model ->
+                        DropdownMenuItem(text = { Text(model.name) }, onClick = {
+                            homeViewModel.updateModelName(model.name)
+                            modelMenuExpanded = false
+                        })
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = modelUrl,
+                onValueChange = { modelUrl = it },
+                label = { Text("Model Download URL") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { Toast.makeText(context, "Downloading from $modelUrl...", Toast.LENGTH_SHORT).show() }) {
+                    Text("Download")
+                }
+                IconButton(onClick = {
+                    Toast.makeText(context, "Checking version...", Toast.LENGTH_SHORT).show()
+                    homeViewModel.checkModelVersion()
+                }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Check version")
+                }
+                IconButton(onClick = {
+                    selectedModel?.let {
+                        homeViewModel.deleteModel(it)
+                    }
+                }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete model")
+                }
+            }
+        }
 
         // Delay Slider
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {

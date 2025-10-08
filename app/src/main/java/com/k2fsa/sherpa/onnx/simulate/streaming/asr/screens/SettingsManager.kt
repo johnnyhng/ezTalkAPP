@@ -2,6 +2,9 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -11,8 +14,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.Model
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ModelManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -27,7 +33,8 @@ data class UserSettings(
     val lingerMs: Float,
     val partialIntervalMs: Float,
     val saveVadSegmentsOnly: Boolean,
-    val userId: String
+    val userId: String,
+    val modelName: String?
 )
 
 /**
@@ -42,6 +49,7 @@ class SettingsManager(context: Context) {
         val PARTIAL_INTERVAL_MS_KEY = floatPreferencesKey("partial_interval_ms")
         val SAVE_VAD_SEGMENTS_ONLY_KEY = booleanPreferencesKey("save_vad_segments_only")
         val USER_ID_KEY = stringPreferencesKey("user_id")
+        val MODEL_NAME_KEY = stringPreferencesKey("model_name")
     }
 
     // Flow to read the settings from DataStore, providing default values if none are set.
@@ -51,7 +59,8 @@ class SettingsManager(context: Context) {
         val saveVadSegmentsOnly =
             preferences[SAVE_VAD_SEGMENTS_ONLY_KEY] ?: false // Default: false (Save Full Audio)
         val userId = preferences[USER_ID_KEY] ?: "user@gmail.com"
-        UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly, userId)
+        val modelName = preferences[MODEL_NAME_KEY]
+        UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly, userId, modelName)
     }
 
     // Functions to update the settings in DataStore. These are suspend functions.
@@ -78,6 +87,16 @@ class SettingsManager(context: Context) {
             settings[USER_ID_KEY] = userId
         }
     }
+
+    suspend fun updateModelName(modelName: String?) {
+        appContext.dataStore.edit { settings ->
+            if (modelName == null) {
+                settings.remove(MODEL_NAME_KEY)
+            } else {
+                settings[MODEL_NAME_KEY] = modelName
+            }
+        }
+    }
 }
 
 /**
@@ -91,10 +110,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false, "user@gmail.com") // Initial default values
+        initialValue = UserSettings(800f, 500f, false, "user@gmail.com", null) // Initial default values
     )
 
-    // Public functions to be called from the UI to update the settings.
+    var models by mutableStateOf<List<Model>>(emptyList())
+        private set
+
+    var selectedModel by mutableStateOf<Model?>(null)
+        private set
+
+    init {
+        viewModelScope.launch {
+            userSettings.collect { settings ->
+                refreshModels(settings.userId)
+                selectedModel = ModelManager.getModel(application, settings.userId, settings.modelName)
+            }
+        }
+    }
+
+    private fun refreshModels(userId: String) {
+        models = ModelManager.listModels(getApplication(), userId)
+    }
+
     fun updateLingerMs(value: Float) {
         viewModelScope.launch {
             settingsManager.updateLingerMs(value)
@@ -116,6 +153,36 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun updateUserId(userId: String) {
         viewModelScope.launch {
             settingsManager.updateUserId(userId)
+            // When user ID changes, the selected model might not be valid anymore
+            settingsManager.updateModelName(null) // Reset model selection
+        }
+    }
+
+    fun updateModelName(modelName: String) {
+        viewModelScope.launch {
+            settingsManager.updateModelName(modelName)
+        }
+    }
+
+    fun downloadModel(url: String) {
+        // TODO: Implement model download logic
+    }
+
+    fun checkModelVersion() {
+        // TODO: Implement version check logic
+    }
+
+    fun deleteModel(model: Model) {
+        viewModelScope.launch {
+            val currentUserId = userSettings.first().userId
+            ModelManager.deleteModel(getApplication(), currentUserId, model.name)
+            refreshModels(currentUserId) // Refresh the list after deletion
+
+            // If the deleted model was the selected one, select the first available model.
+            if (selectedModel?.name == model.name) {
+                val firstModel = models.firstOrNull()
+                settingsManager.updateModelName(firstModel?.name)
+            }
         }
     }
 }
