@@ -16,7 +16,7 @@ fun WaveformDisplay(
     samples: FloatArray,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
-    scale: Float = 3.5f
+    scale: Float = 5.0f
 ) {
     Canvas(modifier = modifier) {
         drawWaveform(samples, color, scale)
