@@ -1,6 +1,7 @@
 package com.k2fsa.sherpa.onnx
 
 import android.content.res.AssetManager
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.Model
 
 data class OfflineRecognizerResult(
     val text: String,
@@ -221,7 +222,15 @@ by following the code)
     encoder/joiner int8, decoder fp32
 
  */
-fun getOfflineModelConfig(type: Int): OfflineModelConfig? {
+fun getOfflineModelConfig(type: Int, model: Model? = null): OfflineModelConfig? {
+    if (model != null) {
+        return OfflineModelConfig(
+            senseVoice = OfflineSenseVoiceModelConfig(
+                model = model.modelPath,
+            ),
+            tokens = model.tokensPath,
+        )
+    }
     when (type) {
         0 -> {
             val modelDir = "sherpa-onnx-paraformer-zh-2023-09-14"

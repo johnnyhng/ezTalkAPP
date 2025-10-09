@@ -26,7 +26,7 @@ object SimulateStreamingAsr {
             return _vad!!
         }
 
-    fun initOfflineRecognizer(assetManager: AssetManager? = null, application: Application) {
+    fun initOfflineRecognizer(assetManager: AssetManager? = null, application: Application, model: Model? = null) {
         synchronized(this) {
             if (_recognizer != null) {
                 return
@@ -76,7 +76,7 @@ object SimulateStreamingAsr {
             }
 
             _recognizer = OfflineRecognizer(
-                assetManager = assetManager,
+                assetManager = if (model == null) assetManager else null,
                 config = config,
             )
 

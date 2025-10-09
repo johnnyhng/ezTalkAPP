@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -35,8 +36,11 @@ import androidx.navigation.compose.rememberNavController
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.FileManagerScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HelpScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HomeScreen
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.SettingsManager
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.SettingsScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ui.theme.SimulateStreamingAsrTheme
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 const val TAG = "sherpa-onnx-sim-asr"
 private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
@@ -60,8 +64,16 @@ class MainActivity : ComponentActivity() {
         }
         ActivityCompat.requestPermissions(this, permissions, REQUEST_RECORD_AUDIO_PERMISSION)
 
-        SimulateStreamingAsr.initOfflineRecognizer(this.assets, this.application)
-        SimulateStreamingAsr.initVad(this.assets)
+        // Modified initialization
+        val settingsManager = SettingsManager(this)
+        lifecycleScope.launch {
+            val userSettings = settingsManager.settingsFlow.first()
+            val model = ModelManager.getModel(application, userSettings.userId, userSettings.modelName)
+
+            // Pass the potentially null model to the initializer
+            SimulateStreamingAsr.initOfflineRecognizer(assets, application)//, model)
+            SimulateStreamingAsr.initVad(assets)
+        }
     }
 
     @Deprecated("Deprecated in Java")
