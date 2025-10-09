@@ -67,11 +67,12 @@ class MainActivity : ComponentActivity() {
         // Modified initialization
         val settingsManager = SettingsManager(this)
         lifecycleScope.launch {
+            val assets = assets
             val userSettings = settingsManager.settingsFlow.first()
             val model = ModelManager.getModel(application, userSettings.userId, userSettings.modelName)
 
             // Pass the potentially null model to the initializer
-            SimulateStreamingAsr.initOfflineRecognizer(assets, application)//, model)
+            SimulateStreamingAsr.initOfflineRecognizer(assets, application, model)
             SimulateStreamingAsr.initVad(assets)
         }
     }

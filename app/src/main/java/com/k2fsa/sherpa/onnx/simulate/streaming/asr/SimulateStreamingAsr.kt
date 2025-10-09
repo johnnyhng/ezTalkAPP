@@ -55,7 +55,7 @@ object SimulateStreamingAsr {
             )
 
             val config = OfflineRecognizerConfig(
-                modelConfig = getOfflineModelConfig(type = asrModelType)!!,
+                modelConfig = getOfflineModelConfig(type = asrModelType, model)!!,
             )
 
             if (config.modelConfig.numThreads == 1) {
