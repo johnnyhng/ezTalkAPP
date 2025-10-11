@@ -19,6 +19,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -50,6 +51,7 @@ fun SettingsScreen(
     val selectedModel = homeViewModel.selectedModel
     var modelMenuExpanded by remember { mutableStateOf(false) }
     var modelUrl by remember { mutableStateOf("") }
+    val isDownloading by remember { mutableStateOf(homeViewModel.isDownloading) }
 
     if (showUserIdDialog) {
         UserIdDialog(
@@ -64,7 +66,7 @@ fun SettingsScreen(
 
     Column(modifier = Modifier.padding(16.dp)) {
         // User ID setting
-        Button(onClick = { showUserIdDialog = true }) {
+        Button(onClick = { showUserIdDialog = true }, enabled = !isDownloading) {
             Text(text = "Edit User ID")
         }
         Text(text = "Current User ID: ${userSettings.userId}")
@@ -78,8 +80,9 @@ fun SettingsScreen(
                     onValueChange = { },
                     readOnly = true,
                     modifier = Modifier.weight(1f),
+                    enabled = !isDownloading,
                     trailingIcon = {
-                        IconButton(onClick = { modelMenuExpanded = true }) {
+                        IconButton(onClick = { modelMenuExpanded = true }, enabled = !isDownloading) {
                             Icon(Icons.Default.ArrowDropDown, contentDescription = "Select model")
                         }
                     }
@@ -101,25 +104,32 @@ fun SettingsScreen(
                 onValueChange = { modelUrl = it },
                 label = { Text("Model Download URL") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                enabled = !isDownloading
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = { Toast.makeText(context, "Downloading from $modelUrl...", Toast.LENGTH_SHORT).show() }) {
+                TextButton(
+                    onClick = { homeViewModel.downloadModel(modelUrl, userSettings.userId) },
+                    enabled = !isDownloading && modelUrl.isNotBlank()
+                ) {
                     Text("Download")
                 }
                 IconButton(onClick = {
                     Toast.makeText(context, "Checking version...", Toast.LENGTH_SHORT).show()
                     homeViewModel.checkModelVersion()
-                }) {
+                }, enabled = !isDownloading) {
                     Icon(Icons.Default.Refresh, contentDescription = "Check version")
                 }
                 IconButton(onClick = {
                     selectedModel?.let {
                         homeViewModel.deleteModel(it)
                     }
-                }) {
+                }, enabled = !isDownloading) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete model")
                 }
+            }
+            if (isDownloading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
 
@@ -134,7 +144,8 @@ fun SettingsScreen(
                 value = userSettings.lingerMs,
                 onValueChange = { homeViewModel.updateLingerMs(it) },
                 valueRange = 0f..10000f,
-                steps = ((10000f - 0f) / 100f).toInt() - 1
+                steps = ((10000f - 0f) / 100f).toInt() - 1,
+                enabled = !isDownloading
             )
         }
 
@@ -149,7 +160,8 @@ fun SettingsScreen(
                 value = userSettings.partialIntervalMs,
                 onValueChange = { homeViewModel.updatePartialIntervalMs(it) },
                 valueRange = 200f..1000f,
-                steps = ((1000f - 200f) / 50f).toInt() - 1
+                steps = ((1000f - 200f) / 50f).toInt() - 1,
+                enabled = !isDownloading
             )
         }
 
@@ -164,7 +176,8 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Switch(
                 checked = !userSettings.saveVadSegmentsOnly,
-                onCheckedChange = { isChecked -> homeViewModel.updateSaveVadSegmentsOnly(!isChecked) }
+                onCheckedChange = { isChecked -> homeViewModel.updateSaveVadSegmentsOnly(!isChecked) },
+                enabled = !isDownloading
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = "Save Full Audio")

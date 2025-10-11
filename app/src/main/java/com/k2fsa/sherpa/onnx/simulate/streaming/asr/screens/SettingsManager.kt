@@ -2,6 +2,7 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,12 +17,18 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.Model
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ModelManager
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import java.net.URL
 
 // Create a DataStore instance at the top level
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -58,7 +65,7 @@ class SettingsManager(context: Context) {
         val partialIntervalMs = preferences[PARTIAL_INTERVAL_MS_KEY] ?: 500f // Default: 500ms
         val saveVadSegmentsOnly =
             preferences[SAVE_VAD_SEGMENTS_ONLY_KEY] ?: false // Default: false (Save Full Audio)
-        val userId = preferences[USER_ID_KEY] ?: "user@gmail.com"
+        val userId = preferences[USER_ID_KEY] ?: "user@example.com"
         val modelName = preferences[MODEL_NAME_KEY]
         UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly, userId, modelName)
     }
@@ -110,13 +117,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false, "user@gmail.com", null) // Initial default values
+        initialValue = UserSettings(800f, 500f, false, "user@example.com", null) // Initial default values
     )
 
     var models by mutableStateOf<List<Model>>(emptyList())
         private set
 
     var selectedModel by mutableStateOf<Model?>(null)
+        private set
+
+    var isDownloading by mutableStateOf(false)
         private set
 
     init {
@@ -164,8 +174,51 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun downloadModel(url: String) {
-        // TODO: Implement model download logic
+    fun downloadModel(url: String, userId: String) {
+        if (url.isBlank()) {
+            Log.w(TAG, "Download URL is blank.")
+            return
+        }
+
+        viewModelScope.launch {
+            isDownloading = true
+            val success = try {
+                withContext(Dispatchers.IO) {
+                    val modelName = "latest"
+                    val targetDir = File(getApplication<Application>().filesDir, "models/$userId/$modelName")
+                    if (!targetDir.exists()) {
+                        targetDir.mkdirs()
+                    }
+
+                    val modelUrl = URL("$url/users/$userId/models/$modelName/model.int8.onnx")
+                    val tokensUrl = URL("$url/users/$userId/models/$modelName/tokens.txt")
+
+                    Log.i(TAG, "Downloading model from $modelUrl")
+                    downloadFile(modelUrl, File(targetDir, "model.int8.onnx"))
+
+                    Log.i(TAG, "Downloading tokens from $tokensUrl")
+                    downloadFile(tokensUrl, File(targetDir, "tokens.txt"))
+                    true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Model download failed", e)
+                false
+            }
+
+            if (success) {
+                Log.i(TAG, "Download finished, refreshing models.")
+                refreshModels(userId)
+            }
+            isDownloading = false
+        }
+    }
+
+    private fun downloadFile(url: URL, outputFile: File) {
+        url.openStream().use { input ->
+            FileOutputStream(outputFile).use { output ->
+                input.copyTo(output)
+            }
+        }
     }
 
     fun checkModelVersion() {
