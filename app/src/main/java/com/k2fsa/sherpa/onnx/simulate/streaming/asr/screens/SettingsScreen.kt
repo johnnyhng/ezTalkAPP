@@ -10,19 +10,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -43,6 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     homeViewModel: HomeViewModel = viewModel(),
@@ -89,28 +92,49 @@ fun SettingsScreen(
         // Model Selection
         Column(modifier = Modifier.padding(vertical = 16.dp)) {
             Text("ASR Model", style = MaterialTheme.typography.titleMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = selectedModel?.name ?: "No model selected",
-                    onValueChange = { },
-                    readOnly = true,
-                    modifier = Modifier.weight(1f),
-                    enabled = !isDownloading,
-                    trailingIcon = {
-                        IconButton(onClick = { modelMenuExpanded = true }, enabled = !isDownloading) {
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Select model")
-                        }
+            ExposedDropdownMenuBox(
+                expanded = modelMenuExpanded,
+                onExpandedChange = {
+                    if (!isDownloading) {
+                        modelMenuExpanded = !modelMenuExpanded
                     }
+                },
+            ) {
+                OutlinedTextField(
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    readOnly = true,
+                    value = selectedModel?.name ?: "No model selected",
+                    onValueChange = {},
+                    label = { Text("Selected Model") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuExpanded) },
+                    enabled = !isDownloading
                 )
-                DropdownMenu(
+                ExposedDropdownMenu(
                     expanded = modelMenuExpanded,
-                    onDismissRequest = { modelMenuExpanded = false }
+                    onDismissRequest = { modelMenuExpanded = false },
+                    modifier = Modifier.exposedDropdownSize()
                 ) {
                     models.forEach { model ->
-                        DropdownMenuItem(text = { Text(model.name) }, onClick = {
-                            homeViewModel.updateModelName(model.name)
-                            modelMenuExpanded = false
-                        })
+                        DropdownMenuItem(
+                            text = { Text(model.name) },
+                            onClick = {
+                                homeViewModel.updateModelName(model.name)
+                                modelMenuExpanded = false
+                            },
+                            leadingIcon = {
+                                RadioButton(
+                                    selected = (model.name == selectedModel?.name),
+                                    onClick = null
+                                )
+                            }
+                        )
+                    }
+                    if (models.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("No models found") },
+                            enabled = false,
+                            onClick = {}
+                        )
                     }
                 }
             }
