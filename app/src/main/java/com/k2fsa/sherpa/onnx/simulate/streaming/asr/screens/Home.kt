@@ -3,6 +3,7 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.Application
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -93,8 +94,11 @@ fun HomeScreen(
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
 
-    // Initialize TTS
+    // Initialize recognizer and TTS
     LaunchedEffect(key1 = context) {
+        SimulateStreamingAsr.initOfflineRecognizer(context.assets,
+            context.applicationContext as Application, homeViewModel.selectedModel)
+        // Initialize TTS
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.getDefault()

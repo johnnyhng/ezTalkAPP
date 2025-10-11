@@ -29,7 +29,8 @@ object SimulateStreamingAsr {
     fun initOfflineRecognizer(assetManager: AssetManager? = null, application: Application, model: Model? = null) {
         synchronized(this) {
             if (_recognizer != null) {
-                return
+                _recognizer!!.release()
+                _recognizer = null
             }
             Log.i(TAG, "Initializing sherpa-onnx offline recognizer")
             // Please change getOfflineModelConfig() to add new models
