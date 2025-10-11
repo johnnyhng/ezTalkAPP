@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -27,6 +28,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
 @Composable
@@ -50,8 +53,20 @@ fun SettingsScreen(
     val models = homeViewModel.models
     val selectedModel = homeViewModel.selectedModel
     var modelMenuExpanded by remember { mutableStateOf(false) }
-    var modelUrl by remember { mutableStateOf("") }
-    val isDownloading by remember { mutableStateOf(homeViewModel.isDownloading) }
+    var modelUrl by remember(userSettings.modelUrl) { mutableStateOf(userSettings.modelUrl) }
+    val isDownloading = homeViewModel.isDownloading
+    val downloadProgress = homeViewModel.downloadProgress
+    val canDeleteModel = homeViewModel.canDeleteModel
+
+    LaunchedEffect(Unit) {
+        homeViewModel.downloadEventFlow.collectLatest { event ->
+            when (event) {
+                is DownloadUiEvent.ShowToast -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     if (showUserIdDialog) {
         UserIdDialog(
@@ -101,18 +116,21 @@ fun SettingsScreen(
             }
             OutlinedTextField(
                 value = modelUrl,
-                onValueChange = { modelUrl = it },
+                onValueChange = { 
+                    modelUrl = it
+                    homeViewModel.updateModelUrl(it)
+                },
                 label = { Text("Model Download URL") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = !isDownloading
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(
+                IconButton(
                     onClick = { homeViewModel.downloadModel(modelUrl, userSettings.userId) },
                     enabled = !isDownloading && modelUrl.isNotBlank()
                 ) {
-                    Text("Download")
+                    Icon(Icons.Default.Download, contentDescription = "Download model")
                 }
                 IconButton(onClick = {
                     Toast.makeText(context, "Checking version...", Toast.LENGTH_SHORT).show()
@@ -124,12 +142,16 @@ fun SettingsScreen(
                     selectedModel?.let {
                         homeViewModel.deleteModel(it)
                     }
-                }, enabled = !isDownloading) {
+                }, enabled = !isDownloading && canDeleteModel) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete model")
                 }
             }
             if (isDownloading) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                if (downloadProgress != null) {
+                    LinearProgressIndicator(progress = downloadProgress, modifier = Modifier.fillMaxWidth())
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
             }
         }
 

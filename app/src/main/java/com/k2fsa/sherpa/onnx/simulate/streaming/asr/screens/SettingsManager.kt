@@ -19,15 +19,18 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.Model
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ModelManager
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.net.URL
 
 // Create a DataStore instance at the top level
@@ -41,7 +44,8 @@ data class UserSettings(
     val partialIntervalMs: Float,
     val saveVadSegmentsOnly: Boolean,
     val userId: String,
-    val modelName: String?
+    val modelName: String?,
+    val modelUrl: String
 )
 
 /**
@@ -57,6 +61,7 @@ class SettingsManager(context: Context) {
         val SAVE_VAD_SEGMENTS_ONLY_KEY = booleanPreferencesKey("save_vad_segments_only")
         val USER_ID_KEY = stringPreferencesKey("user_id")
         val MODEL_NAME_KEY = stringPreferencesKey("model_name")
+        val MODEL_URL_KEY = stringPreferencesKey("model_url")
     }
 
     // Flow to read the settings from DataStore, providing default values if none are set.
@@ -67,7 +72,8 @@ class SettingsManager(context: Context) {
             preferences[SAVE_VAD_SEGMENTS_ONLY_KEY] ?: false // Default: false (Save Full Audio)
         val userId = preferences[USER_ID_KEY] ?: "user@example.com"
         val modelName = preferences[MODEL_NAME_KEY]
-        UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly, userId, modelName)
+        val modelUrl = preferences[MODEL_URL_KEY] ?: ""
+        UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly, userId, modelName, modelUrl)
     }
 
     // Functions to update the settings in DataStore. These are suspend functions.
@@ -104,6 +110,16 @@ class SettingsManager(context: Context) {
             }
         }
     }
+
+    suspend fun updateModelUrl(url: String) {
+        appContext.dataStore.edit { settings ->
+            settings[MODEL_URL_KEY] = url
+        }
+    }
+}
+
+sealed class DownloadUiEvent {
+    data class ShowToast(val message: String) : DownloadUiEvent()
 }
 
 /**
@@ -117,7 +133,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false, "user@example.com", null) // Initial default values
+        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "") // Initial default values
     )
 
     var models by mutableStateOf<List<Model>>(emptyList())
@@ -126,8 +142,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     var selectedModel by mutableStateOf<Model?>(null)
         private set
 
+    val canDeleteModel: Boolean
+        get() = models.size > 1
+
     var isDownloading by mutableStateOf(false)
         private set
+
+    var downloadProgress: Float? by mutableStateOf(null)
+        private set
+
+    private val _downloadEventChannel = Channel<DownloadUiEvent>()
+    val downloadEventFlow = _downloadEventChannel.receiveAsFlow()
 
     init {
         viewModelScope.launch {
@@ -174,6 +199,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateModelUrl(url: String) {
+        viewModelScope.launch {
+            settingsManager.updateModelUrl(url)
+        }
+    }
+
     fun downloadModel(url: String, userId: String) {
         if (url.isBlank()) {
             Log.w(TAG, "Download URL is blank.")
@@ -182,6 +213,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             isDownloading = true
+            downloadProgress = null
             val success = try {
                 withContext(Dispatchers.IO) {
                     val modelName = "latest"
@@ -193,11 +225,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     val modelUrl = URL("$url/users/$userId/models/$modelName/model.int8.onnx")
                     val tokensUrl = URL("$url/users/$userId/models/$modelName/tokens.txt")
 
+                    val modelConn = modelUrl.openConnection()
+                    val modelSize = modelConn.contentLengthLong
+
+                    val tokensConn = tokensUrl.openConnection()
+                    val tokensSize = tokensConn.contentLengthLong
+
+                    val totalSize = if (modelSize > 0 && tokensSize > 0) modelSize + tokensSize else -1L
+                    var downloadedBytes = 0L
+
+                    if (totalSize > 0) {
+                        downloadProgress = 0f
+                    }
+
                     Log.i(TAG, "Downloading model from $modelUrl")
-                    downloadFile(modelUrl, File(targetDir, "model.int8.onnx"))
+                    downloadFile(modelConn.inputStream, File(targetDir, "model.int8.onnx")) { bytesRead ->
+                        if (totalSize > 0) {
+                            downloadedBytes += bytesRead
+                            downloadProgress = downloadedBytes.toFloat() / totalSize
+                        }
+                    }
 
                     Log.i(TAG, "Downloading tokens from $tokensUrl")
-                    downloadFile(tokensUrl, File(targetDir, "tokens.txt"))
+                    downloadFile(tokensConn.inputStream, File(targetDir, "tokens.txt")) { bytesRead ->
+                        if (totalSize > 0) {
+                            downloadedBytes += bytesRead
+                            downloadProgress = downloadedBytes.toFloat() / totalSize
+                        }
+                    }
                     true
                 }
             } catch (e: Exception) {
@@ -208,15 +263,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             if (success) {
                 Log.i(TAG, "Download finished, refreshing models.")
                 refreshModels(userId)
+                _downloadEventChannel.send(DownloadUiEvent.ShowToast("Download successful!"))
+            } else {
+                _downloadEventChannel.send(DownloadUiEvent.ShowToast("Download failed. Please check URL and connection."))
             }
             isDownloading = false
+            downloadProgress = null
         }
     }
 
-    private fun downloadFile(url: URL, outputFile: File) {
-        url.openStream().use { input ->
-            FileOutputStream(outputFile).use { output ->
-                input.copyTo(output)
+    private fun downloadFile(inputStream: InputStream, outputFile: File, onChunkRead: (bytesRead: Int) -> Unit) {
+        FileOutputStream(outputFile).use { output ->
+            inputStream.use { input ->
+                val buffer = ByteArray(4 * 1024) // 4KB buffer
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    onChunkRead(bytesRead)
+                }
             }
         }
     }
