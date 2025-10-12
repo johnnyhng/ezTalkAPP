@@ -178,7 +178,13 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        val isPlaying = currentlyPlaying == entry.wavFile.absolutePath
+                        var isPlaying = currentlyPlaying == entry.wavFile.absolutePath
+                        val mediaControllerListener = object : MediaControllerListener {
+                            override fun onFinishPlayback() {
+                                isPlaying = currentlyPlaying != null
+                            }
+                        }
+                        MediaController.setListener(mediaControllerListener)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -224,13 +230,14 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                         MediaController.stop()
                                     } else {
                                         MediaController.play(entry.wavFile.absolutePath)
+                                        isPlaying = currentlyPlaying == entry.wavFile.absolutePath
                                     }
                                 },
                                 enabled = currentlyPlaying == null || isPlaying
                             ) {
                                 Icon(
-                                    imageVector = if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                                    contentDescription = if (isPlaying) "Stop" else "Playback"
+                                    imageVector = if (isPlaying && currentlyPlaying == entry.wavFile.absolutePath) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                                    contentDescription = if (isPlaying && currentlyPlaying == entry.wavFile.absolutePath) "Stop" else "Playback"
                                 )
                             }
                             IconButton(

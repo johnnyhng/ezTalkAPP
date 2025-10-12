@@ -85,7 +85,14 @@ fun HomeScreen(
 
     // Playback state
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
-    val isPlaying = currentlyPlaying != null
+    var isPlaying = currentlyPlaying != null
+    val mediaControllerListener = object : MediaControllerListener {
+        override fun onFinishPlayback() {
+            isPlaying = currentlyPlaying != null
+        }
+    }
+    MediaController.setListener(mediaControllerListener)
+
 
     // TTS state
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
@@ -584,13 +591,15 @@ fun HomeScreen(
                                         MediaController.stop()
                                     } else {
                                         MediaController.play(result.wavFilePath)
+                                        isPlaying = currentlyPlaying == result.wavFilePath
+
                                     }
                                 },
                                 enabled = !isStarted && !isTtsSpeaking && (!isPlaying || currentlyPlaying == result.wavFilePath)
                             ) {
                                 Icon(
-                                    imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                    contentDescription = if (currentlyPlaying == result.wavFilePath) "Stop" else "Play"
+                                    imageVector = if (currentlyPlaying == result.wavFilePath && isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                    contentDescription = if (currentlyPlaying == result.wavFilePath && isPlaying) "Stop" else "Play"
                                 )
                             }
                         }
