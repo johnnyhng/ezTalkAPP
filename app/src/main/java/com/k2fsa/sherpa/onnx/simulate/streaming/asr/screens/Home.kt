@@ -203,8 +203,12 @@ fun HomeScreen(
                     val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
 
                     var buffer = arrayListOf<Float>()
+                    val reserveForPreviousSpeechDetectedMs = 500
+                    val keep = (sampleRateInHz / 1000) * reserveForPreviousSpeechDetectedMs
                     var offset = 0
                     val windowSize = 512
+                    var startOffset = 0
+                    var lastSpeechDetectedOffset = 0
                     var isSpeechStarted = false
                     var startTime = System.currentTimeMillis()
                     var lastText = ""
@@ -230,10 +234,6 @@ fun HomeScreen(
                             }
                         } else {
                             buffer.addAll(s.toList())
-
-                            if (isSpeechStarted && !saveVadSegmentsOnly) {
-                                fullRecordingBuffer.addAll(s.toList())
-                            }
                         }
 
                         while (offset + windowSize < buffer.size) {
@@ -246,8 +246,7 @@ fun HomeScreen(
                                 startTime = System.currentTimeMillis()
 
                                 if (!saveVadSegmentsOnly) {
-                                    fullRecordingBuffer.clear()
-                                    fullRecordingBuffer.addAll(buffer)
+                                    startOffset = Math.max(0, offset - windowSize - keep)
                                 }
                             }
                         }
@@ -294,6 +293,9 @@ fun HomeScreen(
                         }
 
                         while (!SimulateStreamingAsr.vad.empty()) {
+                            if (!saveVadSegmentsOnly) {
+                                lastSpeechDetectedOffset = offset
+                            }
                             val seg = SimulateStreamingAsr.vad.front().samples
                             SimulateStreamingAsr.vad.pop()
                             utteranceSegments.add(seg)
@@ -320,6 +322,9 @@ fun HomeScreen(
                                 val audioToSave = if (saveVadSegmentsOnly) {
                                     utteranceForRecognition
                                 } else {
+                                    lastSpeechDetectedOffset = Math.min(buffer.size - 1, lastSpeechDetectedOffset + keep)
+                                    fullRecordingBuffer.clear()
+                                    fullRecordingBuffer.addAll(buffer.subList(startOffset, lastSpeechDetectedOffset))
                                     fullRecordingBuffer.toFloatArray()
                                 }
 
@@ -394,6 +399,8 @@ fun HomeScreen(
                                 isSpeechStarted = false
                                 buffer = arrayListOf()
                                 offset = 0
+                                startOffset = 0
+                                lastSpeechDetectedOffset = 0
                                 lastText = ""
                                 added = false
                                 launch(Dispatchers.Main) {
