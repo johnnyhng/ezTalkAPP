@@ -15,14 +15,11 @@ import androidx.compose.ui.unit.dp
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.readWavFileToFloatArray
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditableDropdown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.FileInputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 private const val sampleRateInHz = 16000
 
@@ -124,44 +121,4 @@ internal fun EditRecognitionDialog(
             }
         }
     )
-}
-
-/**
- * Reads a WAV file and returns its audio data as a FloatArray.
- * Note: This makes a simplifying assumption that the WAV file is 16-bit PCM.
- *
- * @param path The absolute path to the WAV file.
- * @return A FloatArray containing the audio samples normalized to [-1, 1], or null on error.
- */
-private fun readWavFileToFloatArray(path: String): FloatArray? {
-    try {
-        val file = File(path)
-        val fileInputStream = FileInputStream(file)
-        val byteBuffer = fileInputStream.readBytes()
-        fileInputStream.close()
-
-        // The first 44 bytes of a standard WAV file are the header. We skip it.
-        val headerSize = 44
-        if (byteBuffer.size <= headerSize) {
-            Log.e(TAG, "WAV file is too small to contain audio data: ${file.name}")
-            return null
-        }
-
-        // We assume the audio data is 16-bit PCM, little-endian.
-        val shortBuffer = ByteBuffer.wrap(byteBuffer, headerSize, byteBuffer.size - headerSize)
-            .order(ByteOrder.LITTLE_ENDIAN)
-            .asShortBuffer()
-
-        val numSamples = shortBuffer.remaining()
-        val floatArray = FloatArray(numSamples)
-
-        for (i in 0 until numSamples) {
-            // Convert 16-bit short to float in the range [-1.0, 1.0]
-            floatArray[i] = shortBuffer.get(i) / 32768.0f
-        }
-        return floatArray
-    } catch (e: Exception) {
-        Log.e(TAG, "Error reading WAV file: $path", e)
-        return null
-    }
 }

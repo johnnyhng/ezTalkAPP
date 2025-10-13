@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -171,4 +172,44 @@ private fun writeWavHeader(
     header[43] = (pcmDataSize shr 24 and 0xff).toByte()
 
     out.write(header, 0, 44)
+}
+
+/**
+ * Reads a WAV file and returns its audio data as a FloatArray.
+ * Note: This makes a simplifying assumption that the WAV file is 16-bit PCM.
+ *
+ * @param path The absolute path to the WAV file.
+ * @return A FloatArray containing the audio samples normalized to [-1, 1], or null on error.
+ */
+internal fun readWavFileToFloatArray(path: String): FloatArray? {
+    try {
+        val file = File(path)
+        val fileInputStream = FileInputStream(file)
+        val byteBuffer = fileInputStream.readBytes()
+        fileInputStream.close()
+
+        // The first 44 bytes of a standard WAV file are the header. We skip it.
+        val headerSize = 44
+        if (byteBuffer.size <= headerSize) {
+            Log.e(TAG, "WAV file is too small to contain audio data: ${file.name}")
+            return null
+        }
+
+        // We assume the audio data is 16-bit PCM, little-endian.
+        val shortBuffer = ByteBuffer.wrap(byteBuffer, headerSize, byteBuffer.size - headerSize)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .asShortBuffer()
+
+        val numSamples = shortBuffer.remaining()
+        val floatArray = FloatArray(numSamples)
+
+        for (i in 0 until numSamples) {
+            // Convert 16-bit short to float in the range [-1.0, 1.0]
+            floatArray[i] = shortBuffer.get(i) / 32768.0f
+        }
+        return floatArray
+    } catch (e: Exception) {
+        Log.e(TAG, "Error reading WAV file: $path", e)
+        return null
+    }
 }
