@@ -42,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -90,14 +91,29 @@ fun HomeScreen(
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsSpeaking by remember { mutableStateOf(false) }
 
+    // ASR model loading state
+    var isAsrModelLoading by remember { mutableStateOf(true) }
+
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
 
-    // Initialize recognizer and TTS
-    LaunchedEffect(key1 = context) {
-        SimulateStreamingAsr.initOfflineRecognizer(context.assets,
-            context.applicationContext as Application, homeViewModel.selectedModel)
-        // Initialize TTS
+    // Initialize recognizer in the background
+    LaunchedEffect(key1 = homeViewModel.selectedModel) {
+        isAsrModelLoading = true
+        Log.i(TAG, "ASR model initialization started.")
+        withContext(Dispatchers.IO) {
+            SimulateStreamingAsr.initOfflineRecognizer(
+                context.assets,
+                context.applicationContext as Application,
+                homeViewModel.selectedModel
+            )
+        }
+        isAsrModelLoading = false
+        Log.i(TAG, "ASR model initialization finished.")
+    }
+
+    // Initialize TTS
+    LaunchedEffect(key1 = Unit) {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.getDefault()
@@ -485,7 +501,8 @@ fun HomeScreen(
                     feedbackRecords.clear() // Also clear the feedback records
                     Log.i(TAG, "Feedback records cleared. Count: ${feedbackRecords.size}")
                 },
-                isPlaybackActive = currentlyPlaying != null || isTtsSpeaking
+                isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
+                isAsrModelLoading = isAsrModelLoading
             )
             if (isStarted) {
                 WaveformDisplay(
@@ -608,7 +625,8 @@ private fun HomeButtonRow(
     onRecordingButtonClick: () -> Unit,
     onCopyButtonClick: () -> Unit,
     onClearButtonClick: () -> Unit,
-    isPlaybackActive: Boolean
+    isPlaybackActive: Boolean,
+    isAsrModelLoading: Boolean
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -616,7 +634,7 @@ private fun HomeButtonRow(
     ) {
         Button(
             onClick = onRecordingButtonClick,
-            enabled = !isPlaybackActive
+            enabled = !isPlaybackActive && !isAsrModelLoading
         ) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
