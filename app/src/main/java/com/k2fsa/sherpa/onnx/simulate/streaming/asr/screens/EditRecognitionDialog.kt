@@ -3,16 +3,8 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -23,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditableDropdown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,7 +26,6 @@ import java.nio.ByteOrder
 
 private const val sampleRateInHz = 16000
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EditRecognitionDialog(
     originalText: String,
@@ -46,7 +38,6 @@ internal fun EditRecognitionDialog(
     var newRecognitionResult by remember { mutableStateOf<String?>(null) }
     var isRecognizing by remember { mutableStateOf(false) }
     var recognitionError by remember { mutableStateOf<String?>(null) }
-    var isDropdownExpanded by remember { mutableStateOf(false) }
 
     // Use the non-streaming (offline) recognizer for whole-file recognition
     val recognizer: OfflineRecognizer = remember { SimulateStreamingAsr.recognizer }
@@ -105,48 +96,13 @@ internal fun EditRecognitionDialog(
                     listOfNotNull(newRecognitionResult, currentText).distinct()
                 }
 
-                ExposedDropdownMenuBox(
-                    expanded = isDropdownExpanded,
-                    onExpandedChange = {
-                        if (!isRecognizing && menuItems.isNotEmpty()) {
-                            isDropdownExpanded = it
-                        }
-                    }
-                ) {
-                    OutlinedTextField(
-                        value = text,
-                        onValueChange = { text = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(), // This is important
-                        label = { Text("Modified Text") },
-                        trailingIcon = {
-                            if (isRecognizing) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            } else {
-                                ExposedDropdownMenuDefaults.TrailingIcon(
-                                    expanded = isDropdownExpanded
-                                )
-                            }
-                        }
-                    )
-
-                    if (menuItems.isNotEmpty()) {
-                        ExposedDropdownMenu(
-                            expanded = isDropdownExpanded,
-                            onDismissRequest = { isDropdownExpanded = false },
-                        ) {
-                            menuItems.forEach {
-                                DropdownMenuItem(
-                                    text = { Text(it) },
-                                    onClick = {
-                                        text = it
-                                        isDropdownExpanded = false
-                                    })
-                            }
-                        }
-                    }
-                }
+                EditableDropdown(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Modified Text") },
+                    menuItems = menuItems,
+                    isRecognizing = isRecognizing
+                )
 
                 recognitionError?.let {
                     Text(it, color = Color.Red, modifier = Modifier.padding(top = 8.dp))
