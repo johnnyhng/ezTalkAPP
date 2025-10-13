@@ -102,7 +102,7 @@ data class OfflineRecognizerConfig(
     var modelConfig: OfflineModelConfig = OfflineModelConfig(),
     // var lmConfig: OfflineLMConfig(), // TODO(fangjun): enable it
     var hr: HomophoneReplacerConfig = HomophoneReplacerConfig(),
-    var decodingMethod: String = "greedy_search",
+    var decodingMethod: String = "greedy_search",  // modified_beam_search,
     var maxActivePaths: Int = 4,
     var hotwordsFile: String = "",
     var hotwordsScore: Float = 1.5f,
@@ -139,9 +139,7 @@ class OfflineRecognizer(
         return OfflineStream(p)
     }
 
-    fun getResult(stream: OfflineStream): OfflineRecognizerResult {
-        val objArray = getResult(stream.ptr)
-
+    private fun toResult(objArray: Array<Any>): OfflineRecognizerResult {
         val text = objArray[0] as String
         val tokens = objArray[1] as Array<String>
         val timestamps = objArray[2] as FloatArray
@@ -158,6 +156,31 @@ class OfflineRecognizer(
             event = event,
             durations = durations,
         )
+    }
+
+    fun getResult(stream: OfflineStream): OfflineRecognizerResult {
+        val objArray = getResult(stream.ptr)
+        return toResult(objArray)
+    }
+
+    fun getResults(stream: OfflineStream): List<OfflineRecognizerResult> {
+        val objArray = getResult(stream.ptr)
+        if (objArray.isEmpty()) {
+            return emptyList()
+        }
+
+        // Check if the first element is a String. If so, it's a single result from greedy_search.
+        if (objArray[0] is String) {
+            return listOf(toResult(objArray))
+        }
+
+        val results = mutableListOf<OfflineRecognizerResult>()
+        // It is assumed that objArray contains a list of results for modified_beam_search,
+        // where each result is represented by an Array<Any>
+        (objArray as Array<Array<Any>>).forEach {
+            results.add(toResult(it))
+        }
+        return results
     }
 
     fun decode(stream: OfflineStream) = decode(ptr, stream.ptr)
@@ -622,7 +645,7 @@ fun getOfflineModelConfig(type: Int, model: Model? = null): OfflineModelConfig? 
         }
 
         33 -> {
-            val modelDir = "sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
+            val modelDir = "sherpa-onnx-nemo-parakeet-tdt_ctc_110m-en-36000-int8"
             return OfflineModelConfig(
                 nemo = OfflineNemoEncDecCtcModelConfig(
                     model = "$modelDir/model.int8.onnx",
