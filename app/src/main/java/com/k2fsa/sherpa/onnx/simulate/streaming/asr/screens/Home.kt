@@ -85,14 +85,6 @@ fun HomeScreen(
 
     // Playback state
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
-    var isPlaying = currentlyPlaying != null
-    val mediaControllerListener = object : MediaControllerListener {
-        override fun onFinishPlayback() {
-            isPlaying = currentlyPlaying != null
-        }
-    }
-    MediaController.setListener(mediaControllerListener)
-
 
     // TTS state
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
@@ -186,7 +178,7 @@ fun HomeScreen(
 
                     audioRecord?.startRecording()
                     while (isStarted) {
-                        if (isPlaying || isTtsSpeaking) { // Pause recording during playback and TTS
+                        if (currentlyPlaying != null || isTtsSpeaking) { // Pause recording during playback and TTS
                             delay(100)
                             continue
                         }
@@ -493,7 +485,7 @@ fun HomeScreen(
                     feedbackRecords.clear() // Also clear the feedback records
                     Log.i(TAG, "Feedback records cleared. Count: ${feedbackRecords.size}")
                 },
-                isPlaybackActive = isPlaying || isTtsSpeaking
+                isPlaybackActive = currentlyPlaying != null || isTtsSpeaking
             )
             if (isStarted) {
                 WaveformDisplay(
@@ -559,7 +551,7 @@ fun HomeScreen(
                                         )
                                     }
                                 },
-                                enabled = !isStarted && !isPlaying && !isTtsSpeaking
+                                enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.RecordVoiceOver,
@@ -576,7 +568,7 @@ fun HomeScreen(
                                     modifiedTextForDialog = result.modifiedText
                                     showEditDialog = true
                                 },
-                                enabled = !isStarted && !isPlaying && !isTtsSpeaking
+                                enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
@@ -591,15 +583,13 @@ fun HomeScreen(
                                         MediaController.stop()
                                     } else {
                                         MediaController.play(result.wavFilePath)
-                                        isPlaying = currentlyPlaying == result.wavFilePath
-
                                     }
                                 },
-                                enabled = !isStarted && !isTtsSpeaking && (!isPlaying || currentlyPlaying == result.wavFilePath)
+                                enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == result.wavFilePath)
                             ) {
                                 Icon(
-                                    imageVector = if (currentlyPlaying == result.wavFilePath && isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                    contentDescription = if (currentlyPlaying == result.wavFilePath && isPlaying) "Stop" else "Play"
+                                    imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                    contentDescription = if (currentlyPlaying == result.wavFilePath) "Stop" else "Play"
                                 )
                             }
                         }

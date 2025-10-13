@@ -7,12 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-interface MediaControllerListener {
-    fun onFinishPlayback()
-}
 object MediaController {
     private var mediaPlayer: MediaPlayer? = null
-    private var listener: MediaControllerListener? = null
 
     private val _currentlyPlaying = MutableStateFlow<String?>(null)
     val currentlyPlaying: StateFlow<String?> = _currentlyPlaying.asStateFlow()
@@ -40,10 +36,6 @@ object MediaController {
         }
     }
 
-    fun setListener(l: MediaControllerListener) {
-        listener = l
-    }
-
     fun play(filePath: String) {
         cleanup() // Clean up any previous player first.
 
@@ -67,8 +59,6 @@ object MediaController {
         } catch (e: Exception) {
             Log.e(TAG, "MediaPlayer preparation failed for $filePath", e)
             cleanup()
-        } finally {
-            listener?.onFinishPlayback()
         }
     }
 
