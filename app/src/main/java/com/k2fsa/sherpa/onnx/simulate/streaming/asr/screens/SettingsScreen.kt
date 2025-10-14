@@ -11,8 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
@@ -53,6 +52,8 @@ fun SettingsScreen(
     val context = LocalContext.current
     val userSettings by homeViewModel.userSettings.collectAsState()
     var showUserIdDialog by remember { mutableStateOf(false) }
+    val showRemoteModelsDialog by homeViewModel.showRemoteModelsDialog.collectAsState()
+
     val models = homeViewModel.models
     val selectedModel = homeViewModel.selectedModel
     var modelMenuExpanded by remember { mutableStateOf(false) }
@@ -81,6 +82,10 @@ fun SettingsScreen(
                 showUserIdDialog = false
             }
         )
+    }
+
+    if (showRemoteModelsDialog) {
+        RemoteModelsManager(homeViewModel = homeViewModel)
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
@@ -151,17 +156,10 @@ fun SettingsScreen(
                 enabled = !isDownloading
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(
-                    onClick = { homeViewModel.downloadModel(modelUrl, userSettings.userId) },
-                    enabled = !isDownloading && modelUrl.isNotBlank()
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = "Download model")
-                }
                 IconButton(onClick = {
-                    Toast.makeText(context, "Checking version...", Toast.LENGTH_SHORT).show()
-                    homeViewModel.checkModelVersion()
-                }, enabled = !isDownloading) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Check version")
+                    homeViewModel.showRemoteModelsDialog()
+                }, enabled = !isDownloading && modelUrl.isNotBlank()) {
+                    Icon(Icons.Default.FolderSpecial, contentDescription = "Check version")
                 }
                 IconButton(onClick = {
                     selectedModel?.let {

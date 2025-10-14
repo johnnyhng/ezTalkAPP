@@ -20,17 +20,21 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ModelManager
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.net.HttpURLConnection
 import java.net.URL
 
 // Create a DataStore instance at the top level
@@ -159,6 +163,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     var selectedModel by mutableStateOf<Model?>(null)
         private set
 
+    private val _showRemoteModelsDialog = MutableStateFlow(false)
+    val showRemoteModelsDialog = _showRemoteModelsDialog.asStateFlow()
+
+    var remoteModels by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    var isFetchingRemoteModels by mutableStateOf(false)
+        private set
+
+
     val canDeleteModel: Boolean
         get() = models.size > 1
 
@@ -228,7 +242,45 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun downloadModel(url: String, userId: String) {
+    fun showRemoteModelsDialog() {
+        _showRemoteModelsDialog.value = true
+        fetchRemoteModels()
+    }
+
+    fun dismissRemoteModelsDialog() {
+        _showRemoteModelsDialog.value = false
+    }
+
+    private fun fetchRemoteModels() {
+        viewModelScope.launch {
+            isFetchingRemoteModels = true
+            val modelUrl = userSettings.value.modelUrl
+            val userId = userSettings.value.userId
+            if (modelUrl.isBlank() || userId.isBlank()) {
+                isFetchingRemoteModels = false
+                return@launch
+            }
+            try {
+                val models = withContext(Dispatchers.IO) {
+                    val url = URL("$modelUrl/api/model/list/$userId")
+                    val connection = url.openConnection() as HttpURLConnection
+                    val modelsJson = connection.inputStream.bufferedReader().readText()
+                    val jsonArray = JSONArray(modelsJson)
+                    List(jsonArray.length()) { i -> jsonArray.getString(i) }
+                }
+                remoteModels = models
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch remote models", e)
+                remoteModels = emptyList()
+            } finally {
+                isFetchingRemoteModels = false
+            }
+        }
+    }
+
+    fun downloadModel(modelName: String) {
+        val url = "${userSettings.value.modelUrl}/files"
+        val userId = userSettings.value.userId
         if (url.isBlank()) {
             Log.w(TAG, "Download URL is blank.")
             return
@@ -239,7 +291,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             downloadProgress = null
             val success = try {
                 withContext(Dispatchers.IO) {
-                    val modelName = "latest"
                     val targetDir = File(getApplication<Application>().filesDir, "models/$userId/$modelName")
                     if (!targetDir.exists()) {
                         targetDir.mkdirs()
@@ -306,10 +357,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-    }
-
-    fun checkModelVersion() {
-        // TODO: Implement version check logic
     }
 
     fun deleteModel(model: Model) {
