@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material3.AlertDialog
@@ -159,7 +160,7 @@ fun SettingsScreen(
                 IconButton(onClick = {
                     homeViewModel.showRemoteModelsDialog()
                 }, enabled = !isDownloading && modelUrl.isNotBlank()) {
-                    Icon(Icons.Default.FolderSpecial, contentDescription = "Check version")
+                    Icon(Icons.Default.Cloud, contentDescription = "Check version")
                 }
                 IconButton(onClick = {
                     selectedModel?.let {
