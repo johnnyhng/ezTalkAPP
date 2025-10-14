@@ -2,10 +2,13 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr
 
 import android.content.Context
 import android.util.Log
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -211,5 +214,98 @@ internal fun readWavFileToFloatArray(path: String): FloatArray? {
     } catch (e: Exception) {
         Log.e(TAG, "Error reading WAV file: $path", e)
         return null
+    }
+}
+
+/**
+ * Reads a WAV file and returns its content as a ShortArray within a JSON object.
+ * The entire file content is read and converted to a short array.
+ * The JSON object will have a single key "raw" which contains an array of 16-bit values.
+ *
+ * @param path The absolute path to the WAV file.
+ * @param userId The ID of the user.
+ * @return A JSONObject like `{"raw": [s1, s2, ...]}`, or null on error.
+ */
+fun packageUploadJson(path: String, userId: String): JSONObject? {
+    try {
+        val wavFile = File(path)
+
+        // Read label from corresponding .jsonl file
+        val jsonlPath = path.substringBeforeLast(".") + ".jsonl"
+        val jsonlFile = File(jsonlPath)
+        var label = ""
+        if (jsonlFile.exists()) {
+            try {
+                val jsonlContent = jsonlFile.readText()
+                if(jsonlContent.isNotBlank()) {
+                    val jsonObject = JSONObject(jsonlContent)
+                    label = jsonObject.optString("modified", "") // Use "modified" key from jsonl
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error reading or parsing jsonl file: $jsonlPath", e)
+            }
+        } else {
+             Log.w(TAG, "jsonl file not found for wav: $path")
+        }
+
+        val fileInputStream = FileInputStream(wavFile)
+        val byteBuffer = fileInputStream.readBytes()
+        fileInputStream.close()
+
+        val headerSize = 44
+        if (byteBuffer.size < headerSize) {
+            Log.e(TAG, "WAV file is too small to contain a valid header: ${wavFile.name}")
+            return null
+        }
+
+        val account = JSONObject()
+        account.put("user_id", userId.split("@")[0])
+
+        val rawArray = JSONArray()
+        byteBuffer.forEach { 
+            rawArray.put(it.toInt() and 0xff)
+        }
+
+
+        val json = JSONObject()
+        json.put("account", account)
+        json.put("raw", rawArray)
+        json.put("label", label) // key in output json is "label"
+        json.put("filename", wavFile.name)
+        json.put("charMode", false)
+
+        return json
+    } catch (e: Exception) {
+        Log.e(TAG, "Error reading WAV file to JSON: $path", e)
+        return null
+    }
+}
+
+fun postFeedback(feedbackUrl: String, jsonPayload: JSONObject): Boolean {
+    return try {
+        val url = URL(feedbackUrl)
+        val connection = url.openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        connection.setRequestProperty("Accept", "application/json")
+        connection.doOutput = true
+        connection.connectTimeout = 5000 // 5 seconds
+        connection.readTimeout = 5000 // 5 seconds
+
+        connection.outputStream.use { os ->
+            val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
+            os.write(input, 0, input.size)
+        }
+
+        val responseCode = connection.responseCode
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            true
+        } else {
+            Log.e(TAG, "Feedback post failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            false
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Exception during feedback post", e)
+        false
     }
 }

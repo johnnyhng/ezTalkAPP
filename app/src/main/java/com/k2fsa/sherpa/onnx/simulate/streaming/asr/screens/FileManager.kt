@@ -41,8 +41,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.packageUploadJson
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.postFeedback
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveJsonl
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 
@@ -70,8 +74,26 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var editingEntry by remember { mutableStateOf<WavFileEntry?>(null) }
 
     fun feedback(selectedFiles: List<WavFileEntry>) {
-        // TODO: Implement feedback submission
-        Toast.makeText(context, "Feedback for ${selectedFiles.size} files submitted", Toast.LENGTH_SHORT).show()
+        coroutineScope.launch {
+            var successCount = 0
+            withContext(Dispatchers.IO) {
+                selectedFiles.forEach { entry ->
+                    val json = packageUploadJson(entry.wavFile.absolutePath, userSettings.userId)
+                    if (json != null) {
+                        val success = postFeedback(userSettings.feedbackUrl, json)
+                        if (success) {
+                            successCount++
+                        }
+                    }
+                }
+            }
+
+            Toast.makeText(
+                context,
+                "Feedback for $successCount/${selectedFiles.size} files submitted",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     fun listWavFiles() {

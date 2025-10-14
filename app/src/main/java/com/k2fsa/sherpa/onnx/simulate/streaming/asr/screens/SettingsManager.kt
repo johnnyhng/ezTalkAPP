@@ -45,7 +45,8 @@ data class UserSettings(
     val saveVadSegmentsOnly: Boolean,
     val userId: String,
     val modelName: String?,
-    val modelUrl: String
+    val modelUrl: String,
+    val feedbackUrl: String
 )
 
 /**
@@ -62,6 +63,7 @@ class SettingsManager(context: Context) {
         val USER_ID_KEY = stringPreferencesKey("user_id")
         val MODEL_NAME_KEY = stringPreferencesKey("model_name")
         val MODEL_URL_KEY = stringPreferencesKey("model_url")
+        val FEEDBACK_URL_KEY = stringPreferencesKey("feedback_url")
     }
 
     // Flow to read the settings from DataStore, providing default values if none are set.
@@ -73,7 +75,16 @@ class SettingsManager(context: Context) {
         val userId = preferences[USER_ID_KEY] ?: "user@example.com"
         val modelName = preferences[MODEL_NAME_KEY]
         val modelUrl = preferences[MODEL_URL_KEY] ?: ""
-        UserSettings(lingerMs, partialIntervalMs, saveVadSegmentsOnly, userId, modelName, modelUrl)
+        val feedbackUrl = preferences[FEEDBACK_URL_KEY] ?: ""
+        UserSettings(
+            lingerMs,
+            partialIntervalMs,
+            saveVadSegmentsOnly,
+            userId,
+            modelName,
+            modelUrl,
+            feedbackUrl
+        )
     }
 
     // Functions to update the settings in DataStore. These are suspend functions.
@@ -116,6 +127,12 @@ class SettingsManager(context: Context) {
             settings[MODEL_URL_KEY] = url
         }
     }
+
+    suspend fun updateFeedbackUrl(url: String) {
+        appContext.dataStore.edit { settings ->
+            settings[FEEDBACK_URL_KEY] = url
+        }
+    }
 }
 
 sealed class DownloadUiEvent {
@@ -133,7 +150,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "") // Initial default values
+        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "", "") // Initial default values
     )
 
     var models by mutableStateOf<List<Model>>(emptyList())
@@ -202,6 +219,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun updateModelUrl(url: String) {
         viewModelScope.launch {
             settingsManager.updateModelUrl(url)
+        }
+    }
+
+    fun updateFeedbackUrl(url: String) {
+        viewModelScope.launch {
+            settingsManager.updateFeedbackUrl(url)
         }
     }
 

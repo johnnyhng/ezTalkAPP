@@ -57,6 +57,7 @@ fun SettingsScreen(
     val selectedModel = homeViewModel.selectedModel
     var modelMenuExpanded by remember { mutableStateOf(false) }
     var modelUrl by remember(userSettings.modelUrl) { mutableStateOf(userSettings.modelUrl) }
+    var feedbackUrl by remember(userSettings.feedbackUrl) { mutableStateOf(userSettings.feedbackUrl) }
     val isDownloading = homeViewModel.isDownloading
     val downloadProgress = homeViewModel.downloadProgress
     val canDeleteModel = homeViewModel.canDeleteModel
@@ -178,6 +179,18 @@ fun SettingsScreen(
                 }
             }
         }
+
+        OutlinedTextField(
+            value = feedbackUrl,
+            onValueChange = {
+                feedbackUrl = it
+                homeViewModel.updateFeedbackUrl(it)
+            },
+            label = { Text("Feedback URL") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !isDownloading
+        )
 
         // Delay Slider
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
