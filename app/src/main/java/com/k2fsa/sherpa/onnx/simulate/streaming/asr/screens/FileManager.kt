@@ -80,10 +80,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
             var successCount = 0
             withContext(Dispatchers.IO) {
                 selectedFiles.forEach { entry ->
-                    var url = userSettings.feedbackUrl
-                    if (url.contains("120.126.151.159")) {
-                        url = url.replace("120.126.151.159", "eztalk.ntpu.edu.tw")
-                    }
+                    val url = userSettings.feedbackUrl
                     val success = postFeedback("$url/api/transfer", entry.wavFile.absolutePath, userSettings.userId)
                     if (success) {
                         successCount++

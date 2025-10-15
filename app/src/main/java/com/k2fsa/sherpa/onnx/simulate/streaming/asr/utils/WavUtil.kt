@@ -14,6 +14,9 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLSession
 
 
 /**
@@ -306,6 +309,9 @@ fun postFeedback(
     return try {
         val url = URL(feedbackUrl)
         val connection = url.openConnection() as HttpURLConnection
+        val hostnameVerifier = HostnameVerifier { _, _ -> true }
+        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
+
         connection.requestMethod = "POST"
         connection.doOutput = true
         connection.connectTimeout = 5000 // 5 seconds
