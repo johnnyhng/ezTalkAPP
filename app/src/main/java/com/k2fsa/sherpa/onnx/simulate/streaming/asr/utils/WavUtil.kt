@@ -219,13 +219,41 @@ internal fun readWavFileToFloatArray(path: String): FloatArray? {
 }
 
 /**
- * Reads a WAV file and returns its content as a ShortArray within a JSON object.
- * The entire file content is read and converted to a short array.
- * The JSON object will have a single key "raw" which contains an array of 16-bit values.
+ * Reads a WAV file and returns its content as a JSONArray of bytes.
+ *
+ * @param path The absolute path to the WAV file.
+ * @return A JSONArray containing the byte values of the file, or null on error.
+ */
+internal fun readWavFileToJsonArray(path: String): JSONArray? {
+    try {
+        val wavFile = File(path)
+        val fileInputStream = FileInputStream(wavFile)
+        val byteBuffer = fileInputStream.readBytes()
+        fileInputStream.close()
+
+        val headerSize = 44
+        if (byteBuffer.size < headerSize) {
+            Log.e(TAG, "WAV file is too small to contain a valid header: ${wavFile.name}")
+            return null
+        }
+
+        val rawArray = JSONArray()
+        byteBuffer.forEach {
+            rawArray.put(it.toInt() and 0xff)
+        }
+        return rawArray
+    } catch (e: Exception) {
+        Log.e(TAG, "Error reading WAV file to JSONArray: $path", e)
+        return null
+    }
+}
+
+/**
+ * Packages a WAV file and its metadata into a JSON object for uploading.
  *
  * @param path The absolute path to the WAV file.
  * @param userId The ID of the user.
- * @return A JSONObject like `{"raw": [s1, s2, ...]}`, or null on error.
+ * @return A JSONObject ready for upload, or null on error.
  */
 fun packageUploadJson(path: String, userId: String): JSONObject? {
     try {
@@ -238,7 +266,7 @@ fun packageUploadJson(path: String, userId: String): JSONObject? {
         if (jsonlFile.exists()) {
             try {
                 val jsonlContent = jsonlFile.readText()
-                if(jsonlContent.isNotBlank()) {
+                if (jsonlContent.isNotBlank()) {
                     val jsonObject = JSONObject(jsonlContent)
                     label = jsonObject.optString("modified", "") // Use "modified" key from jsonl
                 }
@@ -246,27 +274,13 @@ fun packageUploadJson(path: String, userId: String): JSONObject? {
                 Log.e(TAG, "Error reading or parsing jsonl file: $jsonlPath", e)
             }
         } else {
-             Log.w(TAG, "jsonl file not found for wav: $path")
+            Log.w(TAG, "jsonl file not found for wav: $path")
         }
 
-        val fileInputStream = FileInputStream(wavFile)
-        val byteBuffer = fileInputStream.readBytes()
-        fileInputStream.close()
-
-        val headerSize = 44
-        if (byteBuffer.size < headerSize) {
-            Log.e(TAG, "WAV file is too small to contain a valid header: ${wavFile.name}")
-            return null
-        }
+        val rawArray = readWavFileToJsonArray(path) ?: return null
 
         val account = JSONObject()
         account.put("user_id", userId.split("@")[0])
-
-        val rawArray = JSONArray()
-        byteBuffer.forEach { 
-            rawArray.put(it.toInt() and 0xff)
-        }
-
 
         val json = JSONObject()
         json.put("account", account)
@@ -277,12 +291,18 @@ fun packageUploadJson(path: String, userId: String): JSONObject? {
 
         return json
     } catch (e: Exception) {
-        Log.e(TAG, "Error reading WAV file to JSON: $path", e)
+        Log.e(TAG, "Error packaging upload JSON for $path", e)
         return null
     }
 }
 
-fun postFeedback(feedbackUrl: String, jsonPayload: JSONObject): Boolean {
+fun postFeedback(feedbackUrl: String, filePath: String, userId: String): Boolean {
+    val jsonPayload = packageUploadJson(filePath, userId)
+    if (jsonPayload == null) {
+        Log.e(TAG, "Failed to create JSON payload for $filePath")
+        return false
+    }
+
     return try {
         val url = URL(feedbackUrl)
         val connection = url.openConnection() as HttpURLConnection

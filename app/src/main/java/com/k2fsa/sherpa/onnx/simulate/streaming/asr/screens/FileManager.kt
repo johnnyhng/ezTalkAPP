@@ -42,7 +42,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.packageUploadJson
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.postFeedback
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
@@ -81,16 +80,13 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
             var successCount = 0
             withContext(Dispatchers.IO) {
                 selectedFiles.forEach { entry ->
-                    val json = packageUploadJson(entry.wavFile.absolutePath, userSettings.userId)
-                    if (json != null) {
-                        var url = userSettings.feedbackUrl
-                        if (url.contains("120.126.151.159")) {
-                            url = url.replace("120.126.151.159", "eztalk.ntpu.edu.tw")
-                        }
-                        val success = postFeedback("$url/api/transfer", json)
-                        if (success) {
-                            successCount++
-                        }
+                    var url = userSettings.feedbackUrl
+                    if (url.contains("120.126.151.159")) {
+                        url = url.replace("120.126.151.159", "eztalk.ntpu.edu.tw")
+                    }
+                    val success = postFeedback("$url/api/transfer", entry.wavFile.absolutePath, userSettings.userId)
+                    if (success) {
+                        successCount++
                     }
                 }
             }
