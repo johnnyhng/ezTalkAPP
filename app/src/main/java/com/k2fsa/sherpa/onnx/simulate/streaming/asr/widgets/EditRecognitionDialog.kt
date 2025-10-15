@@ -15,10 +15,8 @@ import androidx.compose.ui.unit.dp
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.readWavFileToFloatArray
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditableDropdown
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.readWavFileToFloatArray
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val sampleRateInHz = 16000

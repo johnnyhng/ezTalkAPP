@@ -37,8 +37,9 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Transcript
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveAsWav
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveJsonl
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveAsWav
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditRecognitionDialog
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.WaveformDisplay
 import kotlinx.coroutines.CoroutineScope

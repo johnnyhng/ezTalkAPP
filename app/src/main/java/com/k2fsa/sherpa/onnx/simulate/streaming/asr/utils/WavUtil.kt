@@ -1,7 +1,8 @@
-package com.k2fsa.sherpa.onnx.simulate.streaming.asr
+package com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils
 
 import android.content.Context
 import android.util.Log
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File

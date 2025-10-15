@@ -42,9 +42,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.packageUploadJson
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.postFeedback
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveJsonl
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.packageUploadJson
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.postFeedback
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditRecognitionDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
