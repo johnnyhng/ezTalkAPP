@@ -5,6 +5,7 @@ import android.util.Log
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.DataOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -14,8 +15,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 
-// Data class to hold both the text and the associated file path
-data class RecognitionResult(val text: String, val wavFilePath: String)
 
 /**
  * Saves a FloatArray of audio samples to a WAV file in a structured directory.
@@ -248,18 +247,9 @@ internal fun readWavFileToJsonArray(path: String): JSONArray? {
     }
 }
 
-/**
- * Packages a WAV file and its metadata into a JSON object for uploading.
- *
- * @param path The absolute path to the WAV file.
- * @param userId The ID of the user.
- * @return A JSONObject ready for upload, or null on error.
- */
-fun packageUploadJson(path: String, userId: String): JSONObject? {
+private fun packageUploadJsonMetadata(path: String, userId: String): JSONObject? {
     try {
         val wavFile = File(path)
-
-        // Read label from corresponding .jsonl file
         val jsonlPath = path.substringBeforeLast(".") + ".jsonl"
         val jsonlFile = File(jsonlPath)
         var label = ""
@@ -268,7 +258,7 @@ fun packageUploadJson(path: String, userId: String): JSONObject? {
                 val jsonlContent = jsonlFile.readText()
                 if (jsonlContent.isNotBlank()) {
                     val jsonObject = JSONObject(jsonlContent)
-                    label = jsonObject.optString("modified", "") // Use "modified" key from jsonl
+                    label = jsonObject.optString("modified", "")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error reading or parsing jsonl file: $jsonlPath", e)
@@ -277,45 +267,108 @@ fun packageUploadJson(path: String, userId: String): JSONObject? {
             Log.w(TAG, "jsonl file not found for wav: $path")
         }
 
-        val rawArray = readWavFileToJsonArray(path) ?: return null
-
         val account = JSONObject()
         account.put("user_id", userId.split("@")[0])
 
         val json = JSONObject()
         json.put("account", account)
-        json.put("raw", rawArray)
         json.put("label", label) // key in output json is "label"
         json.put("filename", wavFile.name)
         json.put("charMode", false)
 
         return json
     } catch (e: Exception) {
-        Log.e(TAG, "Error packaging upload JSON for $path", e)
+        Log.e(TAG, "Error packaging upload JSON metadata for $path", e)
         return null
     }
 }
 
-fun postFeedback(feedbackUrl: String, filePath: String, userId: String): Boolean {
-    val jsonPayload = packageUploadJson(filePath, userId)
-    if (jsonPayload == null) {
-        Log.e(TAG, "Failed to create JSON payload for $filePath")
-        return false
-    }
+/**
+ * Packages a WAV file and its metadata into a JSON object for uploading.
+ *
+ * @param path The absolute path to the WAV file.
+ * @param userId The ID of the user.
+ * @return A JSONObject ready for upload, or null on error.
+ */
+fun packageUploadJson(path: String, userId: String): JSONObject? {
+    val metadata = packageUploadJsonMetadata(path, userId) ?: return null
+    val rawArray = readWavFileToJsonArray(path) ?: return null
+    metadata.put("raw", rawArray)
+    return metadata
+}
 
+fun postFeedback(
+    feedbackUrl: String,
+    filePath: String,
+    userId: String,
+    sendFileByJson: Boolean = true
+): Boolean {
     return try {
         val url = URL(feedbackUrl)
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
-        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        connection.setRequestProperty("Accept", "application/json")
         connection.doOutput = true
         connection.connectTimeout = 5000 // 5 seconds
         connection.readTimeout = 5000 // 5 seconds
 
-        connection.outputStream.use { os ->
-            val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
-            os.write(input, 0, input.size)
+        if (sendFileByJson) {
+            val jsonPayload = packageUploadJson(filePath, userId)
+            if (jsonPayload == null) {
+                Log.e(TAG, "Failed to create JSON payload for $filePath")
+                return false
+            }
+
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.outputStream.use { os ->
+                val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+        } else {
+            val metadata = packageUploadJsonMetadata(filePath, userId)
+            if (metadata == null) {
+                Log.e(TAG, "Failed to create metadata for $filePath")
+                return false
+            }
+            val file = File(filePath)
+            if (!file.exists()) {
+                Log.e(TAG, "File not found for upload: $filePath")
+                return false
+            }
+
+            val boundary = "Boundary-${System.currentTimeMillis()}"
+            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+            DataOutputStream(connection.outputStream).use { dos ->
+                val lineEnd = "\r\n"
+                val twoHyphens = "--"
+
+                // Part 1: JSON metadata
+                dos.writeBytes(twoHyphens + boundary + lineEnd)
+                dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
+                dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
+                dos.writeBytes(lineEnd)
+                dos.write(metadata.toString().toByteArray(Charsets.UTF_8))
+                dos.writeBytes(lineEnd)
+
+                // Part 2: File
+                dos.writeBytes(twoHyphens + boundary + lineEnd)
+                dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
+                dos.writeBytes("Content-Type: audio/wav$lineEnd")
+                dos.writeBytes(lineEnd)
+
+                FileInputStream(file).use { fis ->
+                    val buffer = ByteArray(4096)
+                    var bytesRead: Int
+                    while (fis.read(buffer).also { bytesRead = it } != -1) {
+                        dos.write(buffer, 0, bytesRead)
+                    }
+                }
+                dos.writeBytes(lineEnd)
+
+                // End of multipart
+                dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+            }
         }
 
         val responseCode = connection.responseCode
@@ -323,6 +376,8 @@ fun postFeedback(feedbackUrl: String, filePath: String, userId: String): Boolean
             true
         } else {
             Log.e(TAG, "Feedback post failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            val errorStream = connection.errorStream?.bufferedReader()?.readText()
+            Log.e(TAG, "Error body: $errorStream")
             false
         }
     } catch (e: Exception) {
