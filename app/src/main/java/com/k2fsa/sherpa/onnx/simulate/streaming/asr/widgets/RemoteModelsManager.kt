@@ -1,4 +1,4 @@
-package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
+package com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,11 +14,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HomeViewModel
 
 @Composable
 fun RemoteModelsManager(
@@ -65,37 +64,33 @@ fun RemoteModelsManager(
                         }
                     }
                 }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Show download controls or progress bar
-                if (isDownloading) {
-                    // Show progress bar only when downloading
-                    if (downloadProgress != null) {
-                        LinearProgressIndicator(
-                            progress = downloadProgress,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    }
-                } else if (selectedModel != null) {
-                    // Show download button next to selected model text when not downloading
+                if (selectedModel != null) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "Download: ${selectedModel!!}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        if (isDownloading) {
+                            if (downloadProgress != null) {
+                                LinearProgressIndicator(
+                                    progress = downloadProgress,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                LinearProgressIndicator(modifier = Modifier.weight(1f))
+                            }
+                        }
+
                         IconButton(
                             onClick = {
                                 selectedModel?.let {
                                     homeViewModel.downloadModel(it)
                                 }
                             },
-                            enabled = true // Already covered by the 'else if'
+                            enabled = !isDownloading
                         ) {
                             Icon(Icons.Default.Download, contentDescription = "Download")
                         }
@@ -103,10 +98,7 @@ fun RemoteModelsManager(
                 }
             }
         },
-        confirmButton = {
-            // The confirm button is moved inside the `text` lambda,
-            // so we can leave this empty or use it for another action if needed.
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(
                 onClick = { homeViewModel.dismissRemoteModelsDialog() },

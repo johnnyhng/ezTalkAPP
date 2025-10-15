@@ -1,4 +1,4 @@
-package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
+package com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets
 
 import android.util.Log
 import androidx.compose.foundation.layout.Column

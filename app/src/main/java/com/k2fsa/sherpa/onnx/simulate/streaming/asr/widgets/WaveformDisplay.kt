@@ -1,4 +1,4 @@
-package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
+package com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.material3.MaterialTheme
