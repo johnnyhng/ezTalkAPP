@@ -35,6 +35,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.R
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Transcript
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveAsWav
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.saveJsonl
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditRecognitionDialog

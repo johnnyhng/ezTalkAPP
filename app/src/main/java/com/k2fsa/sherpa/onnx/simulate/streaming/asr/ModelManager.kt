@@ -2,6 +2,7 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr
 
 import android.content.Context
 import android.util.Log
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Model
 import java.io.File
 import java.io.FileOutputStream
 

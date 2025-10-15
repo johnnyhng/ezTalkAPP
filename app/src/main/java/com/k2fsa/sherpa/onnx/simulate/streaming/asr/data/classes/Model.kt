@@ -1,4 +1,4 @@
-package com.k2fsa.sherpa.onnx.simulate.streaming.asr
+package com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes
 
 data class Model(
     val name: String,

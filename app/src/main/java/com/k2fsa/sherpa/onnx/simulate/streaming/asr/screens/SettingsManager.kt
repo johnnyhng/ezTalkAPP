@@ -15,7 +15,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.Model
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Model
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ModelManager
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import kotlinx.coroutines.Dispatchers

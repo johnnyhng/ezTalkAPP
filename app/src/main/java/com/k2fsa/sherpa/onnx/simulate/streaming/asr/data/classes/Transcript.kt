@@ -1,4 +1,4 @@
-package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
+package com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes
 
 data class Transcript(
     val recognizedText: String,

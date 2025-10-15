@@ -9,6 +9,7 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.getOfflineModelConfig
 import com.k2fsa.sherpa.onnx.getVadModelConfig
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Model
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException

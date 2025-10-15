@@ -1,7 +1,7 @@
 package com.k2fsa.sherpa.onnx
 
 import android.content.res.AssetManager
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.Model
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Model
 
 data class OfflineRecognizerResult(
     val text: String,
