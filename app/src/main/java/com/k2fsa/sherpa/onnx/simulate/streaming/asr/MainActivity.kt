@@ -36,10 +36,9 @@ import androidx.navigation.compose.rememberNavController
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.FileManagerScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HelpScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HomeScreen
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.SettingsManager
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.SettingsManager
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.SettingsScreen
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ui.theme.SimulateStreamingAsrTheme
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 const val TAG = "sherpa-onnx-sim-asr"

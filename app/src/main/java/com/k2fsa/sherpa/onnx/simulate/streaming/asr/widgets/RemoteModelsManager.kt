@@ -17,7 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens.HomeViewModel
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
 
 @Composable
 fun RemoteModelsManager(

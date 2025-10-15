@@ -1,4 +1,4 @@
-package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
+package com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers
 
 import android.app.Application
 import android.content.Context
@@ -16,7 +16,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Model
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.ModelManager
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.ModelManager
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel

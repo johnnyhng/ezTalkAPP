@@ -1,7 +1,8 @@
-package com.k2fsa.sherpa.onnx.simulate.streaming.asr
+package com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers
 
 import android.content.Context
 import android.util.Log
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Model
 import java.io.File
 import java.io.FileOutputStream

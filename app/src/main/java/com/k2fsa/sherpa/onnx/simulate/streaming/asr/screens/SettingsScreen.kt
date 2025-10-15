@@ -41,6 +41,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.DownloadUiEvent
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.RemoteModelsManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
