@@ -146,9 +146,7 @@ fun HomeScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            audioRecord?.release()
-            audioRecord = null
-            MediaController.stop()
+            stopAudio()
             tts?.stop()
             tts?.shutdown()
             tts = null
@@ -174,6 +172,7 @@ fun HomeScreen(
                 Log.i(TAG, "Recording is not allowed")
                 isStarted = false
             } else {
+                stopAudio()
                 val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
 
                 val audioSource = MediaRecorder.AudioSource.MIC
@@ -314,7 +313,7 @@ fun HomeScreen(
 
                         while (!SimulateStreamingAsr.vad.empty()) {
                             if (!saveVadSegmentsOnly) {
-                                lastSpeechDetectedOffset = offset
+                                lastSpeechDetectedOffset = offset + 2 * keep
                             }
                             val seg = SimulateStreamingAsr.vad.front().samples
                             SimulateStreamingAsr.vad.pop()
@@ -342,7 +341,7 @@ fun HomeScreen(
                                 val audioToSave = if (saveVadSegmentsOnly) {
                                     utteranceForRecognition
                                 } else {
-                                    lastSpeechDetectedOffset = Math.min(buffer.size - 1, lastSpeechDetectedOffset + keep)
+                                    lastSpeechDetectedOffset = Math.min(buffer.size - 1, lastSpeechDetectedOffset)
                                     fullRecordingBuffer.clear()
                                     fullRecordingBuffer.addAll(buffer.subList(startOffset, lastSpeechDetectedOffset))
                                     fullRecordingBuffer.toFloatArray()
@@ -444,10 +443,7 @@ fun HomeScreen(
                 }
             }
         } else {
-            audioRecord?.stop()
-            audioRecord?.release()
-            audioRecord = null
-            MediaController.stop()
+            stopAudio()
         }
     }
 
@@ -620,6 +616,13 @@ fun HomeScreen(
             }
         }
     }
+}
+
+private fun stopAudio() {
+    audioRecord?.stop()
+    audioRecord?.release()
+    audioRecord = null
+    MediaController.stop()
 }
 
 @SuppressLint("UnrememberedMutableState")
