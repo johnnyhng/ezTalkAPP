@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -37,10 +39,10 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Transcript
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveAsWav
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditRecognitionDialog
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditableDropdown
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.WaveformDisplay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +52,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 
 private var audioRecord: AudioRecord? = null
 private const val sampleRateInHz = 16000
@@ -60,7 +64,7 @@ private val feedbackRecords = mutableListOf<Transcript>()
 
 @Composable
 fun HomeScreen(
-    homeViewModel: HomeViewModel = viewModel()
+    homeViewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -72,12 +76,10 @@ fun HomeScreen(
     val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
 
-    // State for the Edit Dialog
-    var showEditDialog by remember { mutableStateOf(false) }
-    var editingItem by remember { mutableStateOf<Transcript?>(null) }
-    var editingItemIndex by remember { mutableStateOf(-1) }
-    var originalTextForDialog by remember { mutableStateOf("") }
-    var modifiedTextForDialog by remember { mutableStateOf("") }
+    // State for inline editing
+    var isEditing by remember { mutableStateOf(false) }
+    var editingIndex by remember { mutableStateOf(-1) }
+    var editingText by remember { mutableStateOf("") }
 
     // Waveform and countdown states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
@@ -313,7 +315,7 @@ fun HomeScreen(
 
                         while (!SimulateStreamingAsr.vad.empty()) {
                             if (!saveVadSegmentsOnly) {
-                                lastSpeechDetectedOffset = offset + 2 * keep
+                                lastSpeechDetectedOffset = offset
                             }
                             val seg = SimulateStreamingAsr.vad.front().samples
                             SimulateStreamingAsr.vad.pop()
@@ -341,9 +343,17 @@ fun HomeScreen(
                                 val audioToSave = if (saveVadSegmentsOnly) {
                                     utteranceForRecognition
                                 } else {
-                                    lastSpeechDetectedOffset = Math.min(buffer.size - 1, lastSpeechDetectedOffset)
+                                    lastSpeechDetectedOffset = Math.min(
+                                        buffer.size - 1,
+                                        lastSpeechDetectedOffset + keep
+                                    )
                                     fullRecordingBuffer.clear()
-                                    fullRecordingBuffer.addAll(buffer.subList(startOffset, lastSpeechDetectedOffset))
+                                    fullRecordingBuffer.addAll(
+                                        buffer.subList(
+                                            startOffset,
+                                            lastSpeechDetectedOffset
+                                        )
+                                    )
                                     fullRecordingBuffer.toFloatArray()
                                 }
 
@@ -389,7 +399,8 @@ fun HomeScreen(
 
                                     val newTranscript = Transcript(
                                         recognizedText = result.text,
-                                        wavFilePath = wavPath ?: ""
+                                        wavFilePath = wavPath ?: "",
+                                        modifiedText = result.text
                                     )
 
                                     if (result.text.isNotBlank()) {
@@ -429,7 +440,8 @@ fun HomeScreen(
                             }
                         } else {
                             if (isRecognizingSpeech) {
-                                val sinceLastPacket = System.currentTimeMillis() - lastVadPacketAt
+                                val sinceLastPacket =
+                                    System.currentTimeMillis() - lastVadPacketAt
                                 if (lastVadPacketAt != 0L && sinceLastPacket > LINGER_MS) {
                                     launch(Dispatchers.Main) { countdownProgress = 0f }
                                 }
@@ -447,36 +459,6 @@ fun HomeScreen(
         }
     }
 
-    if (showEditDialog && editingItemIndex != -1) {
-        EditRecognitionDialog(
-            originalText = originalTextForDialog,
-            currentText = modifiedTextForDialog,
-            wavFilePath = editingItem?.wavFilePath ?: "", // Pass the wav file path
-            onDismiss = { showEditDialog = false },
-            onConfirm = { newText ->
-                val oldItem = resultList[editingItemIndex]
-                resultList[editingItemIndex] = oldItem.copy(modifiedText = newText)
-
-                // *** MODIFIED: Save the edit to the JSONL file ***
-                if (oldItem.wavFilePath.isNotEmpty()) {
-                    val file = File(oldItem.wavFilePath)
-                    val filename = file.nameWithoutExtension
-                    coroutineScope.launch(Dispatchers.IO) {
-                        saveJsonl(
-                            context = context,
-                            userId = userId,
-                            filename = filename,
-                            originalText = oldItem.recognizedText,
-                            modifiedText = newText,
-                            checked = oldItem.checked
-                        )
-                    }
-                }
-                showEditDialog = false
-            }
-        )
-    }
-
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter,
@@ -492,7 +474,8 @@ fun HomeScreen(
                             resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
                                 .joinToString(separator = "\n")
                         clipboardManager.setText(AnnotatedString(s))
-                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT)
+                            .show()
                     } else {
                         Toast.makeText(context, "Nothing to copy", Toast.LENGTH_SHORT).show()
                     }
@@ -500,10 +483,14 @@ fun HomeScreen(
                 onClearButtonClick = {
                     resultList.clear()
                     feedbackRecords.clear() // Also clear the feedback records
-                    Log.i(TAG, "Feedback records cleared. Count: ${feedbackRecords.size}")
+                    Log.i(
+                        TAG,
+                        "Feedback records cleared. Count: ${feedbackRecords.size}"
+                    )
                 },
                 isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
-                isAsrModelLoading = isAsrModelLoading
+                isAsrModelLoading = isAsrModelLoading,
+                isEditing = isEditing
             )
             if (isStarted) {
                 WaveformDisplay(
@@ -523,39 +510,41 @@ fun HomeScreen(
                 state = lazyColumnListState
             ) {
                 itemsIndexed(resultList, key = { _, item -> item.hashCode() }) { index, result ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "${index + 1}: ${result.modifiedText}",
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (index == resultList.size - 1 && isRecognizingSpeech && countdownProgress > 0) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            CircularProgressIndicator(
-                                progress = countdownProgress,
-                                modifier = Modifier.size(24.dp)
-                            )
+                    if (editingIndex == index) {
+                        // Inline editing UI
+                        val menuItems = remember(result) {
+                            listOfNotNull(result.recognizedText, result.modifiedText).distinct()
                         }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            EditableDropdown(
+                                value = editingText,
+                                onValueChange = { editingText = it },
+                                label = { Text("Edit") },
+                                menuItems = menuItems,
+                                isRecognizing = isRecognizingSpeech,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = {
+                                // Reset editing state
+                                isEditing = false
+                                editingIndex = -1
+                                editingText = ""
+                            }) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Cancel Edit"
+                                )
+                            }
+                            IconButton(onClick = {
+                                val oldItem = resultList[index]
+                                val updatedItem = oldItem.copy(modifiedText = editingText)
+                                resultList[index] = updatedItem
 
-                        if (result.wavFilePath.isNotEmpty()) {
-                            // Talk Button -> IconButton
-                            IconButton(
-                                onClick = {
-                                    MediaController.stop() // Stop any audio playback
-                                    val utteranceId = UUID.randomUUID().toString()
-                                    tts?.speak(
-                                        result.modifiedText,
-                                        TextToSpeech.QUEUE_FLUSH,
-                                        null,
-                                        utteranceId
-                                    )
-                                    // Update the checked status
-                                    val updatedItem = result.copy(checked = true)
-                                    resultList[index] = updatedItem
-
-                                    // Save the updated record to JSONL
+                                // Save to JSONL
+                                if (updatedItem.wavFilePath.isNotEmpty()) {
                                     val file = File(updatedItem.wavFilePath)
                                     val filename = file.nameWithoutExtension
                                     coroutineScope.launch(Dispatchers.IO) {
@@ -564,51 +553,110 @@ fun HomeScreen(
                                             userId = userId,
                                             filename = filename,
                                             originalText = updatedItem.recognizedText,
-                                            modifiedText = updatedItem.modifiedText,
+                                            modifiedText = editingText,
                                             checked = updatedItem.checked
                                         )
                                     }
-                                },
-                                enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking
-                            ) {
+                                }
+
+                                // Reset editing state
+                                isEditing = false
+                                editingIndex = -1
+                                editingText = ""
+                            }) {
                                 Icon(
-                                    imageVector = Icons.Default.RecordVoiceOver,
-                                    contentDescription = "Talk"
+                                    Icons.Default.Check,
+                                    contentDescription = "Confirm Edit"
+                                )
+                            }
+                        }
+                    } else {
+                        // Normal display Row
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "${index + 1}: ${result.modifiedText}",
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (index == resultList.size - 1 && isRecognizingSpeech && countdownProgress > 0) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                CircularProgressIndicator(
+                                    progress = countdownProgress,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
 
-                            // Edit Button -> IconButton
-                            IconButton(
-                                onClick = {
-                                    editingItemIndex = index
-                                    editingItem = result // Store the whole item
-                                    originalTextForDialog = result.recognizedText
-                                    modifiedTextForDialog = result.modifiedText
-                                    showEditDialog = true
-                                },
-                                enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit"
-                                )
-                            }
+                            if (result.wavFilePath.isNotEmpty()) {
+                                // Talk Button -> IconButton
+                                IconButton(
+                                    onClick = {
+                                        MediaController.stop() // Stop any audio playback
+                                        val utteranceId = UUID.randomUUID().toString()
+                                        tts?.speak(
+                                            result.modifiedText,
+                                            TextToSpeech.QUEUE_FLUSH,
+                                            null,
+                                            utteranceId
+                                        )
+                                        // Update the checked status
+                                        val updatedItem = result.copy(checked = true)
+                                        resultList[index] = updatedItem
 
-                            // Play Button -> IconButton
-                            IconButton(
-                                onClick = {
-                                    if (currentlyPlaying == result.wavFilePath) {
-                                        MediaController.stop()
-                                    } else {
-                                        MediaController.play(result.wavFilePath)
-                                    }
-                                },
-                                enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == result.wavFilePath)
-                            ) {
-                                Icon(
-                                    imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                    contentDescription = if (currentlyPlaying == result.wavFilePath) "Stop" else "Play"
-                                )
+                                        // Save the updated record to JSONL
+                                        val file = File(updatedItem.wavFilePath)
+                                        val filename = file.nameWithoutExtension
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            saveJsonl(
+                                                context = context,
+                                                userId = userId,
+                                                filename = filename,
+                                                originalText = updatedItem.recognizedText,
+                                                modifiedText = updatedItem.modifiedText,
+                                                checked = updatedItem.checked
+                                            )
+                                        }
+                                    },
+                                    enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.RecordVoiceOver,
+                                        contentDescription = "Talk"
+                                    )
+                                }
+
+                                // Edit Button -> IconButton
+                                IconButton(
+                                    onClick = {
+                                        isEditing = true
+                                        editingIndex = index
+                                        editingText = result.modifiedText
+                                    },
+                                    enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit"
+                                    )
+                                }
+
+                                // Play Button -> IconButton
+                                IconButton(
+                                    onClick = {
+                                        if (currentlyPlaying == result.wavFilePath) {
+                                            MediaController.stop()
+                                        } else {
+                                            MediaController.play(result.wavFilePath)
+                                        }
+                                    },
+                                    enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == result.wavFilePath) && !isEditing
+                                ) {
+                                    Icon(
+                                        imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                        contentDescription = if (currentlyPlaying == result.wavFilePath) "Stop" else "Play"
+                                    )
+                                }
                             }
                         }
                     }
@@ -634,7 +682,8 @@ private fun HomeButtonRow(
     onCopyButtonClick: () -> Unit,
     onClearButtonClick: () -> Unit,
     isPlaybackActive: Boolean,
-    isAsrModelLoading: Boolean
+    isAsrModelLoading: Boolean,
+    isEditing: Boolean,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -642,21 +691,21 @@ private fun HomeButtonRow(
     ) {
         Button(
             onClick = onRecordingButtonClick,
-            enabled = !isPlaybackActive && !isAsrModelLoading
+            enabled = !isPlaybackActive && !isAsrModelLoading && !isEditing
         ) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
         Spacer(modifier = Modifier.width(24.dp))
         Button(
             onClick = onCopyButtonClick,
-            enabled = !isStarted && !isPlaybackActive
+            enabled = !isStarted && !isPlaybackActive && !isEditing
         ) {
             Text(text = stringResource(id = R.string.copy))
         }
         Spacer(modifier = Modifier.width(24.dp))
         Button(
             onClick = onClearButtonClick,
-            enabled = !isStarted && !isPlaybackActive
+            enabled = !isStarted && !isPlaybackActive && !isEditing
         ) {
             Text(text = stringResource(id = R.string.clear))
         }
