@@ -23,6 +23,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,9 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.postFeedback
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditRecognitionDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -60,7 +61,7 @@ data class WavFileEntry(
     val jsonlContent: List<String>,
     val originalText: String,
     val modifiedText: String,
-    val checked: Boolean
+    val checked: Boolean,
 )
 
 @Composable
@@ -75,15 +76,29 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var showEditDialog by remember { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<WavFileEntry?>(null) }
 
+    // Feedback state
+    var isFeedbackInProgress by remember { mutableStateOf(false) }
+    var feedbackProgress by remember { mutableStateOf(0f) }
+    var feedbackProgressText by remember { mutableStateOf("") }
+
     fun feedback(selectedFiles: List<WavFileEntry>) {
         coroutineScope.launch {
+            isFeedbackInProgress = true
+            feedbackProgress = 0f
+            feedbackProgressText = "0/${selectedFiles.size}"
             var successCount = 0
             withContext(Dispatchers.IO) {
-                selectedFiles.forEach { entry ->
+                selectedFiles.forEachIndexed { index, entry ->
                     val url = userSettings.feedbackUrl
-                    val success = postFeedback("$url/api/transfer", entry.wavFile.absolutePath, userSettings.userId)
+                    val success =
+                        postFeedback("$url/api/transfer", entry.wavFile.absolutePath, userSettings.userId)
                     if (success) {
                         successCount++
+                    }
+                    // Update progress on the main thread
+                    withContext(Dispatchers.Main) {
+                        feedbackProgress = (index + 1).toFloat() / selectedFiles.size
+                        feedbackProgressText = "${index + 1}/${selectedFiles.size}"
                     }
                 }
             }
@@ -93,6 +108,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 "Feedback for $successCount/${selectedFiles.size} files submitted",
                 Toast.LENGTH_SHORT
             ).show()
+            isFeedbackInProgress = false
         }
     }
 
@@ -118,7 +134,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                 jsonlContent = listOf(content),
                                 originalText = original,
                                 modifiedText = modified,
-                                checked = checked
+                                checked = checked,
                             )
                         } catch (e: Exception) {
                             null // Ignore malformed lines
@@ -156,7 +172,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         filename = editingEntry!!.wavFile.nameWithoutExtension,
                         originalText = editingEntry!!.originalText,
                         modifiedText = newText,
-                        checked = editingEntry!!.checked
+                        checked = editingEntry!!.checked,
                     )
                     listWavFiles() // Refresh the list
                 }
@@ -179,15 +195,22 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     wavsDir.deleteRecursively()
                 }
                 listWavFiles()
-            }, enabled = currentlyPlaying == null) {
+            }, enabled = currentlyPlaying == null && !isFeedbackInProgress) {
                 Text("Delete all my wavs")
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(onClick = {
                 feedback(wavFileEntries.filter { it.checked })
-            }, enabled = wavFileEntries.any { it.checked }) {
+            }, enabled = wavFileEntries.any { it.checked } && !isFeedbackInProgress) {
                 Text("Feedback")
             }
+        }
+
+        if (isFeedbackInProgress) {
+            Spacer(modifier = Modifier.height(8.dp))
+            LinearProgressIndicator(progress = feedbackProgress, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(feedbackProgressText, style = MaterialTheme.typography.bodySmall)
         }
 
 
@@ -215,11 +238,12 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                             filename = entry.wavFile.nameWithoutExtension,
                                             originalText = entry.originalText,
                                             modifiedText = entry.modifiedText,
-                                            checked = it
+                                            checked = it,
                                         )
                                         listWavFiles()
                                     }
-                                }
+                                },
+                                enabled = !isFeedbackInProgress
                             )
                             Text(
                                 entry.wavFile.name,
@@ -232,7 +256,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                     editingEntry = entry
                                     showEditDialog = true
                                 },
-                                enabled = currentlyPlaying == null
+                                enabled = currentlyPlaying == null && !isFeedbackInProgress
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,
@@ -247,7 +271,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                         MediaController.play(entry.wavFile.absolutePath)
                                     }
                                 },
-                                enabled = currentlyPlaying == null || currentlyPlaying == entry.wavFile.absolutePath
+                                enabled = !isFeedbackInProgress && (currentlyPlaying == null || currentlyPlaying == entry.wavFile.absolutePath)
                             ) {
                                 Icon(
                                     imageVector = if (currentlyPlaying == entry.wavFile.absolutePath) Icons.Filled.Stop else Icons.Filled.PlayArrow,
@@ -267,7 +291,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                     }
                                     listWavFiles()
                                 },
-                                enabled = currentlyPlaying == null
+                                enabled = currentlyPlaying == null && !isFeedbackInProgress
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
