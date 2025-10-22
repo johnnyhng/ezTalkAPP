@@ -391,3 +391,95 @@ fun postFeedback(
         false
     }
 }
+
+fun postForRecognition(
+    recognitionUrl: String,
+    filePath: String,
+    userId: String,
+    sendFileByJson: Boolean = true
+): JSONObject? {
+    return try {
+        val url = URL(recognitionUrl)
+        val connection = url.openConnection() as HttpURLConnection
+        val hostnameVerifier = HostnameVerifier { _, _ -> true }
+        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
+
+        connection.requestMethod = "POST"
+        connection.doOutput = true
+        connection.connectTimeout = 15000 // 15 seconds
+        connection.readTimeout = 15000 // 15 seconds
+
+        val jsonPayload = JSONObject()
+        jsonPayload.put("login_user", userId.split("@")[0])
+        jsonPayload.put("filename", filePath.substringAfterLast("/"))
+        jsonPayload.put("label", "tmp")
+        jsonPayload.put("num_of_stn", 8)
+
+
+        if (sendFileByJson) {
+            jsonPayload.put("raw", readWavFileToJsonArray(filePath))
+
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.outputStream.use { os ->
+                val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+        } else {
+            val file = File(filePath)
+            if (!file.exists()) {
+                Log.e(TAG, "File not found for upload: $filePath")
+                return null
+            }
+
+            val boundary = "Boundary-${System.currentTimeMillis()}"
+            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+            DataOutputStream(connection.outputStream).use { dos ->
+                val lineEnd = "\r\n"
+                val twoHyphens = "--"
+
+                // Part 1: JSON metadata
+                dos.writeBytes(twoHyphens + boundary + lineEnd)
+                dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
+                dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
+                dos.writeBytes(lineEnd)
+                dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
+                dos.writeBytes(lineEnd)
+
+                // Part 2: File
+                dos.writeBytes(twoHyphens + boundary + lineEnd)
+                dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
+                dos.writeBytes("Content-Type: audio/wav$lineEnd")
+                dos.writeBytes(lineEnd)
+
+                FileInputStream(file).use { fis ->
+                    val buffer = ByteArray(4096)
+                    var bytesRead: Int
+                    while (fis.read(buffer).also { bytesRead = it } != -1) {
+                        dos.write(buffer, 0, bytesRead)
+                    }
+                }
+                dos.writeBytes(lineEnd)
+
+                // End of multipart
+                dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+            }
+        }
+
+        val responseCode = connection.responseCode
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
+            val jsonResponse = JSONObject(responseBody)
+            jsonResponse.opt("response")
+        } else {
+            Log.e(TAG, "Recognition post failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            val errorStream = connection.errorStream?.bufferedReader()?.readText()
+            Log.e(TAG, "Error body: $errorStream")
+            null
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Exception during recognition post", e)
+        null
+    } as JSONObject?
+}

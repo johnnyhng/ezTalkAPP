@@ -15,9 +15,12 @@ import androidx.compose.ui.unit.dp
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.postForRecognition
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.readWavFileToFloatArray
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 private const val sampleRateInHz = 16000
 
@@ -28,10 +31,14 @@ internal fun EditRecognitionDialog(
     wavFilePath: String, // We need the path to the audio file
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    userId: String,
+    recognitionUrl: String,
 ) {
     var text by remember { mutableStateOf(currentText) }
     var newRecognitionResult by remember { mutableStateOf<String?>(null) }
+    var remoteRecognitionResult by remember { mutableStateOf<List<String>>(emptyList()) }
     var isRecognizing by remember { mutableStateOf(false) }
+    var isRemoteRecognizing by remember { mutableStateOf(false) }
     var recognitionError by remember { mutableStateOf<String?>(null) }
 
     // Use the non-streaming (offline) recognizer for whole-file recognition
@@ -43,7 +50,7 @@ internal fun EditRecognitionDialog(
             isRecognizing = true
             newRecognitionResult = null
             recognitionError = null
-            withContext(Dispatchers.IO) {
+            launch(Dispatchers.IO) {
                 try {
                     val audioData = readWavFileToFloatArray(wavFilePath)
                     if (audioData != null) {
@@ -75,6 +82,27 @@ internal fun EditRecognitionDialog(
                     }
                 }
             }
+            if (recognitionUrl.isNotBlank()) {
+                launch {
+                    isRemoteRecognizing = true
+                    val response = withContext(Dispatchers.IO) {
+                        postForRecognition(recognitionUrl, wavFilePath, userId)
+                    }
+                    if (response != null) {
+                        try {
+                            val candidates = response.getJSONArray("sentence_candidates")
+                            val sentences = mutableListOf<String>()
+                            for (i in 0 until candidates.length()) {
+                                sentences.add(candidates.getString(i))
+                            }
+                            remoteRecognitionResult = sentences
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Could not parse remote recognition result", e)
+                        }
+                    }
+                    isRemoteRecognizing = false
+                }
+            }
         }
     }
 
@@ -87,8 +115,8 @@ internal fun EditRecognitionDialog(
                 Text(originalText)
                 Spacer(modifier = Modifier.padding(vertical = 8.dp))
 
-                val menuItems = remember(newRecognitionResult, currentText) {
-                    listOfNotNull(newRecognitionResult, currentText).distinct()
+                val menuItems = remember(newRecognitionResult, remoteRecognitionResult, currentText) {
+                    (listOfNotNull(newRecognitionResult, currentText) + remoteRecognitionResult).distinct()
                 }
 
                 EditableDropdown(
@@ -96,7 +124,7 @@ internal fun EditRecognitionDialog(
                     onValueChange = { text = it },
                     label = { Text("Modified Text") },
                     menuItems = menuItems,
-                    isRecognizing = isRecognizing
+                    isRecognizing = isRecognizing || isRemoteRecognizing
                 )
 
                 recognitionError?.let {

@@ -177,7 +177,9 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     listWavFiles() // Refresh the list
                 }
                 showEditDialog = false
-            }
+            },
+            userId = userSettings.userId,
+            recognitionUrl = "${userSettings.feedbackUrl}/api/process_audio"
         )
     }
 
