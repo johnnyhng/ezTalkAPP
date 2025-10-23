@@ -89,9 +89,8 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
             var successCount = 0
             withContext(Dispatchers.IO) {
                 selectedFiles.forEachIndexed { index, entry ->
-                    val url = userSettings.feedbackUrl
                     val success =
-                        postFeedback("$url/api/transfer", entry.wavFile.absolutePath, userSettings.userId)
+                        postFeedback(userSettings.feedbackUrl, entry.wavFile.absolutePath, userSettings.userId)
                     if (success) {
                         successCount++
                     }
@@ -179,7 +178,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 showEditDialog = false
             },
             userId = userSettings.userId,
-            recognitionUrl = "${userSettings.feedbackUrl}/api/process_audio"
+            recognitionUrl = userSettings.recognitionUrl
         )
     }
 

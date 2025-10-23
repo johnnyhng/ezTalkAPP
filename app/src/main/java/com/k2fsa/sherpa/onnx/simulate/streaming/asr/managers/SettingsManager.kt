@@ -50,8 +50,13 @@ data class UserSettings(
     val userId: String,
     val modelName: String?,
     val modelUrl: String,
+    val backendUrl: String
+) {
     val feedbackUrl: String
-)
+        get() = if (backendUrl.isNotBlank()) "$backendUrl/api/transfer" else ""
+    val recognitionUrl: String
+        get() = if (backendUrl.isNotBlank()) "$backendUrl/api/process_audio" else ""
+}
 
 /**
  * Manages loading and saving user settings using Jetpack DataStore.
@@ -67,7 +72,7 @@ class SettingsManager(context: Context) {
         val USER_ID_KEY = stringPreferencesKey("user_id")
         val MODEL_NAME_KEY = stringPreferencesKey("model_name")
         val MODEL_URL_KEY = stringPreferencesKey("model_url")
-        val FEEDBACK_URL_KEY = stringPreferencesKey("feedback_url")
+        val BACKEND_URL_KEY = stringPreferencesKey("backend_url")
     }
 
     // Flow to read the settings from DataStore, providing default values if none are set.
@@ -79,7 +84,7 @@ class SettingsManager(context: Context) {
         val userId = preferences[USER_ID_KEY] ?: "user@example.com"
         val modelName = preferences[MODEL_NAME_KEY]
         val modelUrl = preferences[MODEL_URL_KEY] ?: ""
-        val feedbackUrl = preferences[FEEDBACK_URL_KEY] ?: ""
+        val backendUrl = preferences[BACKEND_URL_KEY] ?: "https://120.126.151.159:56432"
         UserSettings(
             lingerMs,
             partialIntervalMs,
@@ -87,7 +92,7 @@ class SettingsManager(context: Context) {
             userId,
             modelName,
             modelUrl,
-            feedbackUrl
+            backendUrl
         )
     }
 
@@ -132,9 +137,9 @@ class SettingsManager(context: Context) {
         }
     }
 
-    suspend fun updateFeedbackUrl(url: String) {
+    suspend fun updateBackendUrl(url: String) {
         appContext.dataStore.edit { settings ->
-            settings[FEEDBACK_URL_KEY] = url
+            settings[BACKEND_URL_KEY] = url
         }
     }
 }
@@ -154,7 +159,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "", "") // Initial default values
+        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "", "https://120.126.151.159:56432") // Initial default values
     )
 
     var models by mutableStateOf<List<Model>>(emptyList())
@@ -236,9 +241,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateFeedbackUrl(url: String) {
+    fun updateBackendUrl(url: String) {
         viewModelScope.launch {
-            settingsManager.updateFeedbackUrl(url)
+            settingsManager.updateBackendUrl(url)
         }
     }
 

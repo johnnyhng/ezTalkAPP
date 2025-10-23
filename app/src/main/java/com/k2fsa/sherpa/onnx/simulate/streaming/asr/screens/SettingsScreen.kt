@@ -61,7 +61,7 @@ fun SettingsScreen(
     val selectedModel = homeViewModel.selectedModel
     var modelMenuExpanded by remember { mutableStateOf(false) }
     var modelUrl by remember(userSettings.modelUrl) { mutableStateOf(userSettings.modelUrl) }
-    var feedbackUrl by remember(userSettings.feedbackUrl) { mutableStateOf(userSettings.feedbackUrl) }
+    var backendUrl by remember(userSettings.backendUrl) { mutableStateOf(userSettings.backendUrl) }
     val isDownloading = homeViewModel.isDownloading
     val downloadProgress = homeViewModel.downloadProgress
     val canDeleteModel = homeViewModel.canDeleteModel
@@ -182,12 +182,12 @@ fun SettingsScreen(
         }
 
         OutlinedTextField(
-            value = feedbackUrl,
+            value = backendUrl,
             onValueChange = {
-                feedbackUrl = it
-                homeViewModel.updateFeedbackUrl(it)
+                backendUrl = it
+                homeViewModel.updateBackendUrl(it)
             },
-            label = { Text("Feedback URL") },
+            label = { Text("backend URL") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             enabled = !isDownloading
