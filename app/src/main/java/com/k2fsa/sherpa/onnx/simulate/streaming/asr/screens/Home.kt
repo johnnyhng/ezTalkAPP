@@ -40,6 +40,8 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Transcript
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.postForRecognition
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.readWavFileToFloatArray
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveAsWav
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditableDropdown
@@ -50,6 +52,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -80,6 +83,9 @@ fun HomeScreen(
     var isEditing by remember { mutableStateOf(false) }
     var editingIndex by remember { mutableStateOf(-1) }
     var editingText by remember { mutableStateOf("") }
+    var remoteCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
+    var localCandidate by remember { mutableStateOf<String?>(null) }
+    var isFetchingCandidates by remember { mutableStateOf(false) }
 
     // Waveform and countdown states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
@@ -512,8 +518,12 @@ fun HomeScreen(
                 itemsIndexed(resultList, key = { _, item -> item.hashCode() }) { index, result ->
                     if (editingIndex == index) {
                         // Inline editing UI
-                        val menuItems = remember(result) {
-                            listOfNotNull(result.recognizedText, result.modifiedText).distinct()
+                        val menuItems = remember(result, remoteCandidates, localCandidate) {
+                            (listOfNotNull(
+                                result.recognizedText,
+                                result.modifiedText,
+                                localCandidate
+                            ) + remoteCandidates).distinct()
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -524,7 +534,7 @@ fun HomeScreen(
                                 onValueChange = { editingText = it },
                                 label = { Text("Edit") },
                                 menuItems = menuItems,
-                                isRecognizing = isRecognizingSpeech,
+                                isRecognizing = isFetchingCandidates,
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = {
@@ -532,6 +542,7 @@ fun HomeScreen(
                                 isEditing = false
                                 editingIndex = -1
                                 editingText = ""
+                                remoteCandidates = emptyList()
                             }) {
                                 Icon(
                                     Icons.Default.Close,
@@ -563,6 +574,7 @@ fun HomeScreen(
                                 isEditing = false
                                 editingIndex = -1
                                 editingText = ""
+                                remoteCandidates = emptyList()
                             }) {
                                 Icon(
                                     Icons.Default.Check,
@@ -632,6 +644,90 @@ fun HomeScreen(
                                         isEditing = true
                                         editingIndex = index
                                         editingText = result.modifiedText
+                                        remoteCandidates = emptyList() // Clear old candidates
+                                        localCandidate = null // Clear old local candidate
+
+                                        if (result.wavFilePath.isNotEmpty()) {
+                                            coroutineScope.launch {
+                                                isFetchingCandidates = true
+
+                                                // Launch both recognitions in parallel
+                                                val remoteJob = launch(Dispatchers.IO) {
+                                                    if (userSettings.recognitionUrl.isNotBlank()) {
+                                                        val response = postForRecognition(
+                                                            recognitionUrl = userSettings.recognitionUrl,
+                                                            filePath = result.wavFilePath,
+                                                            userId = userSettings.userId
+                                                        )
+                                                        if (response != null) {
+                                                            try {
+                                                                val candidates =
+                                                                    response.optJSONArray(
+                                                                        "sentence_candidates"
+                                                                    )
+                                                                if (candidates != null) {
+                                                                    val sentences =
+                                                                        mutableListOf<String>()
+                                                                    for (i in 0 until candidates.length()) {
+                                                                        sentences.add(
+                                                                            candidates.getString(
+                                                                                i
+                                                                            )
+                                                                        )
+                                                                    }
+                                                                    withContext(Dispatchers.Main) {
+                                                                        remoteCandidates =
+                                                                            sentences
+                                                                    }
+                                                                }
+                                                            } catch (e: Exception) {
+                                                                Log.e(
+                                                                    TAG,
+                                                                    "Could not parse remote recognition result",
+                                                                    e
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                val localJob = launch(Dispatchers.IO) {
+                                                    try {
+                                                        val audioData =
+                                                            readWavFileToFloatArray(result.wavFilePath)
+                                                        if (audioData != null) {
+                                                            val recognizer =
+                                                                SimulateStreamingAsr.recognizer
+                                                            val stream =
+                                                                recognizer.createStream()
+                                                            stream.acceptWaveform(
+                                                                audioData,
+                                                                sampleRateInHz
+                                                            )
+                                                            recognizer.decode(stream)
+                                                            val localResultText =
+                                                                recognizer.getResult(stream).text
+                                                            stream.release()
+                                                            withContext(Dispatchers.Main) {
+                                                                localCandidate = localResultText
+                                                            }
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        Log.e(
+                                                            TAG,
+                                                            "Local re-recognition failed",
+                                                            e
+                                                        )
+                                                    }
+                                                }
+
+                                                // Wait for both to finish
+                                                remoteJob.join()
+                                                localJob.join()
+
+                                                isFetchingCandidates = false
+                                            }
+                                        }
                                     },
                                     enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
                                 ) {
