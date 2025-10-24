@@ -83,7 +83,6 @@ fun HomeScreen(
     var isEditing by remember { mutableStateOf(false) }
     var editingIndex by remember { mutableStateOf(-1) }
     var editingText by remember { mutableStateOf("") }
-    var remoteCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var localCandidate by remember { mutableStateOf<String?>(null) }
     var isFetchingCandidates by remember { mutableStateOf(false) }
 
@@ -151,6 +150,20 @@ fun HomeScreen(
                                 if (index != -1) {
                                     val oldItem = resultList[index]
                                     resultList[index] = oldItem.copy(remoteCandidates = sentences)
+
+                                    // Update the jsonl with the new candidates
+                                    val file = File(oldItem.wavFilePath)
+                                    val filename = file.nameWithoutExtension
+                                    saveJsonl(
+                                        context = context,
+                                        userId = userId,
+                                        filename = filename,
+                                        originalText = oldItem.recognizedText,
+                                        modifiedText = oldItem.modifiedText,
+                                        checked = oldItem.checked,
+                                        remoteCandidates = sentences
+                                    )
+
                                 } else {
                                     Log.w(
                                         TAG,
@@ -611,7 +624,8 @@ fun HomeScreen(
                                             filename = filename,
                                             originalText = updatedItem.recognizedText,
                                             modifiedText = editingText,
-                                            checked = updatedItem.checked
+                                            checked = updatedItem.checked,
+                                            remoteCandidates = updatedItem.remoteCandidates
                                         )
                                     }
                                 }
@@ -671,7 +685,8 @@ fun HomeScreen(
                                                 filename = filename,
                                                 originalText = updatedItem.recognizedText,
                                                 modifiedText = updatedItem.modifiedText,
-                                                checked = updatedItem.checked
+                                                checked = updatedItem.checked,
+                                                remoteCandidates = updatedItem.remoteCandidates
                                             )
                                         }
                                     },

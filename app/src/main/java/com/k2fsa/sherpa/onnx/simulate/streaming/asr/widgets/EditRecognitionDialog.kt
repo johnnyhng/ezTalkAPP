@@ -10,17 +10,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.postForRecognition
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.readJsonl
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.readWavFileToFloatArray
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
+import java.io.File
 
 private const val sampleRateInHz = 16000
 
@@ -34,6 +37,7 @@ internal fun EditRecognitionDialog(
     userId: String,
     recognitionUrl: String,
 ) {
+    val context = LocalContext.current
     var text by remember { mutableStateOf(currentText) }
     var newRecognitionResult by remember { mutableStateOf<String?>(null) }
     var remoteRecognitionResult by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -82,12 +86,30 @@ internal fun EditRecognitionDialog(
                     }
                 }
             }
-            if (recognitionUrl.isNotBlank()) {
-                launch {
-                    isRemoteRecognizing = true
-                    val response = withContext(Dispatchers.IO) {
-                        postForRecognition(recognitionUrl, wavFilePath, userId)
+
+            // Check for existing remote candidates in the jsonl file
+            val jsonlFile = File(wavFilePath).resolveSibling(
+                File(wavFilePath).nameWithoutExtension + ".jsonl"
+            )
+
+            launch(Dispatchers.IO) {
+                val jsonlData = readJsonl(jsonlFile.absolutePath)
+                val existingCandidates = jsonlData?.optJSONArray("remote_candidates")
+
+                if (existingCandidates != null && existingCandidates.length() > 0) {
+                    Log.d(TAG, "Found existing remote candidates in jsonl file")
+                    val sentences = mutableListOf<String>()
+                    for (i in 0 until existingCandidates.length()) {
+                        sentences.add(existingCandidates.getString(i))
                     }
+                    withContext(Dispatchers.Main) {
+                        remoteRecognitionResult = sentences
+                    }
+                } else if (recognitionUrl.isNotBlank()) {
+                    withContext(Dispatchers.Main) {
+                        isRemoteRecognizing = true
+                    }
+                    val response = postForRecognition(recognitionUrl, wavFilePath, userId)
                     if (response != null) {
                         try {
                             val candidates = response.getJSONArray("sentence_candidates")
@@ -95,12 +117,36 @@ internal fun EditRecognitionDialog(
                             for (i in 0 until candidates.length()) {
                                 sentences.add(candidates.getString(i))
                             }
-                            remoteRecognitionResult = sentences
+                            withContext(Dispatchers.Main) {
+                                remoteRecognitionResult = sentences
+                            }
+
+                            // Save to jsonl
+                            val file = File(wavFilePath)
+                            val filename = file.nameWithoutExtension
+                            val original =
+                                jsonlData?.optString("original", originalText) ?: originalText
+                            val modified =
+                                jsonlData?.optString("modified", currentText) ?: currentText
+                            val checked = jsonlData?.optBoolean("checked", false) ?: false
+
+                            saveJsonl(
+                                context = context,
+                                userId = userId,
+                                filename = filename,
+                                originalText = original,
+                                modifiedText = modified,
+                                checked = checked,
+                                remoteCandidates = sentences
+                            )
+
                         } catch (e: Exception) {
                             Log.e(TAG, "Could not parse remote recognition result", e)
                         }
                     }
-                    isRemoteRecognizing = false
+                    withContext(Dispatchers.Main) {
+                        isRemoteRecognizing = false
+                    }
                 }
             }
         }
@@ -115,9 +161,13 @@ internal fun EditRecognitionDialog(
                 Text(originalText)
                 Spacer(modifier = Modifier.padding(vertical = 8.dp))
 
-                val menuItems = remember(newRecognitionResult, remoteRecognitionResult, currentText) {
-                    (listOfNotNull(newRecognitionResult, currentText) + remoteRecognitionResult).distinct()
-                }
+                val menuItems =
+                    remember(newRecognitionResult, remoteRecognitionResult, currentText) {
+                        (listOfNotNull(
+                            newRecognitionResult,
+                            currentText
+                        ) + remoteRecognitionResult).distinct()
+                    }
 
                 EditableDropdown(
                     value = text,

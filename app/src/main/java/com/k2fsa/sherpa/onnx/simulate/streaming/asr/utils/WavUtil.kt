@@ -3,6 +3,7 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils
 import android.content.Context
 import android.util.Log
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
@@ -76,6 +77,7 @@ fun saveAsWav(
  * @param originalText The original recognized text.
  * @param modifiedText The (potentially) modified text.
  * @param checked Whether the user has listened to the audio.
+ * @param remoteCandidates Optional list of remote candidates.
  * @return The absolute path to the saved JSONL file, or null on failure.
  */
 fun saveJsonl(
@@ -84,7 +86,8 @@ fun saveJsonl(
     filename: String,
     originalText: String,
     modifiedText: String,
-    checked: Boolean
+    checked: Boolean,
+    remoteCandidates: List<String>? = null
 ): String? {
     val dir = File(context.filesDir, "wavs/$userId")
     if (!dir.exists()) {
@@ -99,6 +102,9 @@ fun saveJsonl(
             put("original", originalText)
             put("modified", modifiedText)
             put("checked", checked)
+            remoteCandidates?.let {
+                put("remote_candidates", JSONArray(it))
+            }
         }
         val jsonLine = jsonObject.toString() + "\n"
 
@@ -109,6 +115,26 @@ fun saveJsonl(
         return file.absolutePath
     } catch (e: Exception) {
         Log.e(TAG, "Error saving JSONL file", e)
+        return null
+    }
+}
+
+/**
+ * Reads a JSONL file and returns its content as a JSONObject.
+ *
+ * @param path The absolute path to the JSONL file.
+ * @return A JSONObject containing the file's content, or null on error or if the file doesn't exist.
+ */
+fun readJsonl(path: String): JSONObject? {
+    try {
+        val file = File(path)
+        if (!file.exists() || file.length() == 0L) {
+            return null
+        }
+        val text = file.readText()
+        return if (text.isNotBlank()) JSONObject(text) else null
+    } catch (e: Exception) {
+        Log.e(TAG, "Error reading or parsing JSONL file: $path", e)
         return null
     }
 }
