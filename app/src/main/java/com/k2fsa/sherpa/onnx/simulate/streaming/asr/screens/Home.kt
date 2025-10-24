@@ -39,11 +39,7 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.SimulateStreamingAsr
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Transcript
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.postForRecognition
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.readWavFileToFloatArray
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveAsWav
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.*
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditableDropdown
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.WaveformDisplay
 import kotlinx.coroutines.CoroutineScope
@@ -52,7 +48,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -131,51 +126,36 @@ fun HomeScreen(
             for (wavPath in recognitionQueue) {
                 if (userSettings.recognitionUrl.isBlank()) continue
 
-                val response = postForRecognition(
-                    recognitionUrl = userSettings.recognitionUrl,
-                    filePath = wavPath,
-                    userId = userSettings.userId
-                )
+                var transcript: Transcript? = null
+                // Switch to main thread to safely access resultList
+                withContext(Dispatchers.Main) {
+                    transcript = resultList.find { it.wavFilePath == wavPath }
+                }
 
-                if (response != null) {
-                    try {
-                        val candidates = response.optJSONArray("sentence_candidates")
-                        if (candidates != null) {
-                            val sentences = mutableListOf<String>()
-                            for (i in 0 until candidates.length()) {
-                                sentences.add(candidates.getString(i))
-                            }
-                            withContext(Dispatchers.Main) {
-                                val index = resultList.indexOfFirst { it.wavFilePath == wavPath }
-                                if (index != -1) {
-                                    val oldItem = resultList[index]
-                                    resultList[index] = oldItem.copy(remoteCandidates = sentences)
+                transcript?.let {
+                    val sentences = getRemoteCandidates(
+                        context = context,
+                        wavFilePath = wavPath,
+                        userId = userSettings.userId,
+                        recognitionUrl = userSettings.recognitionUrl,
+                        originalText = it.recognizedText,
+                        currentText = it.modifiedText
+                    )
 
-                                    // Update the jsonl with the new candidates
-                                    val file = File(oldItem.wavFilePath)
-                                    val filename = file.nameWithoutExtension
-                                    saveJsonl(
-                                        context = context,
-                                        userId = userId,
-                                        filename = filename,
-                                        originalText = oldItem.recognizedText,
-                                        modifiedText = oldItem.modifiedText,
-                                        checked = oldItem.checked,
-                                        remoteCandidates = sentences
-                                    )
-
-                                } else {
-                                    Log.w(
-                                        TAG,
-                                        "Could not find transcript for wavPath: $wavPath to update remote candidates."
-                                    )
-                                }
+                    if (sentences.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            val index =
+                                resultList.indexOfFirst { transcript -> transcript.wavFilePath == wavPath }
+                            if (index != -1) {
+                                resultList[index] =
+                                    resultList[index].copy(remoteCandidates = sentences)
                             }
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Could not parse remote recognition result in background", e)
                     }
-                }
+                } ?: Log.w(
+                    TAG,
+                    "Could not find transcript for wavPath: $wavPath to update remote candidates."
+                )
             }
         }
     }
