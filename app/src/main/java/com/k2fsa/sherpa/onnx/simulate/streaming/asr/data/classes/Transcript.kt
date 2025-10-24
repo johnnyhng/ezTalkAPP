@@ -5,5 +5,6 @@ data class Transcript(
     var modifiedText: String = recognizedText,
     var wavFilePath: String,
     var checked: Boolean = false,
-    var canCheck: Boolean = true
+    var canCheck: Boolean = true,
+    var remoteCandidates: List<String> = emptyList()
 )

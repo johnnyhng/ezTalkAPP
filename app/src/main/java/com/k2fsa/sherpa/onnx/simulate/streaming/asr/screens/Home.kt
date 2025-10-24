@@ -109,6 +109,7 @@ fun HomeScreen(
 
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
+    val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
 
     // Initialize recognizer in the background
     LaunchedEffect(key1 = homeViewModel.selectedModel) {
@@ -123,6 +124,47 @@ fun HomeScreen(
         }
         isAsrModelLoading = false
         Log.i(TAG, "ASR model initialization finished.")
+    }
+
+    // Background recognition queue processor
+    LaunchedEffect(userSettings.recognitionUrl, userSettings.userId) {
+        launch(Dispatchers.IO) {
+            for (wavPath in recognitionQueue) {
+                if (userSettings.recognitionUrl.isBlank()) continue
+
+                val response = postForRecognition(
+                    recognitionUrl = userSettings.recognitionUrl,
+                    filePath = wavPath,
+                    userId = userSettings.userId
+                )
+
+                if (response != null) {
+                    try {
+                        val candidates = response.optJSONArray("sentence_candidates")
+                        if (candidates != null) {
+                            val sentences = mutableListOf<String>()
+                            for (i in 0 until candidates.length()) {
+                                sentences.add(candidates.getString(i))
+                            }
+                            withContext(Dispatchers.Main) {
+                                val index = resultList.indexOfFirst { it.wavFilePath == wavPath }
+                                if (index != -1) {
+                                    val oldItem = resultList[index]
+                                    resultList[index] = oldItem.copy(remoteCandidates = sentences)
+                                } else {
+                                    Log.w(
+                                        TAG,
+                                        "Could not find transcript for wavPath: $wavPath to update remote candidates."
+                                    )
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Could not parse remote recognition result in background", e)
+                    }
+                }
+            }
+        }
     }
 
     // Initialize TTS
@@ -158,6 +200,7 @@ fun HomeScreen(
             tts?.stop()
             tts?.shutdown()
             tts = null
+            recognitionQueue.close()
         }
     }
 
@@ -400,8 +443,12 @@ fun HomeScreen(
                                             modifiedText = result.text, // Initially, modified is same as original
                                             checked = false
                                         )
-                                    }
 
+                                        // Enqueue for background recognition
+                                        if (userSettings.recognitionUrl.isNotBlank()) {
+                                            recognitionQueue.trySend(wavPath)
+                                        }
+                                    }
 
                                     val newTranscript = Transcript(
                                         recognizedText = result.text,
@@ -518,12 +565,12 @@ fun HomeScreen(
                 itemsIndexed(resultList, key = { _, item -> item.hashCode() }) { index, result ->
                     if (editingIndex == index) {
                         // Inline editing UI
-                        val menuItems = remember(result, remoteCandidates, localCandidate) {
+                        val menuItems = remember(result, localCandidate) {
                             (listOfNotNull(
                                 result.recognizedText,
                                 result.modifiedText,
                                 localCandidate
-                            ) + remoteCandidates).distinct()
+                            ) + result.remoteCandidates).distinct()
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -542,7 +589,6 @@ fun HomeScreen(
                                 isEditing = false
                                 editingIndex = -1
                                 editingText = ""
-                                remoteCandidates = emptyList()
                             }) {
                                 Icon(
                                     Icons.Default.Close,
@@ -574,7 +620,6 @@ fun HomeScreen(
                                 isEditing = false
                                 editingIndex = -1
                                 editingText = ""
-                                remoteCandidates = emptyList()
                             }) {
                                 Icon(
                                     Icons.Default.Check,
@@ -644,53 +689,11 @@ fun HomeScreen(
                                         isEditing = true
                                         editingIndex = index
                                         editingText = result.modifiedText
-                                        remoteCandidates = emptyList() // Clear old candidates
                                         localCandidate = null // Clear old local candidate
 
                                         if (result.wavFilePath.isNotEmpty()) {
                                             coroutineScope.launch {
                                                 isFetchingCandidates = true
-
-                                                // Launch both recognitions in parallel
-                                                val remoteJob = launch(Dispatchers.IO) {
-                                                    if (userSettings.recognitionUrl.isNotBlank()) {
-                                                        val response = postForRecognition(
-                                                            recognitionUrl = userSettings.recognitionUrl,
-                                                            filePath = result.wavFilePath,
-                                                            userId = userSettings.userId
-                                                        )
-                                                        if (response != null) {
-                                                            try {
-                                                                val candidates =
-                                                                    response.optJSONArray(
-                                                                        "sentence_candidates"
-                                                                    )
-                                                                if (candidates != null) {
-                                                                    val sentences =
-                                                                        mutableListOf<String>()
-                                                                    for (i in 0 until candidates.length()) {
-                                                                        sentences.add(
-                                                                            candidates.getString(
-                                                                                i
-                                                                            )
-                                                                        )
-                                                                    }
-                                                                    withContext(Dispatchers.Main) {
-                                                                        remoteCandidates =
-                                                                            sentences
-                                                                    }
-                                                                }
-                                                            } catch (e: Exception) {
-                                                                Log.e(
-                                                                    TAG,
-                                                                    "Could not parse remote recognition result",
-                                                                    e
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
                                                 val localJob = launch(Dispatchers.IO) {
                                                     try {
                                                         val audioData =
@@ -721,10 +724,7 @@ fun HomeScreen(
                                                     }
                                                 }
 
-                                                // Wait for both to finish
-                                                remoteJob.join()
                                                 localJob.join()
-
                                                 isFetchingCandidates = false
                                             }
                                         }
