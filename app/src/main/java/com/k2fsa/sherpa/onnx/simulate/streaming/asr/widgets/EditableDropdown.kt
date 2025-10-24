@@ -33,8 +33,9 @@ fun EditableDropdown(
     menuItems: List<String>,
     isRecognizing: Boolean,
     modifier: Modifier = Modifier,
+    startExpanded: Boolean = false
 ) {
-    var isDropdownExpanded by remember { mutableStateOf(false) }
+    var isDropdownExpanded by remember { mutableStateOf(startExpanded) }
     var rowWidth by remember { mutableStateOf(0) }
     val density = LocalDensity.current
 

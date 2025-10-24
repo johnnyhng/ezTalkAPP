@@ -12,6 +12,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -19,7 +20,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
@@ -53,6 +53,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.max
+import kotlin.math.min
 
 private var audioRecord: AudioRecord? = null
 private const val sampleRateInHz = 16000
@@ -76,7 +78,7 @@ fun HomeScreen(
 
     // State for inline editing
     var isEditing by remember { mutableStateOf(false) }
-    var editingIndex by remember { mutableStateOf(-1) }
+    var editingIndex by remember { mutableIntStateOf(-1) }
     var editingText by remember { mutableStateOf("") }
     var localCandidate by remember { mutableStateOf<String?>(null) }
     var isFetchingCandidates by remember { mutableStateOf(false) }
@@ -84,7 +86,7 @@ fun HomeScreen(
     // Waveform and countdown states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
     var isRecognizingSpeech by remember { mutableStateOf(false) }
-    var countdownProgress by remember { mutableStateOf(0f) }
+    var countdownProgress by remember { mutableFloatStateOf(0f) }
 
 
     // Collect settings from the ViewModel
@@ -260,9 +262,10 @@ fun HomeScreen(
                 }
 
                 // --- Coroutine to process audio ---
+                @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
                 CoroutineScope(Dispatchers.Default).launch {
-                    val LINGER_MS = userSettings.lingerMs
-                    val PARTIAL_INTERVAL_MS = userSettings.partialIntervalMs
+                    val lingerMs = userSettings.lingerMs
+                    val partialIntervalMs = userSettings.partialIntervalMs
                     val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
 
                     var buffer = arrayListOf<Float>()
@@ -274,13 +277,13 @@ fun HomeScreen(
                     var lastSpeechDetectedOffset = 0
                     var isSpeechStarted = false
                     var startTime = System.currentTimeMillis()
-                    var lastText = ""
+                    var lastText: String
                     var added = false
 
                     val utteranceSegments = mutableListOf<FloatArray>()
                     var lastVadPacketAt = 0L
 
-                    var fullRecordingBuffer = arrayListOf<Float>()
+                    val fullRecordingBuffer = arrayListOf<Float>()
 
                     var done = false
                     while (!done) {
@@ -309,14 +312,14 @@ fun HomeScreen(
                                 startTime = System.currentTimeMillis()
 
                                 if (!saveVadSegmentsOnly) {
-                                    startOffset = Math.max(0, offset - windowSize - keep)
+                                    startOffset = max(0, offset - windowSize - keep)
                                 }
                             }
                         }
 
                         if (isSpeechStarted) {
                             val elapsed = System.currentTimeMillis() - startTime
-                            if (elapsed > PARTIAL_INTERVAL_MS) {
+                            if (elapsed > partialIntervalMs) {
                                 val stream = SimulateStreamingAsr.recognizer.createStream()
                                 try {
                                     stream.acceptWaveform(
@@ -367,10 +370,10 @@ fun HomeScreen(
 
                         if (utteranceSegments.isNotEmpty()) {
                             val since = System.currentTimeMillis() - lastVadPacketAt
-                            val progress = (since.toFloat() / LINGER_MS).coerceIn(0f, 1f)
+                            val progress = (since.toFloat() / lingerMs).coerceIn(0f, 1f)
                             launch(Dispatchers.Main) { countdownProgress = progress }
                             // Process if silence duration is met OR if it's the final flush
-                            if (since >= LINGER_MS || (done && utteranceSegments.isNotEmpty())) {
+                            if (since >= lingerMs || (done && utteranceSegments.isNotEmpty())) {
                                 val totalSize = utteranceSegments.sumOf { it.size }
                                 val concatenated = FloatArray(totalSize)
                                 var currentPos = 0
@@ -385,7 +388,7 @@ fun HomeScreen(
                                 val audioToSave = if (saveVadSegmentsOnly) {
                                     utteranceForRecognition
                                 } else {
-                                    lastSpeechDetectedOffset = Math.min(
+                                    lastSpeechDetectedOffset = min(
                                         buffer.size - 1,
                                         lastSpeechDetectedOffset + keep
                                     )
@@ -477,7 +480,6 @@ fun HomeScreen(
                                 offset = 0
                                 startOffset = 0
                                 lastSpeechDetectedOffset = 0
-                                lastText = ""
                                 added = false
                                 launch(Dispatchers.Main) {
                                     isRecognizingSpeech = false
@@ -488,7 +490,7 @@ fun HomeScreen(
                             if (isRecognizingSpeech) {
                                 val sinceLastPacket =
                                     System.currentTimeMillis() - lastVadPacketAt
-                                if (lastVadPacketAt != 0L && sinceLastPacket > LINGER_MS) {
+                                if (lastVadPacketAt != 0L && sinceLastPacket > lingerMs) {
                                     launch(Dispatchers.Main) { countdownProgress = 0f }
                                 }
                             }
@@ -575,7 +577,8 @@ fun HomeScreen(
                                 label = { Text("Edit") },
                                 menuItems = menuItems,
                                 isRecognizing = isFetchingCandidates,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                startExpanded = true
                             )
                             IconButton(onClick = {
                                 // Reset editing state
@@ -625,7 +628,53 @@ fun HomeScreen(
                         // Normal display Row
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !isRecognizingSpeech && !isEditing && !isStarted) {
+                                    isEditing = true
+                                    editingIndex = index
+                                    editingText = result.modifiedText
+                                    localCandidate = null // Clear old local candidate
+
+                                    if (result.wavFilePath.isNotEmpty()) {
+                                        coroutineScope.launch {
+                                            isFetchingCandidates = true
+                                            val localJob = launch(Dispatchers.IO) {
+                                                try {
+                                                    val audioData =
+                                                        readWavFileToFloatArray(result.wavFilePath)
+                                                    if (audioData != null) {
+                                                        val recognizer =
+                                                            SimulateStreamingAsr.recognizer
+                                                        val stream =
+                                                            recognizer.createStream()
+                                                        stream.acceptWaveform(
+                                                            audioData,
+                                                            sampleRateInHz
+                                                        )
+                                                        recognizer.decode(stream)
+                                                        val localResultText =
+                                                            recognizer
+                                                                .getResult(stream).text
+                                                        stream.release()
+                                                        withContext(Dispatchers.Main) {
+                                                            localCandidate = localResultText
+                                                        }
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e(
+                                                        TAG,
+                                                        "Local re-recognition failed",
+                                                        e
+                                                    )
+                                                }
+                                            }
+
+                                            localJob.join()
+                                            isFetchingCandidates = false
+                                        }
+                                    }
+                                }
                         ) {
                             Text(
                                 text = "${index + 1}: ${result.modifiedText}",
@@ -675,60 +724,6 @@ fun HomeScreen(
                                     Icon(
                                         imageVector = Icons.Default.RecordVoiceOver,
                                         contentDescription = "Talk"
-                                    )
-                                }
-
-                                // Edit Button -> IconButton
-                                IconButton(
-                                    onClick = {
-                                        isEditing = true
-                                        editingIndex = index
-                                        editingText = result.modifiedText
-                                        localCandidate = null // Clear old local candidate
-
-                                        if (result.wavFilePath.isNotEmpty()) {
-                                            coroutineScope.launch {
-                                                isFetchingCandidates = true
-                                                val localJob = launch(Dispatchers.IO) {
-                                                    try {
-                                                        val audioData =
-                                                            readWavFileToFloatArray(result.wavFilePath)
-                                                        if (audioData != null) {
-                                                            val recognizer =
-                                                                SimulateStreamingAsr.recognizer
-                                                            val stream =
-                                                                recognizer.createStream()
-                                                            stream.acceptWaveform(
-                                                                audioData,
-                                                                sampleRateInHz
-                                                            )
-                                                            recognizer.decode(stream)
-                                                            val localResultText =
-                                                                recognizer.getResult(stream).text
-                                                            stream.release()
-                                                            withContext(Dispatchers.Main) {
-                                                                localCandidate = localResultText
-                                                            }
-                                                        }
-                                                    } catch (e: Exception) {
-                                                        Log.e(
-                                                            TAG,
-                                                            "Local re-recognition failed",
-                                                            e
-                                                        )
-                                                    }
-                                                }
-
-                                                localJob.join()
-                                                isFetchingCandidates = false
-                                            }
-                                        }
-                                    },
-                                    enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Edit"
                                     )
                                 }
 
