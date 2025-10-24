@@ -42,14 +42,17 @@ suspend fun getRemoteCandidates(
                         sentences.add(candidates.getString(i))
                     }
 
+                    // Re-read the jsonl file to get the most up-to-date user edits before writing.
+                    val latestJsonlData = readJsonl(jsonlFile.absolutePath)
+
                     // Save to jsonl
                     val file = File(wavFilePath)
                     val filename = file.nameWithoutExtension
                     val original =
-                        jsonlData?.optString("original", originalText) ?: originalText
+                        latestJsonlData?.optString("original", originalText) ?: originalText
                     val modified =
-                        jsonlData?.optString("modified", currentText) ?: currentText
-                    val checked = jsonlData?.optBoolean("checked", false) ?: false
+                        latestJsonlData?.optString("modified", currentText) ?: currentText
+                    val checked = latestJsonlData?.optBoolean("checked", false) ?: false
 
                     saveJsonl(
                         context = context,
