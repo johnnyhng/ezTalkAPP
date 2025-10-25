@@ -74,11 +74,11 @@ fun EditableDropdown(
             onDismissRequest = { isDropdownExpanded = false },
             modifier = Modifier.width(with(density) { rowWidth.toDp() })
         ) {
-            menuItems.forEach {
+            menuItems.forEachIndexed { index, item ->
                 DropdownMenuItem(
-                    text = { Text(it) },
+                    text = { Text("${index + 1}: $item") },
                     onClick = {
-                        onValueChange(it)
+                        onValueChange(item)
                         isDropdownExpanded = false
                     })
             }
