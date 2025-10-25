@@ -507,6 +507,36 @@ fun HomeScreen(
         }
     }
 
+    // Function to handle TTS and transcript updates
+    fun handleTtsClick(index: Int, text: String) {
+        MediaController.stop() // Stop any audio playback
+        val utteranceId = UUID.randomUUID().toString()
+        tts?.speak(
+            text,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            utteranceId
+        )
+        // Update the checked status
+        val updatedItem = resultList[index].copy(modifiedText = text, checked = true)
+        resultList[index] = updatedItem
+
+        // Save the updated record to JSONL
+        val file = File(updatedItem.wavFilePath)
+        val filename = file.nameWithoutExtension
+        coroutineScope.launch(Dispatchers.IO) {
+            saveJsonl(
+                context = context,
+                userId = userId,
+                filename = filename,
+                originalText = updatedItem.recognizedText,
+                modifiedText = updatedItem.modifiedText,
+                checked = updatedItem.checked,
+                remoteCandidates = updatedItem.remoteCandidates
+            )
+        }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter,
@@ -592,26 +622,7 @@ fun HomeScreen(
                                 )
                             }
                             IconButton(onClick = {
-                                val oldItem = resultList[index]
-                                val updatedItem = oldItem.copy(modifiedText = editingText)
-                                resultList[index] = updatedItem
-
-                                // Save to JSONL
-                                if (updatedItem.wavFilePath.isNotEmpty()) {
-                                    val file = File(updatedItem.wavFilePath)
-                                    val filename = file.nameWithoutExtension
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        saveJsonl(
-                                            context = context,
-                                            userId = userId,
-                                            filename = filename,
-                                            originalText = updatedItem.recognizedText,
-                                            modifiedText = editingText,
-                                            checked = updatedItem.checked,
-                                            remoteCandidates = updatedItem.remoteCandidates
-                                        )
-                                    }
-                                }
+                                handleTtsClick(index, editingText)
 
                                 // Reset editing state
                                 isEditing = false
@@ -619,7 +630,7 @@ fun HomeScreen(
                                 editingText = ""
                             }) {
                                 Icon(
-                                    Icons.Default.Check,
+                                    Icons.Default.RecordVoiceOver,
                                     contentDescription = "Confirm Edit"
                                 )
                             }
@@ -692,32 +703,7 @@ fun HomeScreen(
                                 // Talk Button -> IconButton
                                 IconButton(
                                     onClick = {
-                                        MediaController.stop() // Stop any audio playback
-                                        val utteranceId = UUID.randomUUID().toString()
-                                        tts?.speak(
-                                            result.modifiedText,
-                                            TextToSpeech.QUEUE_FLUSH,
-                                            null,
-                                            utteranceId
-                                        )
-                                        // Update the checked status
-                                        val updatedItem = result.copy(checked = true)
-                                        resultList[index] = updatedItem
-
-                                        // Save the updated record to JSONL
-                                        val file = File(updatedItem.wavFilePath)
-                                        val filename = file.nameWithoutExtension
-                                        coroutineScope.launch(Dispatchers.IO) {
-                                            saveJsonl(
-                                                context = context,
-                                                userId = userId,
-                                                filename = filename,
-                                                originalText = updatedItem.recognizedText,
-                                                modifiedText = updatedItem.modifiedText,
-                                                checked = updatedItem.checked,
-                                                remoteCandidates = updatedItem.remoteCandidates
-                                            )
-                                        }
+                                        handleTtsClick(index, result.modifiedText)
                                     },
                                     enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
                                 ) {
