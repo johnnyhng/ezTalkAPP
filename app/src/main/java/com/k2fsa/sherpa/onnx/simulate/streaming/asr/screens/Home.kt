@@ -3,7 +3,6 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr.screens
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.Application
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -18,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -114,7 +112,6 @@ fun HomeScreen(
         withContext(Dispatchers.IO) {
             SimulateStreamingAsr.initOfflineRecognizer(
                 context.assets,
-                context.applicationContext as Application,
                 homeViewModel.selectedModel
             )
         }

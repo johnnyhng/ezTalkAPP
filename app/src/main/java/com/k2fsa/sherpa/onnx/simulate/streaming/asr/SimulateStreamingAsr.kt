@@ -3,7 +3,6 @@ package com.k2fsa.sherpa.onnx.simulate.streaming.asr
 import android.app.Application
 import android.content.res.AssetManager
 import android.util.Log
-import com.k2fsa.sherpa.onnx.HomophoneReplacerConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.Vad
@@ -27,7 +26,7 @@ object SimulateStreamingAsr {
             return _vad!!
         }
 
-    fun initOfflineRecognizer(assetManager: AssetManager? = null, application: Application, model: Model? = null) {
+    fun initOfflineRecognizer(assetManager: AssetManager? = null, model: Model? = null) {
         synchronized(this) {
             if (_recognizer != null) {
                 _recognizer!!.release()
@@ -38,23 +37,8 @@ object SimulateStreamingAsr {
             // See https://k2-fsa.github.io/sherpa/onnx/pretrained_models/index.html
             // for a list of available models
             val asrModelType = 43
-            val asrRuleFsts: String?
-            asrRuleFsts = null
             Log.i(TAG, "Select model type $asrModelType for ASR")
 
-            val useHr = false
-            val hr =  HomophoneReplacerConfig(
-                // Used only when useHr is true
-                // Please download the following 3 files from
-                // https://github.com/k2-fsa/sherpa-onnx/releases/tag/hr-files
-                //
-                // dict and lexicon.txt can be shared by different apps
-                //
-                // replace.fst is specific for an app
-                dictDir = "dict",
-                lexicon = "lexicon.txt",
-                ruleFsts = "replace.fst",
-            )
 
             val config = OfflineRecognizerConfig(
                 modelConfig = getOfflineModelConfig(type = asrModelType, model)!!,
@@ -62,19 +46,6 @@ object SimulateStreamingAsr {
 
             if (config.modelConfig.numThreads == 1) {
                 config.modelConfig.numThreads = 2
-            }
-
-            if (asrRuleFsts != null) {
-                config.ruleFsts = asrRuleFsts
-            }
-
-            if (useHr) {
-                if (hr.dictDir.isNotEmpty() && hr.dictDir.first() != '/') {
-                    // We need to copy it from the assets directory to some path
-                    val newDir = copyDataDir(hr.dictDir, application)
-                    hr.dictDir = "$newDir/${hr.dictDir}"
-                }
-                config.hr = hr
             }
 
             _recognizer = OfflineRecognizer(
@@ -99,15 +70,6 @@ object SimulateStreamingAsr {
             config = config!!,
         )
         Log.i(TAG, "sherpa-onnx vad initialized")
-    }
-
-    private fun copyDataDir(dataDir: String, application: Application): String {
-        Log.i(TAG, "data dir is $dataDir")
-        copyAssets(dataDir, application)
-
-        val newDataDir = application.getExternalFilesDir(null)!!.absolutePath
-        Log.i(TAG, "newDataDir: $newDataDir")
-        return newDataDir
     }
 
     private fun copyAssets(path: String, application: Application) {
