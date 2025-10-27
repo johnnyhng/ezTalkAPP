@@ -242,6 +242,22 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = "Save Full Audio")
         }
+
+        // Inline Edit Switch
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "Inline Edit")
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = userSettings.inlineEdit,
+                onCheckedChange = { homeViewModel.updateInlineEdit(it) },
+                enabled = !isDownloading
+            )
+        }
     }
 }
 

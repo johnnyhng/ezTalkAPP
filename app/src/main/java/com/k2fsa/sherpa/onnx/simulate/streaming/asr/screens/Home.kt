@@ -38,6 +38,7 @@ import com.k2fsa.sherpa.onnx.simulate.streaming.asr.TAG
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.data.classes.Transcript
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.*
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditRecognitionDialog
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditableDropdown
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.WaveformDisplay
 import kotlinx.coroutines.CoroutineScope
@@ -80,6 +81,7 @@ fun HomeScreen(
     var editingText by remember { mutableStateOf("") }
     var localCandidate by remember { mutableStateOf<String?>(null) }
     var isFetchingCandidates by remember { mutableStateOf(false) }
+    var transcriptToEditInDialog by remember { mutableStateOf<Pair<Int, Transcript>?>(null) }
 
     // Waveform and countdown states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
@@ -639,48 +641,53 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable(enabled = !isRecognizingSpeech && !isEditing && !isStarted) {
-                                    isEditing = true
-                                    editingIndex = index
-                                    editingText = result.modifiedText
-                                    localCandidate = null // Clear old local candidate
+                                    if (userSettings.inlineEdit) {
+                                        isEditing = true
+                                        editingIndex = index
+                                        editingText = result.modifiedText
+                                        localCandidate = null // Clear old local candidate
 
-                                    if (result.wavFilePath.isNotEmpty()) {
-                                        coroutineScope.launch {
-                                            isFetchingCandidates = true
-                                            val localJob = launch(Dispatchers.IO) {
-                                                try {
-                                                    val audioData =
-                                                        readWavFileToFloatArray(result.wavFilePath)
-                                                    if (audioData != null) {
-                                                        val recognizer =
-                                                            SimulateStreamingAsr.recognizer
-                                                        val stream =
-                                                            recognizer.createStream()
-                                                        stream.acceptWaveform(
-                                                            audioData,
-                                                            sampleRateInHz
-                                                        )
-                                                        recognizer.decode(stream)
-                                                        val localResultText =
-                                                            recognizer
-                                                                .getResult(stream).text
-                                                        stream.release()
-                                                        withContext(Dispatchers.Main) {
-                                                            localCandidate = localResultText
+                                        if (result.wavFilePath.isNotEmpty()) {
+                                            coroutineScope.launch {
+                                                isFetchingCandidates = true
+                                                val localJob = launch(Dispatchers.IO) {
+                                                    try {
+                                                        val audioData =
+                                                            readWavFileToFloatArray(result.wavFilePath)
+                                                        if (audioData != null) {
+                                                            val recognizer =
+                                                                SimulateStreamingAsr.recognizer
+                                                            val stream =
+                                                                recognizer.createStream()
+                                                            stream.acceptWaveform(
+                                                                audioData,
+                                                                sampleRateInHz
+                                                            )
+                                                            recognizer.decode(stream)
+                                                            val localResultText =
+                                                                recognizer
+                                                                    .getResult(stream).text
+                                                            stream.release()
+                                                            withContext(Dispatchers.Main) {
+                                                                localCandidate = localResultText
+                                                            }
                                                         }
+                                                    } catch (e: Exception) {
+                                                        Log.e(
+                                                            TAG,
+                                                            "Local re-recognition failed",
+                                                            e
+                                                        )
                                                     }
-                                                } catch (e: Exception) {
-                                                    Log.e(
-                                                        TAG,
-                                                        "Local re-recognition failed",
-                                                        e
-                                                    )
                                                 }
-                                            }
 
-                                            localJob.join()
-                                            isFetchingCandidates = false
+                                                localJob.join()
+                                                isFetchingCandidates = false
+                                            }
                                         }
+                                    } else {
+                                        isEditing = true
+                                        transcriptToEditInDialog = index to result
                                     }
                                 }
                         ) {
@@ -731,6 +738,41 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+
+        transcriptToEditInDialog?.let { (index, transcript) ->
+            EditRecognitionDialog(
+                originalText = transcript.recognizedText,
+                currentText = transcript.modifiedText,
+                wavFilePath = transcript.wavFilePath,
+                onDismiss = {
+                    transcriptToEditInDialog = null
+                    isEditing = false
+                },
+                onConfirm = { newText ->
+                    val updatedItem = transcript.copy(modifiedText = newText, checked = true)
+                    resultList[index] = updatedItem
+
+                    val file = File(updatedItem.wavFilePath)
+                    val filename = file.nameWithoutExtension
+                    coroutineScope.launch(Dispatchers.IO) {
+                        saveJsonl(
+                            context = context,
+                            userId = userId,
+                            filename = filename,
+                            originalText = updatedItem.recognizedText,
+                            modifiedText = updatedItem.modifiedText,
+                            checked = updatedItem.checked,
+                            remoteCandidates = updatedItem.remoteCandidates
+                        )
+                    }
+
+                    transcriptToEditInDialog = null
+                    isEditing = false
+                },
+                userId = userSettings.userId,
+                recognitionUrl = userSettings.recognitionUrl,
+            )
         }
     }
 }

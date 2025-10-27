@@ -50,7 +50,8 @@ data class UserSettings(
     val userId: String,
     val modelName: String?,
     val modelUrl: String,
-    val backendUrl: String
+    val backendUrl: String,
+    val inlineEdit: Boolean
 ) {
     val feedbackUrl: String
         get() = if (backendUrl.isNotBlank()) "$backendUrl/api/transfer" else ""
@@ -73,6 +74,7 @@ class SettingsManager(context: Context) {
         val MODEL_NAME_KEY = stringPreferencesKey("model_name")
         val MODEL_URL_KEY = stringPreferencesKey("model_url")
         val BACKEND_URL_KEY = stringPreferencesKey("backend_url")
+        val INLINE_EDIT_KEY = booleanPreferencesKey("inline_edit")
     }
 
     // Flow to read the settings from DataStore, providing default values if none are set.
@@ -85,6 +87,7 @@ class SettingsManager(context: Context) {
         val modelName = preferences[MODEL_NAME_KEY]
         val modelUrl = preferences[MODEL_URL_KEY] ?: ""
         val backendUrl = preferences[BACKEND_URL_KEY] ?: "https://120.126.151.159:56432"
+        val inlineEdit = preferences[INLINE_EDIT_KEY] ?: false
         UserSettings(
             lingerMs,
             partialIntervalMs,
@@ -92,7 +95,8 @@ class SettingsManager(context: Context) {
             userId,
             modelName,
             modelUrl,
-            backendUrl
+            backendUrl,
+            inlineEdit
         )
     }
 
@@ -142,6 +146,12 @@ class SettingsManager(context: Context) {
             settings[BACKEND_URL_KEY] = url
         }
     }
+
+    suspend fun updateInlineEdit(inlineEdit: Boolean) {
+        appContext.dataStore.edit { settings ->
+            settings[INLINE_EDIT_KEY] = inlineEdit
+        }
+    }
 }
 
 sealed class DownloadUiEvent {
@@ -159,7 +169,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "", "https://120.126.151.159:56432") // Initial default values
+        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "", "https://120.126.151.159:56432", false) // Initial default values
     )
 
     var models by mutableStateOf<List<Model>>(emptyList())
@@ -244,6 +254,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun updateBackendUrl(url: String) {
         viewModelScope.launch {
             settingsManager.updateBackendUrl(url)
+        }
+    }
+
+    fun updateInlineEdit(inlineEdit: Boolean) {
+        viewModelScope.launch {
+            settingsManager.updateInlineEdit(inlineEdit)
         }
     }
 
