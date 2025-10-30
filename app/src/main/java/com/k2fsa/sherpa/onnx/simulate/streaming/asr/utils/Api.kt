@@ -69,6 +69,7 @@ private fun packageUploadJsonMetadata(path: String, userId: String): JSONObject?
         val json = JSONObject()
         json.put("account", account)
         json.put("label", label) // key in output json is "label"
+        json.put("sentence", label)
         json.put("filename", wavFile.name)
         json.put("charMode", false)
 

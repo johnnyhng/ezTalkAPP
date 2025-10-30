@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -81,36 +82,6 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var feedbackProgress by remember { mutableStateOf(0f) }
     var feedbackProgressText by remember { mutableStateOf("") }
 
-    fun feedback(selectedFiles: List<WavFileEntry>) {
-        coroutineScope.launch {
-            isFeedbackInProgress = true
-            feedbackProgress = 0f
-            feedbackProgressText = "0/${selectedFiles.size}"
-            var successCount = 0
-            withContext(Dispatchers.IO) {
-                selectedFiles.forEachIndexed { index, entry ->
-                    val success =
-                        postFeedback(userSettings.feedbackUrl, entry.wavFile.absolutePath, userSettings.userId)
-                    if (success) {
-                        successCount++
-                    }
-                    // Update progress on the main thread
-                    withContext(Dispatchers.Main) {
-                        feedbackProgress = (index + 1).toFloat() / selectedFiles.size
-                        feedbackProgressText = "${index + 1}/${selectedFiles.size}"
-                    }
-                }
-            }
-
-            Toast.makeText(
-                context,
-                "Feedback for $successCount/${selectedFiles.size} files submitted",
-                Toast.LENGTH_SHORT
-            ).show()
-            isFeedbackInProgress = false
-        }
-    }
-
     fun listWavFiles() {
         val wavsDir = File(context.filesDir, "wavs/${userSettings.userId}")
         if (wavsDir.exists()) {
@@ -146,6 +117,44 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
             wavFileEntries = emptyList()
         }
     }
+
+    fun feedback(selectedFiles: List<WavFileEntry>) {
+        coroutineScope.launch {
+            isFeedbackInProgress = true
+            feedbackProgress = 0f
+            feedbackProgressText = "0/${selectedFiles.size}"
+            var successCount = 0
+            withContext(Dispatchers.IO) {
+                selectedFiles.forEachIndexed { index, entry ->
+                    val success =
+                        postFeedback(userSettings.feedbackUrl, entry.wavFile.absolutePath, userSettings.userId)
+                    if (success) {
+                        successCount++
+                        // Delete the wav and jsonl files
+                        val jsonlFile =
+                            File(entry.wavFile.parent, "${entry.wavFile.nameWithoutExtension}.jsonl")
+                        entry.wavFile.delete()
+                        jsonlFile.delete()
+                    }
+                    // Update progress on the main thread
+                    withContext(Dispatchers.Main) {
+                        feedbackProgress = (index + 1).toFloat() / selectedFiles.size
+                        feedbackProgressText = "${index + 1}/${selectedFiles.size}"
+                    }
+                }
+            }
+
+            Toast.makeText(
+                context,
+                "Feedback for $successCount/${selectedFiles.size} files submitted",
+                Toast.LENGTH_SHORT
+            ).show()
+            isFeedbackInProgress = false
+            listWavFiles() // Refresh the list
+        }
+    }
+
+
 
     LaunchedEffect(userSettings.userId) {
         listWavFiles()
@@ -252,6 +261,17 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold
                             )
+                            IconButton(
+                                onClick = {
+                                    feedback(listOf(entry))
+                                },
+                                enabled = !isFeedbackInProgress
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Upload,
+                                    contentDescription = "Upload"
+                                )
+                            }
                             IconButton(
                                 onClick = {
                                     editingEntry = entry
