@@ -32,6 +32,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -79,7 +80,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
 
     // Feedback state
     var isFeedbackInProgress by remember { mutableStateOf(false) }
-    var feedbackProgress by remember { mutableStateOf(0f) }
+    var feedbackProgress by remember { mutableFloatStateOf(0f) }
     var feedbackProgressText by remember { mutableStateOf("") }
 
     fun listWavFiles() {
@@ -106,7 +107,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                 modifiedText = modified,
                                 checked = checked,
                             )
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             null // Ignore malformed lines
                         }
                     } else {
@@ -200,13 +201,30 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
     ) {
         Row {
             Button(onClick = {
-                val wavsDir = File(context.filesDir, "wavs/${userSettings.userId}")
-                if (wavsDir.exists()) {
-                    wavsDir.deleteRecursively()
+                val selectedFiles = wavFileEntries.filter { it.checked }
+                coroutineScope.launch {
+                    withContext(Dispatchers.IO) {
+                        selectedFiles.forEach { entry ->
+                            val jsonlFile =
+                                File(
+                                    entry.wavFile.parent,
+                                    "${entry.wavFile.nameWithoutExtension}.jsonl"
+                                )
+                            entry.wavFile.delete()
+                            if (jsonlFile.exists()) {
+                                jsonlFile.delete()
+                            }
+                        }
+                    }
+                    listWavFiles()
+                    Toast.makeText(
+                        context,
+                        "${selectedFiles.size} files deleted",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
-                listWavFiles()
-            }, enabled = currentlyPlaying == null && !isFeedbackInProgress) {
-                Text("Delete all my wavs")
+            }, enabled = wavFileEntries.any { it.checked } && !isFeedbackInProgress) {
+                Text("Delete Selected")
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(onClick = {
@@ -221,6 +239,36 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
             LinearProgressIndicator(progress = feedbackProgress, modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(4.dp))
             Text(feedbackProgressText, style = MaterialTheme.typography.bodySmall)
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val allSelected = wavFileEntries.isNotEmpty() && wavFileEntries.all { it.checked }
+            Checkbox(
+                checked = allSelected,
+                onCheckedChange = {
+                    val newState = !allSelected
+                    coroutineScope.launch {
+                        wavFileEntries.forEach { entry ->
+                            saveJsonl(
+                                context = context,
+                                userId = userSettings.userId,
+                                filename = entry.wavFile.nameWithoutExtension,
+                                originalText = entry.originalText,
+                                modifiedText = entry.modifiedText,
+                                checked = newState,
+                            )
+                        }
+                        listWavFiles()
+                    }
+                },
+                enabled = !isFeedbackInProgress
+            )
+            Text("Select All")
         }
 
 
