@@ -53,8 +53,6 @@ data class UserSettings(
     val backendUrl: String,
     val inlineEdit: Boolean
 ) {
-    val feedbackUrl: String
-        get() = if (backendUrl.isNotBlank()) "$backendUrl/api/transfer" else ""
     val recognitionUrl: String
         get() = if (backendUrl.isNotBlank()) "$backendUrl/api/process_audio" else ""
 }

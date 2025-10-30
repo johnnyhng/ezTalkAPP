@@ -32,7 +32,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,7 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.managers.HomeViewModel
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.MediaController
-import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.postFeedback
+import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.feedbackToBackend
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.utils.saveJsonl
 import com.k2fsa.sherpa.onnx.simulate.streaming.asr.widgets.EditRecognitionDialog
 import kotlinx.coroutines.Dispatchers
@@ -80,7 +79,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
 
     // Feedback state
     var isFeedbackInProgress by remember { mutableStateOf(false) }
-    var feedbackProgress by remember { mutableFloatStateOf(0f) }
+    var feedbackProgress by remember { mutableStateOf(0f) }
     var feedbackProgressText by remember { mutableStateOf("") }
 
     fun listWavFiles() {
@@ -107,7 +106,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                 modifiedText = modified,
                                 checked = checked,
                             )
-                        } catch (_: Exception) {
+                        } catch (e: Exception) {
                             null // Ignore malformed lines
                         }
                     } else {
@@ -128,7 +127,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
             withContext(Dispatchers.IO) {
                 selectedFiles.forEachIndexed { index, entry ->
                     val success =
-                        postFeedback(userSettings.feedbackUrl, entry.wavFile.absolutePath, userSettings.userId)
+                        feedbackToBackend(userSettings.backendUrl, entry.wavFile.absolutePath, userSettings.userId)
                     if (success) {
                         successCount++
                         // Delete the wav and jsonl files

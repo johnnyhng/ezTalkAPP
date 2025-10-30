@@ -49,12 +49,14 @@ private fun packageUploadJsonMetadata(path: String, userId: String): JSONObject?
         val jsonlPath = path.substringBeforeLast(".") + ".jsonl"
         val jsonlFile = File(jsonlPath)
         var label = ""
+        var remoteCandidates = JSONArray()
         if (jsonlFile.exists()) {
             try {
                 val jsonlContent = jsonlFile.readText()
                 if (jsonlContent.isNotBlank()) {
                     val jsonObject = JSONObject(jsonlContent)
                     label = jsonObject.optString("modified", "")
+                    remoteCandidates = jsonObject.optJSONArray("remote_candidates") ?: JSONArray()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error reading or parsing jsonl file: $jsonlPath", e)
@@ -72,6 +74,7 @@ private fun packageUploadJsonMetadata(path: String, userId: String): JSONObject?
         json.put("sentence", label)
         json.put("filename", wavFile.name)
         json.put("charMode", false)
+        json.put("remote_candidates", remoteCandidates)
 
         return json
     } catch (e: Exception) {
@@ -94,14 +97,90 @@ fun packageUploadJson(path: String, userId: String): JSONObject? {
     return metadata
 }
 
-fun postFeedback(
-    feedbackUrl: String,
+fun feedbackToBackend(
+    backendUrl: String,
+    filePath: String,
+    userId: String
+): Boolean {
+    val jsonlPath = filePath.substringBeforeLast(".") + ".jsonl"
+    val metadata = readJsonl(jsonlPath)
+    val hasRemoteCandidates = metadata?.optJSONArray("remote_candidates") != null
+
+
+    return if (hasRemoteCandidates) {
+        putForUpdates("$backendUrl/api/updates", filePath, userId, metadata)
+    } else {
+        postTransfer("$backendUrl/api/transfer", filePath, userId)
+    }
+}
+
+fun putForUpdates(
+    updateUrl: String,
+    filePath: String,
+    userId: String,
+    metadata: JSONObject? = null
+): Boolean {
+    return try {
+        val url = URL(updateUrl)
+        val connection = url.openConnection() as HttpURLConnection
+        val hostnameVerifier = HostnameVerifier { _, _ -> true }
+        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
+
+        connection.requestMethod = "PUT"
+        connection.doOutput = true
+        connection.connectTimeout = 5000 // 5 seconds
+        connection.readTimeout = 5000 // 5 seconds
+
+        // TODO: Use OAUTH2 for authentication
+        val  account = JSONObject()
+        account.put("user_id", userId.split("@")[0])
+        account.put("password", sha256(sha256("password")))
+
+        val jsonPayload = JSONObject()
+        jsonPayload.put("account", account)
+        val jsonArray = JSONArray()
+        val element = JSONObject()
+        val label = JSONObject()
+        label.put("original", "tmp")
+        label.put("modified", metadata?.optString("modified") ?: "")
+        element.put(filePath.substringAfterLast("/"), label)
+        jsonArray.put(element)
+        jsonPayload.put("streamFilesMove", jsonArray)
+        jsonPayload.put("update_files", "True")
+        jsonPayload.put("sentence", metadata?.optString("modified") ?: "")
+
+
+
+        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        connection.setRequestProperty("Accept", "application/json")
+        connection.outputStream.use { os ->
+            val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
+            os.write(input, 0, input.size)
+        }
+
+        val responseCode = connection.responseCode
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            true
+        } else {
+            Log.e(TAG, "Update failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            val errorStream = connection.errorStream?.bufferedReader()?.readText()
+            Log.e(TAG, "Error body: $errorStream")
+            false
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Exception during update", e)
+        false
+    }
+}
+
+fun postTransfer(
+    transferUrl: String,
     filePath: String,
     userId: String,
     sendFileByJson: Boolean = true
 ): Boolean {
     return try {
-        val url = URL(feedbackUrl)
+        val url = URL(transferUrl)
         val connection = url.openConnection() as HttpURLConnection
         val hostnameVerifier = HostnameVerifier { _, _ -> true }
         (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
@@ -175,13 +254,13 @@ fun postFeedback(
         if (responseCode == HttpURLConnection.HTTP_OK) {
             true
         } else {
-            Log.e(TAG, "Feedback post failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            Log.e(TAG, "Transfer post failed. Response code: $responseCode, message: ${connection.responseMessage}")
             val errorStream = connection.errorStream?.bufferedReader()?.readText()
             Log.e(TAG, "Error body: $errorStream")
             false
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Exception during feedback post", e)
+        Log.e(TAG, "Exception during transfer post", e)
         false
     }
 }
