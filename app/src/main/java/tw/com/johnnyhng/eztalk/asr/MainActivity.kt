@@ -36,10 +36,12 @@ import androidx.navigation.compose.rememberNavController
 import tw.com.johnnyhng.eztalk.asr.screens.FileManagerScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HelpScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HomeScreen
-import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 import tw.com.johnnyhng.eztalk.asr.screens.SettingsScreen
 import tw.com.johnnyhng.eztalk.asr.ui.theme.SimulateStreamingAsrTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 
 const val TAG = "sherpa-onnx-sim-asr"
 private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
@@ -63,11 +65,23 @@ class MainActivity : ComponentActivity() {
         }
         ActivityCompat.requestPermissions(this, permissions, REQUEST_RECORD_AUDIO_PERMISSION)
 
-        // Modified initialization
-        val settingsManager = SettingsManager(this)
-        lifecycleScope.launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             val assets = assets
-            SimulateStreamingAsr.initVad(assets)
+            val vadModel = "silero_vad.onnx"
+            val destFile = File(filesDir, vadModel)
+            if (!destFile.exists()) {
+                try {
+                    assets.open(vadModel).use { inputStream ->
+                        FileOutputStream(destFile).use { outputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                    Log.i(TAG, "Copied $vadModel to ${destFile.absolutePath}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to copy $vadModel", e)
+                }
+            }
+            SimulateStreamingAsr.initVad(assets, destFile)
         }
     }
 

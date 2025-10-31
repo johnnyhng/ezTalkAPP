@@ -58,7 +58,7 @@ object SimulateStreamingAsr {
         }
     }
 
-    fun initVad(assetManager: AssetManager? = null) {
+    fun initVad(assetManager: AssetManager? = null, vadModel: File? = null) {
         if (_vad != null) {
             return
         }
@@ -67,7 +67,7 @@ object SimulateStreamingAsr {
         val config = getVadModelConfig(type)
 
         _vad = Vad(
-            assetManager = assetManager,
+            assetManager = if (vadModel == null) assetManager else null,
             config = config!!,
         )
         Log.i(TAG, "sherpa-onnx vad initialized")
