@@ -1,0 +1,115 @@
+package tw.com.johnnyhng.eztalk.asr
+
+import android.app.Application
+import android.content.res.AssetManager
+import android.util.Log
+import tw.com.johnnyhng.eztalk.OfflineRecognizer
+import tw.com.johnnyhng.eztalk.OfflineRecognizerConfig
+import tw.com.johnnyhng.eztalk.Vad
+import tw.com.johnnyhng.eztalk.getOfflineModelConfig
+import tw.com.johnnyhng.eztalk.getVadModelConfig
+import tw.com.johnnyhng.eztalk.asr.data.classes.Model
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import kotlin.collections.iterator
+
+object SimulateStreamingAsr {
+    private var _recognizer: OfflineRecognizer? = null
+    val recognizer: OfflineRecognizer
+        get() {
+            return _recognizer!!
+        }
+
+    private var _vad: Vad? = null
+    val vad: Vad
+        get() {
+            return _vad!!
+        }
+
+    fun initOfflineRecognizer(assetManager: AssetManager? = null, model: Model? = null) {
+        synchronized(this) {
+            if (_recognizer != null) {
+                _recognizer!!.release()
+                _recognizer = null
+            }
+            Log.i(TAG, "Initializing sherpa-onnx offline recognizer")
+            // Please change getOfflineModelConfig() to add new models
+            // See https://k2-fsa.github.io/sherpa/onnx/pretrained_models/index.html
+            // for a list of available models
+            val asrModelType = 43
+            Log.i(TAG, "Select model type $asrModelType for ASR")
+
+
+            val config = OfflineRecognizerConfig(
+                modelConfig = getOfflineModelConfig(type = asrModelType, model)!!,
+            )
+
+            if (config.modelConfig.numThreads == 1) {
+                config.modelConfig.numThreads = 2
+            }
+
+            _recognizer = OfflineRecognizer(
+                assetManager = if (model == null) assetManager else null,
+                config = config,
+            )
+
+            Log.i(TAG, "sherpa-onnx offline recognizer initialized")
+        }
+    }
+
+    fun initVad(assetManager: AssetManager? = null) {
+        if (_vad != null) {
+            return
+        }
+        val type = 0
+        Log.i(TAG, "Select VAD model type $type")
+        val config = getVadModelConfig(type)
+
+        _vad = Vad(
+            assetManager = assetManager,
+            config = config!!,
+        )
+        Log.i(TAG, "sherpa-onnx vad initialized")
+    }
+
+    private fun copyAssets(path: String, application: Application) {
+        val assets: Array<String>?
+        try {
+            assets = application.assets.list(path)
+            if (assets!!.isEmpty()) {
+                copyFile(path, application)
+            } else {
+                val fullPath = "${application.getExternalFilesDir(null)}/$path"
+                val dir = File(fullPath)
+                dir.mkdirs()
+                for (asset in assets.iterator()) {
+                    val p: String = if (path == "") "" else "$path/"
+                    copyAssets(p + asset, application)
+                }
+            }
+        } catch (ex: IOException) {
+            Log.e(TAG, "Failed to copy $path. $ex")
+        }
+    }
+
+    private fun copyFile(filename: String, application: Application) {
+        try {
+            val istream = application.assets.open(filename)
+            val newFilename = application.getExternalFilesDir(null).toString() + "/" + filename
+            val ostream = FileOutputStream(newFilename)
+            // Log.i(TAG, "Copying $filename to $newFilename")
+            val buffer = ByteArray(1024)
+            var read = 0
+            while (read != -1) {
+                ostream.write(buffer, 0, read)
+                read = istream.read(buffer)
+            }
+            istream.close()
+            ostream.flush()
+            ostream.close()
+        } catch (ex: Exception) {
+            Log.e(TAG, "Failed to copy $filename, $ex")
+        }
+    }
+}

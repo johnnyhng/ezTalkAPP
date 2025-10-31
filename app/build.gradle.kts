@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.k2fsa.sherpa.onnx.simulate.streaming.asr"
+    namespace = "tw.com.johnnyhng.eztalk.asr"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.k2fsa.sherpa.onnx.simulate.streaming.asr"
+        applicationId = "tw.com.johnnyhng.eztalk.asr"
         minSdk = 26
         targetSdk = 34
         versionCode = 20250918
