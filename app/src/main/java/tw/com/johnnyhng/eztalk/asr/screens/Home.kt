@@ -421,7 +421,7 @@ fun HomeScreen(
                                     ).format(
                                         Date()
                                     )
-                                    val filename = "rec_${timestamp}"
+                                    val filename = "${timestamp}.app"
 
                                     // Save the WAV file
                                     val wavPath = saveAsWav(
