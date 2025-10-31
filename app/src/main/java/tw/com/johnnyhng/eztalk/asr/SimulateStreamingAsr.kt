@@ -3,11 +3,11 @@ package tw.com.johnnyhng.eztalk.asr
 import android.app.Application
 import android.content.res.AssetManager
 import android.util.Log
-import tw.com.johnnyhng.eztalk.OfflineRecognizer
-import tw.com.johnnyhng.eztalk.OfflineRecognizerConfig
-import tw.com.johnnyhng.eztalk.Vad
-import tw.com.johnnyhng.eztalk.getOfflineModelConfig
-import tw.com.johnnyhng.eztalk.getVadModelConfig
+import com.k2fsa.sherpa.onnx.OfflineRecognizer
+import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.Vad
+import com.k2fsa.sherpa.onnx.getOfflineModelConfig
+import com.k2fsa.sherpa.onnx.getVadModelConfig
 import tw.com.johnnyhng.eztalk.asr.data.classes.Model
 import java.io.File
 import java.io.FileOutputStream
@@ -58,7 +58,7 @@ object SimulateStreamingAsr {
         }
     }
 
-    fun initVad(assetManager: AssetManager? = null, vadModel: File? = null) {
+    fun initVad(assetManager: AssetManager? = null) {
         if (_vad != null) {
             return
         }
@@ -67,7 +67,7 @@ object SimulateStreamingAsr {
         val config = getVadModelConfig(type)
 
         _vad = Vad(
-            assetManager = if (vadModel == null) assetManager else null,
+            assetManager = assetManager,
             config = config!!,
         )
         Log.i(TAG, "sherpa-onnx vad initialized")

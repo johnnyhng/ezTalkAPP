@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk
+package com.k2fsa.sherpa.onnx
 
 class OfflineStream(var ptr: Long) {
     fun acceptWaveform(samples: FloatArray, sampleRate: Int) =

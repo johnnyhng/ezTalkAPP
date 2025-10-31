@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk
+package com.k2fsa.sherpa.onnx
 
 data class FeatureConfig(
     var sampleRate: Int = 16000,

@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk
+package com.k2fsa.sherpa.onnx
 
 import android.content.res.AssetManager
 import tw.com.johnnyhng.eztalk.asr.data.classes.Model

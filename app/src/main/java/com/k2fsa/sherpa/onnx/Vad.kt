@@ -1,8 +1,7 @@
 // Copyright (c)  2023  Xiaomi Corporation
-package tw.com.johnnyhng.eztalk
+package com.k2fsa.sherpa.onnx
 
 import android.content.res.AssetManager
-import java.io.File
 
 data class SileroVadModelConfig(
     var model: String = "",
@@ -115,12 +114,12 @@ class Vad(
 // For ten-vad, please use
 // https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/ten-vad.onnx
 //
-fun getVadModelConfig(type: Int, vadModel: File? = null): VadModelConfig? {
+fun getVadModelConfig(type: Int): VadModelConfig? {
     when (type) {
         0 -> {
             return VadModelConfig(
                 sileroVadModelConfig = SileroVadModelConfig(
-                    model = if (vadModel != null) vadModel.absolutePath else "silero_vad.onnx",
+                    model = "silero_vad.onnx",
                     threshold = 0.5F,
                     minSilenceDuration = 0.25F,
                     minSpeechDuration = 0.25F,
