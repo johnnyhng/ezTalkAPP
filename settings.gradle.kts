@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SimulateStreamingAsr"
+rootProject.name = "ezTalk"
 include(":app")
