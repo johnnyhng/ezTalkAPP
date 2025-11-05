@@ -1,7 +1,10 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
-import android.util.Patterns
+import android.app.Activity
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,7 +29,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,6 +42,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.widgets.RemoteModelsManager
@@ -54,7 +59,6 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val userSettings by homeViewModel.userSettings.collectAsState()
-    var showUserIdDialog by remember { mutableStateOf(false) }
     val showRemoteModelsDialog by homeViewModel.showRemoteModelsDialog.collectAsState()
 
     val models = homeViewModel.models
@@ -66,6 +70,33 @@ fun SettingsScreen(
     val downloadProgress = homeViewModel.downloadProgress
     val canDeleteModel = homeViewModel.canDeleteModel
 
+    val gso = remember {
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .build()
+    }
+    val googleSignInClient = remember {
+        GoogleSignIn.getClient(context, gso)
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                account?.email?.let {
+                    homeViewModel.updateUserId(it)
+                    Toast.makeText(context, "Signed in as $it", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: ApiException) {
+                Log.w(TAG, "Google sign in failed", e)
+                Toast.makeText(context, "Google sign in failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         homeViewModel.downloadEventFlow.collectLatest { event ->
             when (event) {
@@ -76,27 +107,27 @@ fun SettingsScreen(
         }
     }
 
-    if (showUserIdDialog) {
-        UserIdDialog(
-            currentUserId = userSettings.userId,
-            onDismiss = { showUserIdDialog = false },
-            onConfirm = { newUserId ->
-                homeViewModel.updateUserId(newUserId)
-                showUserIdDialog = false
-            }
-        )
-    }
-
     if (showRemoteModelsDialog) {
         RemoteModelsManager(homeViewModel = homeViewModel)
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
         // User ID setting
-        Button(onClick = { showUserIdDialog = true }, enabled = !isDownloading) {
-            Text(text = "Edit User ID")
-        }
         Text(text = "Current User ID: ${userSettings.userId}")
+        Row {
+            Button(onClick = { launcher.launch(googleSignInClient.signInIntent) }, enabled = !isDownloading) {
+                Text(text = "Sign in with Google")
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Button(onClick = {
+                googleSignInClient.signOut().addOnCompleteListener {
+                    homeViewModel.updateUserId("user@example.com") // Reset to default
+                    Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
+                }
+            }, enabled = !isDownloading) {
+                Text("Sign Out")
+            }
+        }
 
         // Model Selection
         Column(modifier = Modifier.padding(vertical = 16.dp)) {
@@ -259,53 +290,4 @@ fun SettingsScreen(
             )
         }
     }
-}
-
-@Composable
-private fun UserIdDialog(
-    currentUserId: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var userId by remember { mutableStateOf(currentUserId) }
-    var isValid by remember { mutableStateOf(userId.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(userId).matches()) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit User ID") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = userId,
-                    onValueChange = {
-                        userId = it
-                        isValid = it.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(it).matches()
-                    },
-                    label = { Text("User ID (email format)") },
-                    isError = !isValid,
-                    singleLine = true
-                )
-                if (!isValid && userId.isNotEmpty()) {
-                    Text(
-                        text = "Please enter a valid email address.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(userId) },
-                enabled = isValid
-            ) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
 }

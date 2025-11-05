@@ -5,4 +5,5 @@
 .idea
 .cxx
 local.properties
-**/secrets.xml
+app/google-services.json
+app/src/main/res/values/secrets.xml
