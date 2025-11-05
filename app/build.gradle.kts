@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("androidx.compose.material:material-icons-extended-android:1.6.7")
+    implementation("com.google.android.gms:play-services-auth:21.4.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
