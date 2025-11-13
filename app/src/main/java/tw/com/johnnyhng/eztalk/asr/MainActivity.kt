@@ -34,12 +34,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 import tw.com.johnnyhng.eztalk.asr.screens.FileManagerScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HelpScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HomeScreen
 import tw.com.johnnyhng.eztalk.asr.screens.SettingsScreen
 import tw.com.johnnyhng.eztalk.asr.ui.theme.SimulateStreamingAsrTheme
+import java.util.Locale
 
 const val TAG = "eztalk"
 private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
@@ -51,16 +54,28 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            SimulateStreamingAsrTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    MainScreen()
+
+        lifecycleScope.launch {
+            val settingsManager = SettingsManager(this@MainActivity)
+            val language = settingsManager.settingsFlow.first().language
+            val locale = Locale(language)
+            Locale.setDefault(locale)
+            val config = resources.configuration
+            config.setLocale(locale)
+            resources.updateConfiguration(config, resources.displayMetrics)
+
+            setContent {
+                SimulateStreamingAsrTheme {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        MainScreen()
+                    }
                 }
             }
         }
+
         ActivityCompat.requestPermissions(this, permissions, REQUEST_RECORD_AUDIO_PERMISSION)
 
         lifecycleScope.launch(Dispatchers.Default) {

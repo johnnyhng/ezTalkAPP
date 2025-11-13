@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -35,6 +36,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +52,8 @@ import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.widgets.RemoteModelsManager
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +62,8 @@ fun SettingsScreen(
     homeViewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val activity = context as Activity
+    val coroutineScope = rememberCoroutineScope()
     val userSettings by homeViewModel.userSettings.collectAsState()
     val showRemoteModelsDialog by homeViewModel.showRemoteModelsDialog.collectAsState()
 
@@ -69,6 +75,9 @@ fun SettingsScreen(
     val isDownloading = homeViewModel.isDownloading
     val downloadProgress = homeViewModel.downloadProgress
     val canDeleteModel = homeViewModel.canDeleteModel
+
+    var languageMenuExpanded by remember { mutableStateOf(false) }
+    val languages = listOf("en" to "English", "zh" to "Chinese")
 
     val gso = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -112,6 +121,39 @@ fun SettingsScreen(
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
+        // Language selection
+        ExposedDropdownMenuBox(
+            expanded = languageMenuExpanded,
+            onExpandedChange = { languageMenuExpanded = !languageMenuExpanded },
+        ) {
+            OutlinedTextField(
+                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                readOnly = true,
+                value = Locale(userSettings.language).displayName,
+                onValueChange = {},
+                label = { Text("Language") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageMenuExpanded) },
+            )
+            ExposedDropdownMenu(
+                expanded = languageMenuExpanded,
+                onDismissRequest = { languageMenuExpanded = false },
+            ) {
+                languages.forEach { (code, name) ->
+                    DropdownMenuItem(
+                        text = { Text(name) },
+                        onClick = {
+                            coroutineScope.launch {
+                                homeViewModel.updateLanguage(code)
+                                languageMenuExpanded = false
+                                activity.recreate()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
         // User ID setting
         Text(text = "Current User ID: ${userSettings.userId}")
         Row {
