@@ -41,12 +41,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
@@ -131,7 +133,7 @@ fun SettingsScreen(
                 readOnly = true,
                 value = Locale(userSettings.language).displayName,
                 onValueChange = {},
-                label = { Text("Language") },
+                label = { Text(stringResource(R.string.language)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageMenuExpanded) },
             )
             ExposedDropdownMenu(
@@ -155,10 +157,10 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // User ID setting
-        Text(text = "Current User ID: ${userSettings.userId}")
+        Text(text = stringResource(R.string.current_user_id, userSettings.userId))
         Row {
             Button(onClick = { launcher.launch(googleSignInClient.signInIntent) }, enabled = !isDownloading) {
-                Text(text = "Sign in with Google")
+                Text(text = stringResource(R.string.sign_in_with_google))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(onClick = {
@@ -167,13 +169,13 @@ fun SettingsScreen(
                     Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
                 }
             }, enabled = !isDownloading) {
-                Text("Sign Out")
+                Text(stringResource(R.string.sign_out))
             }
         }
 
         // Model Selection
         Column(modifier = Modifier.padding(vertical = 16.dp)) {
-            Text("ASR Model", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.asr_model), style = MaterialTheme.typography.titleMedium)
             ExposedDropdownMenuBox(
                 expanded = modelMenuExpanded,
                 onExpandedChange = {
@@ -185,9 +187,9 @@ fun SettingsScreen(
                 OutlinedTextField(
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
                     readOnly = true,
-                    value = selectedModel?.name ?: "No model selected",
+                    value = selectedModel?.name ?: stringResource(R.string.no_model_selected),
                     onValueChange = {},
-                    label = { Text("Selected Model") },
+                    label = { Text(stringResource(R.string.selected_model)) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuExpanded) },
                     enabled = !isDownloading
                 )
@@ -213,7 +215,7 @@ fun SettingsScreen(
                     }
                     if (models.isEmpty()) {
                         DropdownMenuItem(
-                            text = { Text("No models found") },
+                            text = { Text(stringResource(R.string.no_models_found)) },
                             enabled = false,
                             onClick = {}
                         )
@@ -226,7 +228,7 @@ fun SettingsScreen(
                     modelUrl = it
                     homeViewModel.updateModelUrl(it)
                 },
-                label = { Text("Model Download URL") },
+                label = { Text(stringResource(R.string.model_download_url)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = !isDownloading
@@ -235,14 +237,14 @@ fun SettingsScreen(
                 IconButton(onClick = {
                     homeViewModel.showRemoteModelsDialog()
                 }, enabled = !isDownloading && modelUrl.isNotBlank()) {
-                    Icon(Icons.Default.Cloud, contentDescription = "Check version")
+                    Icon(Icons.Default.Cloud, contentDescription = stringResource(R.string.check_version))
                 }
                 IconButton(onClick = {
                     selectedModel?.let {
                         homeViewModel.deleteModel(it)
                     }
                 }, enabled = !isDownloading && canDeleteModel) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete model")
+                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_model))
                 }
             }
             if (isDownloading) {
@@ -260,7 +262,7 @@ fun SettingsScreen(
                 backendUrl = it
                 homeViewModel.updateBackendUrl(it)
             },
-            label = { Text("backend URL") },
+            label = { Text(stringResource(R.string.backend_url)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             enabled = !isDownloading
@@ -269,7 +271,7 @@ fun SettingsScreen(
         // Delay Slider
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
             Text(
-                text = "Delay: ${userSettings.lingerMs.roundToInt()} ms",
+                text = stringResource(R.string.delay, userSettings.lingerMs.roundToInt()),
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -285,7 +287,7 @@ fun SettingsScreen(
         // Recognize Time Slider
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
             Text(
-                text = "Recognize Time: ${userSettings.partialIntervalMs.roundToInt()} ms",
+                text = stringResource(R.string.recognize_time, userSettings.partialIntervalMs.roundToInt()),
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
             )
@@ -305,7 +307,7 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "Save VAD Segments")
+            Text(text = stringResource(R.string.save_vad_segments))
             Spacer(modifier = Modifier.width(8.dp))
             Switch(
                 checked = !userSettings.saveVadSegmentsOnly,
@@ -313,7 +315,7 @@ fun SettingsScreen(
                 enabled = !isDownloading
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Save Full Audio")
+            Text(text = stringResource(R.string.save_full_audio))
         }
 
         // Inline Edit Switch
@@ -323,7 +325,7 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "Inline Edit")
+            Text(text = stringResource(R.string.inline_edit))
             Spacer(modifier = Modifier.width(8.dp))
             Switch(
                 checked = userSettings.inlineEdit,

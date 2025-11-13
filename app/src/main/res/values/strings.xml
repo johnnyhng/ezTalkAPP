@@ -4,4 +4,21 @@
     <string name="stop">Stop</string>
     <string name="copy">Copy</string>
     <string name="clear">Clear</string>
+    <string name="language">Language</string>
+    <string name="current_user_id">Current User ID: %1$s</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="sign_out">Sign Out</string>
+    <string name="asr_model">ASR Model</string>
+    <string name="no_model_selected">No model selected</string>
+    <string name="selected_model">Selected Model</string>
+    <string name="no_models_found">No models found</string>
+    <string name="model_download_url">Model Download URL</string>
+    <string name="check_version">Check version</string>
+    <string name="delete_model">Delete model</string>
+    <string name="backend_url">backend URL</string>
+    <string name="delay">Delay: %1$d ms</string>
+    <string name="recognize_time">Recognize Time: %1$d ms</string>
+    <string name="save_vad_segments">Save VAD Segments</string>
+    <string name="save_full_audio">Save Full Audio</string>
+    <string name="inline_edit">Inline Edit</string>
 </resources>

@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">ezTalk</string>
+    <string name="start">開始</string>
+    <string name="stop">停止</string>
+    <string name="copy">複製</string>
+    <string name="clear">清除</string>
+    <string name="language">語言</string>
+    <string name="current_user_id">目前的使用者 ID: %1$s</string>
+    <string name="sign_in_with_google">使用 Google 登入</string>
+    <string name="sign_out">登出</string>
+    <string name="asr_model">ASR 模型</string>
+    <string name="no_model_selected">未選取模型</string>
+    <string name="selected_model">選取的模型</string>
+    <string name="no_models_found">找不到模型</string>
+    <string name="model_download_url">模型下載網址</string>
+    <string name="check_version">檢查版本</string>
+    <string name="delete_model">刪除模型</string>
+    <string name="backend_url">後端網址</string>
+    <string name="delay">延遲: %1$d 毫秒</string>
+    <string name="recognize_time">辨識時間: %1$d 毫秒</string>
+    <string name="save_vad_segments">儲存 VAD 片段</string>
+    <string name="save_full_audio">儲存完整音訊</string>
+    <string name="inline_edit">行內編輯</string>
+</resources>
