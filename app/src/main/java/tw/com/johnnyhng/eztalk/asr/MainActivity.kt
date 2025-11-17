@@ -15,6 +15,7 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -36,6 +37,7 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 import tw.com.johnnyhng.eztalk.asr.screens.FileManagerScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HelpScreen
@@ -55,23 +57,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        lifecycleScope.launch {
-            val settingsManager = SettingsManager(this@MainActivity)
-            val language = settingsManager.settingsFlow.first().language
-            val locale = Locale(language)
-            Locale.setDefault(locale)
-            val config = resources.configuration
-            config.setLocale(locale)
-            resources.updateConfiguration(config, resources.displayMetrics)
+        val locale = Locale.getDefault()
+        Locale.setDefault(locale)
+        val config = resources.configuration
+        config.setLocale(locale)
+        resources.updateConfiguration(config, resources.displayMetrics)
 
-            setContent {
-                SimulateStreamingAsrTheme {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        MainScreen()
-                    }
+        setContent {
+            SimulateStreamingAsrTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = colorScheme.background
+                ) {
+                    MainScreen()
                 }
             }
         }
@@ -121,8 +119,8 @@ fun MainScreen(modifier: Modifier = Modifier) {
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
+                    containerColor = colorScheme.primaryContainer,
+                    titleContentColor = colorScheme.primary,
                 ),
                 title = {
                     Text(

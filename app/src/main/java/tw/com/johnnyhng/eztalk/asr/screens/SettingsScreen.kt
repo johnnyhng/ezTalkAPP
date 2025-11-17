@@ -5,6 +5,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -123,37 +125,37 @@ fun SettingsScreen(
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
-        // Language selection
-        ExposedDropdownMenuBox(
-            expanded = languageMenuExpanded,
-            onExpandedChange = { languageMenuExpanded = !languageMenuExpanded },
-        ) {
-            OutlinedTextField(
-                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                readOnly = true,
-                value = Locale(userSettings.language).displayName,
-                onValueChange = {},
-                label = { Text(stringResource(R.string.language)) },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageMenuExpanded) },
-            )
-            ExposedDropdownMenu(
-                expanded = languageMenuExpanded,
-                onDismissRequest = { languageMenuExpanded = false },
-            ) {
-                languages.forEach { (code, name) ->
-                    DropdownMenuItem(
-                        text = { Text(name) },
-                        onClick = {
-                            coroutineScope.launch {
-                                homeViewModel.updateLanguage(code)
-                                languageMenuExpanded = false
-                                activity.recreate()
-                            }
-                        }
-                    )
-                }
-            }
-        }
+//        // Language selection
+//        ExposedDropdownMenuBox(
+//            expanded = languageMenuExpanded,
+//            onExpandedChange = { languageMenuExpanded = !languageMenuExpanded },
+//        ) {
+//            OutlinedTextField(
+//                modifier = Modifier.menuAnchor().fillMaxWidth(),
+//                readOnly = true,
+//                value = Locale(userSettings.language).displayName,
+//                onValueChange = {},
+//                label = { Text(stringResource(R.string.language)) },
+//                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageMenuExpanded) },
+//            )
+//            ExposedDropdownMenu(
+//                expanded = languageMenuExpanded,
+//                onDismissRequest = { languageMenuExpanded = false },
+//            ) {
+//                languages.forEach { (code, name) ->
+//                    DropdownMenuItem(
+//                        text = { Text(name) },
+//                        onClick = {
+//                            coroutineScope.launch {
+//                                homeViewModel.updateLanguage(code)
+//                                val appLocale = LocaleListCompat.forLanguageTags(code)
+//                                AppCompatDelegate.setApplicationLocales(appLocale)
+//                            }
+//                        }
+//                    )
+//                }
+//            }
+//        }
         Spacer(modifier = Modifier.height(16.dp))
 
         // User ID setting
