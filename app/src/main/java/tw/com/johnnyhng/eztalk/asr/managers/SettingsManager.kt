@@ -296,7 +296,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
             try {
                 val models = withContext(Dispatchers.IO) {
-                    val url = URL("$modelUrl/api/model/list/$userId")
+                    val url = URL("$modelUrl/api/model/list/${userId.split("@")[0]}")
                     val connection = url.openConnection() as HttpURLConnection
                     val modelsJson = connection.inputStream.bufferedReader().readText()
                     val jsonArray = JSONArray(modelsJson)
@@ -330,8 +330,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         targetDir.mkdirs()
                     }
 
-                    val modelUrl = URL("$url/users/$userId/models/$modelName/model.int8.onnx")
-                    val tokensUrl = URL("$url/users/$userId/models/$modelName/tokens.txt")
+                    val uId = userId.split("@")[0]
+                    val modelUrl = URL("$url/$uId/models/$modelName/model.int8.onnx")
+                    val tokensUrl = URL("$url/$uId/models/$modelName/tokens.txt")
 
                     val modelConn = modelUrl.openConnection()
                     val modelSize = modelConn.contentLengthLong
