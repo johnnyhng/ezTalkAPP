@@ -1,5 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
+import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,10 +40,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
 import tw.com.johnnyhng.eztalk.asr.utils.feedbackToBackend
@@ -59,12 +62,12 @@ import java.io.File
  */
 data class WavFileEntry(
     val wavFile: File,
-    val jsonlContent: List<String>,
     val originalText: String,
     val modifiedText: String,
     val checked: Boolean,
 )
 
+@SuppressLint("StringFormatInvalid")
 @Composable
 fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
     val context = LocalContext.current
@@ -97,11 +100,9 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             val original = json.getString("original")
                             val modified = json.getString("modified")
                             val checked = json.getBoolean("checked")
-                            val content = "Original: $original\nModified: $modified"
 
                             WavFileEntry(
                                 wavFile = wavFile,
-                                jsonlContent = listOf(content),
                                 originalText = original,
                                 modifiedText = modified,
                                 checked = checked,
@@ -150,7 +151,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
 
             Toast.makeText(
                 context,
-                "Feedback for $successCount/${selectedFiles.size} files submitted",
+                context.getString(R.string.feedback_submitted, successCount, selectedFiles.size),
                 Toast.LENGTH_SHORT
             ).show()
             isFeedbackInProgress = false
@@ -222,18 +223,18 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     listWavFiles()
                     Toast.makeText(
                         context,
-                        "${selectedFiles.size} files deleted",
+                        context.getString(R.string.files_deleted, selectedFiles.size),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             }, enabled = wavFileEntries.any { it.checked } && !isFeedbackInProgress) {
-                Text("Delete Selected")
+                Text(stringResource(R.string.delete_selected))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(onClick = {
                 feedback(wavFileEntries.filter { it.checked })
             }, enabled = wavFileEntries.any { it.checked } && !isFeedbackInProgress) {
-                Text("Feedback")
+                Text(stringResource(R.string.feedback))
             }
         }
 
@@ -271,7 +272,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 },
                 enabled = !isFeedbackInProgress
             )
-            Text("Select All")
+            Text(stringResource(R.string.select_all))
         }
 
 
@@ -320,7 +321,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Upload,
-                                    contentDescription = "Upload"
+                                    contentDescription = stringResource(R.string.upload)
                                 )
                             }
                             IconButton(
@@ -332,7 +333,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,
-                                    contentDescription = "Edit"
+                                    contentDescription = stringResource(R.string.edit)
                                 )
                             }
                             IconButton(
@@ -347,7 +348,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             ) {
                                 Icon(
                                     imageVector = if (currentlyPlaying == entry.wavFile.absolutePath) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                                    contentDescription = if (currentlyPlaying == entry.wavFile.absolutePath) "Stop" else "Playback"
+                                    contentDescription = if (currentlyPlaying == entry.wavFile.absolutePath) stringResource(R.string.stop) else stringResource(R.string.playback)
                                 )
                             }
                             IconButton(
@@ -367,23 +368,20 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Delete"
+                                    contentDescription = stringResource(R.string.delete)
                                 )
                             }
                         }
 
-                        // Display JSONL content if available
-                        if (entry.jsonlContent.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            entry.jsonlContent.forEach { contentLine ->
-                                Text(
-                                    text = contentLine,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.padding(start = 8.dp, top = 4.dp)
-                                )
-                            }
-                        }
+                        // Display JSONL content
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.original_text, entry.originalText) + "\n" +
+                                    stringResource(R.string.modified_text, entry.modifiedText),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                        )
                     }
                 }
             }

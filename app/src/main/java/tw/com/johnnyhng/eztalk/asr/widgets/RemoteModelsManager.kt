@@ -16,7 +16,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 
 @Composable
@@ -34,13 +36,13 @@ fun RemoteModelsManager(
                 homeViewModel.dismissRemoteModelsDialog()
             }
         },
-        title = { Text("Available Remote Models") },
+        title = { Text(stringResource(R.string.available_remote_models)) },
         text = {
             Column {
                 if (homeViewModel.isFetchingRemoteModels) {
                     CircularProgressIndicator()
                 } else if (remoteModels.isEmpty()) {
-                    Text("No remote models found.")
+                    Text(stringResource(R.string.no_remote_models_found))
                 } else {
                     LazyColumn {
                         items(remoteModels) { model ->
@@ -92,7 +94,7 @@ fun RemoteModelsManager(
                             },
                             enabled = !isDownloading
                         ) {
-                            Icon(Icons.Default.Download, contentDescription = "Download")
+                            Icon(Icons.Default.Download, contentDescription = stringResource(R.string.download))
                         }
                     }
                 }
@@ -104,7 +106,7 @@ fun RemoteModelsManager(
                 onClick = { homeViewModel.dismissRemoteModelsDialog() },
                 enabled = !isDownloading
             ) {
-                Text("Close")
+                Text(stringResource(R.string.close))
             }
         }
     )

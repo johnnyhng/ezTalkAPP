@@ -25,8 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
+import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
@@ -127,13 +129,13 @@ internal fun EditRecognitionDialog(
                     } else {
                         withContext(Dispatchers.Main) {
                             recognitionError =
-                                "Error: Could not read audio file."
+                                context.getString(R.string.error_could_not_read_audio_file)
                         }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Re-recognition failed", e)
                     withContext(Dispatchers.Main) {
-                        recognitionError = "Error: Recognition failed."
+                        recognitionError = context.getString(R.string.error_recognition_failed)
                     }
                 } finally {
                     withContext(Dispatchers.Main) {
@@ -159,14 +161,14 @@ internal fun EditRecognitionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Recognition") },
+        title = { Text(stringResource(R.string.edit_recognition)) },
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it },
-                        label = { Text("Modified Text") },
+                        label = { Text(stringResource(R.string.modified_text_label)) },
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(
@@ -178,7 +180,7 @@ internal fun EditRecognitionDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.RecordVoiceOver,
-                            contentDescription = "Speak and Confirm"
+                            contentDescription = stringResource(R.string.speak_and_confirm)
                         )
                     }
                 }
@@ -195,7 +197,7 @@ internal fun EditRecognitionDialog(
                     }
 
                 if (isRecognizing || isRemoteRecognizing) {
-                    Text("Recognizing...")
+                    Text(stringResource(R.string.recognizing))
                 } else {
                     LazyColumn {
                         itemsIndexed(menuItems) { index, item ->
@@ -219,14 +221,14 @@ internal fun EditRecognitionDialog(
             TextButton(
                 onClick = { onConfirm(text) }
             ) {
-                Text("OK")
+                Text(stringResource(R.string.ok))
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss
             ) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )
