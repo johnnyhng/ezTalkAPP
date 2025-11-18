@@ -331,8 +331,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     val uId = userId.split("@")[0]
-                    val modelUrl = URL("$url/$uId/models/$modelName/model.int8.onnx")
-                    val tokensUrl = URL("$url/$uId/models/$modelName/tokens.txt")
+                    val modelUrl = URL("$url/users/$uId/models/$modelName/model.int8.onnx")
+                    val tokensUrl = URL("$url/users/$uId/models/$modelName/tokens.txt")
 
                     val modelConn = modelUrl.openConnection()
                     val modelSize = modelConn.contentLengthLong
