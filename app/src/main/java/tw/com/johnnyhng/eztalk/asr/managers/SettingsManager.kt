@@ -79,12 +79,12 @@ class SettingsManager(context: Context) {
     // Flow to read the settings from DataStore, providing default values if none are set.
     val settingsFlow = appContext.dataStore.data.map { preferences ->
         val lingerMs = preferences[LINGER_MS_KEY] ?: 800f // Default: 800ms
-        val partialIntervalMs = preferences[PARTIAL_INTERVAL_MS_KEY] ?: 500f // Default: 500ms
+        val partialIntervalMs = preferences[PARTIAL_INTERVAL_MS_KEY] ?: 4500f // Default: 4500ms
         val saveVadSegmentsOnly =
             preferences[SAVE_VAD_SEGMENTS_ONLY_KEY] ?: false // Default: false (Save Full Audio)
         val userId = preferences[USER_ID_KEY] ?: "user@example.com"
         val modelName = preferences[MODEL_NAME_KEY]
-        val modelUrl = preferences[MODEL_URL_KEY] ?: ""
+        val modelUrl = preferences[MODEL_URL_KEY] ?: "http://120.126.151.159:8081"
         val backendUrl = preferences[BACKEND_URL_KEY] ?: "https://120.126.151.159:56432"
         val inlineEdit = preferences[INLINE_EDIT_KEY] ?: false
         val language = preferences[LANGUAGE_KEY] ?: "en"
