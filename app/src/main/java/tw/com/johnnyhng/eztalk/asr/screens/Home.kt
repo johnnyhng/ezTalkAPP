@@ -240,7 +240,7 @@ fun HomeScreen(
                 SimulateStreamingAsr.vad.reset()
 
                 // --- Coroutine to record audio ---
-                CoroutineScope(Dispatchers.IO).launch {
+                CoroutineScope(Dispatchers.IO).launch     {
                     Log.i(TAG, "Audio recording started")
                     val interval = 0.1 // 100ms
                     val bufferSize = (interval * sampleRateInHz).toInt()
@@ -377,7 +377,7 @@ fun HomeScreen(
                             val progress = (since.toFloat() / lingerMs).coerceIn(0f, 1f)
                             launch(Dispatchers.Main) { countdownProgress = progress }
                             // Process if silence duration is met OR if it's the final flush
-                            if (since >= lingerMs || (done && utteranceSegments.isNotEmpty())) {
+                            if (since >= lingerMs || (done && utteranceSegments.isNotEmpty()) || !isStarted) {
                                 val totalSize = utteranceSegments.sumOf { it.size }
                                 val concatenated = FloatArray(totalSize)
                                 var currentPos = 0
