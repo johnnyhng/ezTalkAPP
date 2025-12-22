@@ -22,7 +22,8 @@
     <string name="save_full_audio">儲存完整音訊</string>
     <string name="inline_edit">行內編輯</string>
     <string name="home">首頁</string>
-    <string name="file_manager">檔案管理員</string>
+    <string name="translate">翻譯</string>
+    <string name="file_manager">檔案管理</string>
     <string name="settings">設定</string>
     <string name="help">說明</string>
     <string name="delete_selected">刪除選取</string>

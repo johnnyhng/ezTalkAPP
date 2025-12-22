@@ -43,6 +43,7 @@ import tw.com.johnnyhng.eztalk.asr.screens.FileManagerScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HelpScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HomeScreen
 import tw.com.johnnyhng.eztalk.asr.screens.SettingsScreen
+import tw.com.johnnyhng.eztalk.asr.screens.TranslateScreen
 import tw.com.johnnyhng.eztalk.asr.ui.theme.SimulateStreamingAsrTheme
 import java.util.Locale
 
@@ -147,6 +148,10 @@ fun NavigationHost(navController: NavHostController) {
     NavHost(navController = navController, startDestination = NavRoutes.Home.route) {
         composable(NavRoutes.Home.route) {
             HomeScreen()
+        }
+
+        composable(NavRoutes.Translate.route) {
+            TranslateScreen()
         }
 
         composable(NavRoutes.FileManager.route) {
