@@ -34,6 +34,9 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.Default
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -49,6 +52,7 @@ import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max
@@ -101,7 +105,7 @@ fun TranslateScreen(
     LaunchedEffect(key1 = homeViewModel.selectedModel) {
         isAsrModelLoading = true
         Log.i(TAG, "ASR model initialization started.")
-        withContext(Dispatchers.IO) {
+        withContext(IO) {
             SimulateStreamingAsr.initOfflineRecognizer(
                 context.assets,
                 homeViewModel.selectedModel
@@ -146,7 +150,7 @@ fun TranslateScreen(
             remoteCandidates = emptyList()
 
             // Local re-recognition
-            launch(Dispatchers.IO) {
+            launch(IO) {
                 try {
                     val audioData = readWavFileToFloatArray(transcript.wavFilePath)
                     if (audioData != null) {
@@ -156,7 +160,7 @@ fun TranslateScreen(
                         recognizer.decode(stream)
                         val localResultText = recognizer.getResult(stream).text
                         stream.release()
-                        withContext(Dispatchers.Main) {
+                        withContext(Main) {
                             localCandidate = localResultText
                         }
                     }
@@ -167,7 +171,7 @@ fun TranslateScreen(
 
             // Remote recognition
             if (userSettings.recognitionUrl.isNotBlank()) {
-                launch(Dispatchers.IO) {
+                launch(IO) {
                     val sentences = getRemoteCandidates(
                         context = context,
                         wavFilePath = transcript.wavFilePath,
@@ -176,7 +180,7 @@ fun TranslateScreen(
                         originalText = transcript.recognizedText,
                         currentText = transcript.modifiedText
                     )
-                    withContext(Dispatchers.Main) {
+                    withContext(Main) {
                         remoteCandidates = sentences
                     }
                 }
@@ -231,7 +235,7 @@ fun TranslateScreen(
                 SimulateStreamingAsr.vad.reset()
 
                 // --- Coroutine to record audio ---
-                CoroutineScope(Dispatchers.IO).launch {
+                CoroutineScope(IO).launch {
                     Log.i(TAG, "Audio recording started")
                     val interval = 0.1 // 100ms
                     val bufferSize = (interval * sampleRateInHz).toInt()
@@ -247,7 +251,7 @@ fun TranslateScreen(
                         if (ret != null && ret > 0) {
                             val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
                             samplesChannel.send(samples)
-                            launch(Dispatchers.Main) {
+                            launch(Main) {
                                 latestAudioSamples = samples
                             }
                         }
@@ -257,7 +261,7 @@ fun TranslateScreen(
                 }
 
                 // --- Coroutine to process audio ---
-                CoroutineScope(Dispatchers.Default).launch {
+                CoroutineScope(Default).launch {
                     val fullRecordingBuffer = arrayListOf<Float>()
                     val reserveForPreviousSpeechDetectedMs = 500
                     val keep = (sampleRateInHz / 1000) * reserveForPreviousSpeechDetectedMs
@@ -296,7 +300,7 @@ fun TranslateScreen(
 
                     // Final recognition and save
                     if (isSpeechStarted && speechStartOffset != -1) {
-                        withContext(Dispatchers.Main) { isRecognizingSpeech = true }
+                        withContext(Main) { isRecognizingSpeech = true }
 
                         val endPosition = if (lastSpeechDetectedOffset != -1) {
                             min(fullRecordingBuffer.size, lastSpeechDetectedOffset + keep)
@@ -336,7 +340,7 @@ fun TranslateScreen(
                                         modifiedText = result.text
                                     )
 
-                                    withContext(Dispatchers.Main) {
+                                    withContext(Main) {
                                         currentTranscript = newTranscript
                                         textInput = newTranscript.modifiedText
 
@@ -356,7 +360,7 @@ fun TranslateScreen(
                                 stream.release()
                             }
                         }
-                        withContext(Dispatchers.Main) { isRecognizingSpeech = false }
+                        withContext(Main) { isRecognizingSpeech = false }
                     }
                 }
             }
@@ -383,8 +387,27 @@ fun TranslateScreen(
                 onClick = {
                     val utteranceId = UUID.randomUUID().toString()
                     tts?.speak(textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+
+                    currentTranscript?.let { transcript ->
+                        val updatedTranscript = transcript.copy(modifiedText = textInput, checked = true)
+                        currentTranscript = updatedTranscript
+
+                        val file = File(transcript.wavFilePath)
+                        val filename = file.nameWithoutExtension
+
+                        coroutineScope.launch(IO) {
+                            saveJsonl(
+                                context = context,
+                                userId = userId,
+                                filename = filename,
+                                originalText = updatedTranscript.recognizedText,
+                                modifiedText = updatedTranscript.modifiedText,
+                                checked = updatedTranscript.checked
+                            )
+                        }
+                    }
                 },
-                enabled = !isTtsSpeaking && textInput.isNotEmpty()
+                enabled = !isTtsSpeaking && textInput.isNotEmpty() && currentTranscript != null
             ) {
                 Icon(Icons.Default.RecordVoiceOver, contentDescription = "Speak Text")
             }
