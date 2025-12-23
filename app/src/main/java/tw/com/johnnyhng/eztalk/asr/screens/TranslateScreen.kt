@@ -87,6 +87,7 @@ fun TranslateScreen(
     // Waveform and recognition states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
     var isRecognizingSpeech by remember { mutableStateOf(false) }
+    var speechBufferForRealtime by remember { mutableStateOf<FloatArray?>(null) }
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
@@ -198,6 +199,29 @@ fun TranslateScreen(
         }
     }
 
+    // Real-time recognition
+    LaunchedEffect(speechBufferForRealtime) {
+        speechBufferForRealtime?.let { audioData ->
+            if (audioData.isNotEmpty() && isStarted) { // only run if recording
+                launch(IO) {
+                    val stream = SimulateStreamingAsr.recognizer.createStream()
+                    try {
+                        stream.acceptWaveform(audioData, sampleRateInHz)
+                        SimulateStreamingAsr.recognizer.decode(stream)
+                        val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                        if (isStarted) { // Check again in case user stopped while recognizing
+                            withContext(Main) {
+                                textInput = result.text
+                            }
+                        }
+                    } finally {
+                        stream.release()
+                    }
+                }
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             stopAudio()
@@ -278,6 +302,16 @@ fun TranslateScreen(
                     var speechStartOffset = -1
                     var lastSpeechDetectedOffset = -1
                     var isSpeechStarted = false
+                    var lastRealtimeRecognitionTime = 0L
+                    val realtimeRecognitionInterval = 500L // ms
+
+                    // Reset UI for new recording
+                    withContext(Main) {
+                        textInput = ""
+                        currentTranscript = null
+                        localCandidate = null
+                        remoteCandidates = emptyList()
+                    }
 
                     var done = false
                     while (!done) {
@@ -292,6 +326,17 @@ fun TranslateScreen(
                             if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
                                 isSpeechStarted = true
                                 speechStartOffset = max(0, currentBufferPosition - keep)
+                            }
+
+                            if (isSpeechStarted) {
+                                val now = System.currentTimeMillis()
+                                if (now - lastRealtimeRecognitionTime > realtimeRecognitionInterval) {
+                                    lastRealtimeRecognitionTime = now
+                                    val audioForRealtime = fullRecordingBuffer.subList(speechStartOffset, fullRecordingBuffer.size).toFloatArray()
+                                    withContext(Main) {
+                                        speechBufferForRealtime = audioForRealtime
+                                    }
+                                }
                             }
                         }
 
@@ -389,7 +434,7 @@ fun TranslateScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            textStyle = TextStyle(fontSize = 25.sp, textAlign = TextAlign.Center)
+            textStyle = TextStyle(fontSize = 20.sp, textAlign = TextAlign.Center)
         )
 
         HomeButtonRow(
