@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -387,7 +388,8 @@ fun TranslateScreen(
             label = { Text("Recognized Text") },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            textStyle = TextStyle(fontSize = 25.sp, textAlign = TextAlign.Center)
         )
 
         HomeButtonRow(
@@ -440,8 +442,8 @@ fun TranslateScreen(
                     }
                 }
             },
-            isTtsButtonEnabled = !isTtsSpeaking && textInput.isNotEmpty() && currentTranscript != null,
-            isPlaybackButtonEnabled = !isStarted && currentTranscript?.wavFilePath?.isNotEmpty() == true,
+            isTtsButtonEnabled = !isStarted && !isTtsSpeaking && textInput.isNotEmpty() && currentTranscript != null,
+            isPlaybackButtonEnabled = !isStarted && !isTtsSpeaking && currentTranscript?.wavFilePath?.isNotEmpty() == true,
             isPlaying = currentlyPlaying == currentTranscript?.wavFilePath,
             isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
             isAsrModelLoading = isAsrModelLoading
