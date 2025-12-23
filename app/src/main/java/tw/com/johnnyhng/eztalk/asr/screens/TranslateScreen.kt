@@ -33,11 +33,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.Default
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -145,47 +145,52 @@ fun TranslateScreen(
     LaunchedEffect(currentTranscript) {
         val transcript = currentTranscript
         if (transcript != null && transcript.wavFilePath.isNotEmpty()) {
-            isFetchingCandidates = true
-            localCandidate = null
-            remoteCandidates = emptyList()
+            try {
+                isFetchingCandidates = true
+                localCandidate = null
+                remoteCandidates = emptyList()
 
-            // Local re-recognition
-            launch(IO) {
-                try {
-                    val audioData = readWavFileToFloatArray(transcript.wavFilePath)
-                    if (audioData != null) {
-                        val recognizer = SimulateStreamingAsr.recognizer
-                        val stream = recognizer.createStream()
-                        stream.acceptWaveform(audioData, sampleRateInHz)
-                        recognizer.decode(stream)
-                        val localResultText = recognizer.getResult(stream).text
-                        stream.release()
-                        withContext(Main) {
-                            localCandidate = localResultText
+                coroutineScope {
+                    // Local re-recognition
+                    launch(IO) {
+                        try {
+                            val audioData = readWavFileToFloatArray(transcript.wavFilePath)
+                            if (audioData != null) {
+                                val recognizer = SimulateStreamingAsr.recognizer
+                                val stream = recognizer.createStream()
+                                stream.acceptWaveform(audioData, sampleRateInHz)
+                                recognizer.decode(stream)
+                                val localResultText = recognizer.getResult(stream).text
+                                stream.release()
+                                withContext(Main) {
+                                    localCandidate = localResultText
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Local re-recognition failed", e)
                         }
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Local re-recognition failed", e)
-                }
-            }
 
-            // Remote recognition
-            if (userSettings.recognitionUrl.isNotBlank()) {
-                launch(IO) {
-                    val sentences = getRemoteCandidates(
-                        context = context,
-                        wavFilePath = transcript.wavFilePath,
-                        userId = userSettings.userId,
-                        recognitionUrl = userSettings.recognitionUrl,
-                        originalText = transcript.recognizedText,
-                        currentText = transcript.modifiedText
-                    )
-                    withContext(Main) {
-                        remoteCandidates = sentences
+                    // Remote recognition
+                    if (userSettings.recognitionUrl.isNotBlank()) {
+                        launch(IO) {
+                            val sentences = getRemoteCandidates(
+                                context = context,
+                                wavFilePath = transcript.wavFilePath,
+                                userId = userSettings.userId,
+                                recognitionUrl = userSettings.recognitionUrl,
+                                originalText = transcript.recognizedText,
+                                currentText = transcript.modifiedText
+                            )
+                            withContext(Main) {
+                                remoteCandidates = sentences
+                            }
+                        }
                     }
                 }
+            } finally {
+                isFetchingCandidates = false
             }
-            isFetchingCandidates = false
         }
     }
 
