@@ -14,7 +14,7 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -27,7 +27,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
@@ -367,16 +369,6 @@ fun TranslateScreen(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (isStarted) {
-            WaveformDisplay(
-                samples = latestAudioSamples,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .padding(vertical = 8.dp)
-            )
-        }
-
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -437,34 +429,43 @@ fun TranslateScreen(
             isAsrModelLoading = isAsrModelLoading
         )
 
-        if (isRecognizingSpeech) {
-            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+        if (isStarted) {
+            WaveformDisplay(
+                samples = latestAudioSamples,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .padding(vertical = 8.dp)
+            )
         }
 
         val candidates = remember(currentTranscript, localCandidate, remoteCandidates) {
             (listOfNotNull(
                 currentTranscript?.recognizedText,
                 localCandidate
-            ) + remoteCandidates).distinct().filter { it.isNotBlank() && it != textInput }
-        }
-
-        if (isFetchingCandidates) {
-            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+            ) + remoteCandidates).distinct().filter { it.isNotBlank() }
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp)
+            modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            items(candidates) { candidate ->
+            itemsIndexed(candidates) { index, candidate ->
                 Text(
-                    text = candidate,
+                    text = "${index + 1}: $candidate",
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { textInput = candidate }
-                        .padding(vertical = 12.dp)
+                        .padding(vertical = 12.dp),
+                    textAlign = TextAlign.Center,
+                    fontSize = 20.sp
                 )
             }
+        }
+
+        if (isRecognizingSpeech || isFetchingCandidates) {
+            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
         }
     }
 }
