@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
@@ -378,62 +381,14 @@ fun TranslateScreen(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = textInput,
-                onValueChange = { textInput = it },
-                label = { Text("Recognized Text") },
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(
-                onClick = {
-                    val utteranceId = UUID.randomUUID().toString()
-                    tts?.speak(textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
-
-                    currentTranscript?.let { transcript ->
-                        val updatedTranscript = transcript.copy(modifiedText = textInput, checked = true)
-                        currentTranscript = updatedTranscript
-
-                        val file = File(transcript.wavFilePath)
-                        val filename = file.nameWithoutExtension
-
-                        coroutineScope.launch(IO) {
-                            saveJsonl(
-                                context = context,
-                                userId = userId,
-                                filename = filename,
-                                originalText = updatedTranscript.recognizedText,
-                                modifiedText = updatedTranscript.modifiedText,
-                                checked = updatedTranscript.checked
-                            )
-                        }
-                    }
-                },
-                enabled = !isTtsSpeaking && textInput.isNotEmpty() && currentTranscript != null
-            ) {
-                Icon(Icons.Default.RecordVoiceOver, contentDescription = "Speak Text")
-            }
-            IconButton(
-                onClick = {
-                    currentTranscript?.wavFilePath?.let { path ->
-                        if (currentlyPlaying == path) {
-                            MediaController.stop()
-                        } else {
-                            MediaController.play(path)
-                        }
-                    }
-                },
-                enabled = !isStarted && currentTranscript?.wavFilePath?.isNotEmpty() == true
-            ) {
-                Icon(
-                    imageVector = if (currentlyPlaying == currentTranscript?.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = if (currentlyPlaying == currentTranscript?.wavFilePath) "Stop" else "Play"
-                )
-            }
-        }
+        OutlinedTextField(
+            value = textInput,
+            onValueChange = { textInput = it },
+            label = { Text("Recognized Text") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
 
         HomeButtonRow(
             modifier = Modifier.padding(vertical = 16.dp),
@@ -453,6 +408,41 @@ fun TranslateScreen(
                 localCandidate = null
                 remoteCandidates = emptyList()
             },
+            onTtsButtonClick = {
+                val utteranceId = UUID.randomUUID().toString()
+                tts?.speak(textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+
+                currentTranscript?.let { transcript ->
+                    val updatedTranscript = transcript.copy(modifiedText = textInput, checked = true)
+                    currentTranscript = updatedTranscript
+
+                    val file = File(transcript.wavFilePath)
+                    val filename = file.nameWithoutExtension
+
+                    coroutineScope.launch(IO) {
+                        saveJsonl(
+                            context = context,
+                            userId = userId,
+                            filename = filename,
+                            originalText = updatedTranscript.recognizedText,
+                            modifiedText = updatedTranscript.modifiedText,
+                            checked = updatedTranscript.checked
+                        )
+                    }
+                }
+            },
+            onPlaybackButtonClick = {
+                currentTranscript?.wavFilePath?.let { path ->
+                    if (currentlyPlaying == path) {
+                        MediaController.stop()
+                    } else {
+                        MediaController.play(path)
+                    }
+                }
+            },
+            isTtsButtonEnabled = !isTtsSpeaking && textInput.isNotEmpty() && currentTranscript != null,
+            isPlaybackButtonEnabled = !isStarted && currentTranscript?.wavFilePath?.isNotEmpty() == true,
+            isPlaying = currentlyPlaying == currentTranscript?.wavFilePath,
             isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
             isAsrModelLoading = isAsrModelLoading
         )
@@ -475,7 +465,9 @@ fun TranslateScreen(
         }
 
         LazyColumn(
-            modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -513,32 +505,72 @@ private fun HomeButtonRow(
     onRecordingButtonClick: () -> Unit,
     onCopyButtonClick: () -> Unit,
     onClearButtonClick: () -> Unit,
+    onTtsButtonClick: () -> Unit,
+    onPlaybackButtonClick: () -> Unit,
     isPlaybackActive: Boolean,
+    isTtsButtonEnabled: Boolean,
+    isPlaybackButtonEnabled: Boolean,
+    isPlaying: Boolean,
     isAsrModelLoading: Boolean,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Button(
+        IconButton(
+            onClick = onPlaybackButtonClick,
+            enabled = isPlaybackButtonEnabled
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+                contentDescription = if (isPlaying) "Stop" else "Play",
+                modifier = Modifier.size(36.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(24.dp))
+        IconButton(
+            onClick = onTtsButtonClick,
+            enabled = isTtsButtonEnabled
+        ) {
+            Icon(
+                imageVector = Icons.Default.RecordVoiceOver,
+                contentDescription = "Speak Text",
+                modifier = Modifier.size(36.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(24.dp))
+        IconButton(
             onClick = onRecordingButtonClick,
             enabled = !isPlaybackActive && !isAsrModelLoading
         ) {
-            Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
+            Icon(
+                imageVector = if (isStarted) Icons.Filled.Stop else Icons.Filled.Mic,
+                contentDescription = stringResource(if (isStarted) R.string.stop else R.string.start),
+                modifier = Modifier.size(36.dp)
+            )
         }
         Spacer(modifier = Modifier.width(24.dp))
-        Button(
+        IconButton(
             onClick = onCopyButtonClick,
             enabled = !isStarted && !isPlaybackActive
         ) {
-            Text(text = stringResource(id = R.string.copy))
+            Icon(
+                imageVector = Icons.Filled.ContentCopy,
+                contentDescription = stringResource(id = R.string.copy),
+                modifier = Modifier.size(36.dp)
+            )
         }
         Spacer(modifier = Modifier.width(24.dp))
-        Button(
+        IconButton(
             onClick = onClearButtonClick,
             enabled = !isStarted && !isPlaybackActive
         ) {
-            Text(text = stringResource(id = R.string.clear))
+            Icon(
+                imageVector = Icons.Filled.Clear,
+                contentDescription = stringResource(id = R.string.clear),
+                modifier = Modifier.size(36.dp)
+            )
         }
     }
 }
