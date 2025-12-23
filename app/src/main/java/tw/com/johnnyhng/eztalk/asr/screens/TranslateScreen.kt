@@ -40,7 +40,6 @@ import tw.com.johnnyhng.eztalk.asr.widgets.EditRecognitionDialog
 import tw.com.johnnyhng.eztalk.asr.widgets.EditableDropdown
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -88,11 +87,9 @@ fun TranslateScreen(
     var isFetchingCandidates by remember { mutableStateOf(false) }
     var transcriptToEditInDialog by remember { mutableStateOf<Pair<Int, Transcript>?>(null) }
 
-    // Waveform and countdown states
+    // Waveform and recognition states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
     var isRecognizingSpeech by remember { mutableStateOf(false) }
-    var countdownProgress by remember { mutableFloatStateOf(0f) }
-
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
@@ -240,7 +237,7 @@ fun TranslateScreen(
                 SimulateStreamingAsr.vad.reset()
 
                 // --- Coroutine to record audio ---
-                CoroutineScope(Dispatchers.IO).launch     {
+                CoroutineScope(Dispatchers.IO).launch {
                     Log.i(TAG, "Audio recording started")
                     val interval = 0.1 // 100ms
                     val bufferSize = (interval * sampleRateInHz).toInt()
@@ -266,189 +263,78 @@ fun TranslateScreen(
                 }
 
                 // --- Coroutine to process audio ---
-                @OptIn(DelicateCoroutinesApi::class)
                 CoroutineScope(Dispatchers.Default).launch {
-                    val lingerMs = userSettings.lingerMs
-                    val partialIntervalMs = userSettings.partialIntervalMs
-                    val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
-
-                    var buffer = arrayListOf<Float>()
+                    val fullRecordingBuffer = arrayListOf<Float>()
                     val reserveForPreviousSpeechDetectedMs = 500
                     val keep = (sampleRateInHz / 1000) * reserveForPreviousSpeechDetectedMs
-                    var offset = 0
-                    val windowSize = 512
-                    var startOffset = 0
-                    var lastSpeechDetectedOffset = 0
+
+                    var speechStartOffset = -1
+                    var lastSpeechDetectedOffset = -1
                     var isSpeechStarted = false
-                    var startTime = System.currentTimeMillis()
-                    var lastText: String
-                    var added = false
-
-                    val utteranceSegments = mutableListOf<FloatArray>()
-                    var lastVadPacketAt = 0L
-
-                    val fullRecordingBuffer = arrayListOf<Float>()
 
                     var done = false
                     while (!done) {
                         val s = samplesChannel.tryReceive().getOrNull()
                         val flushRequest = flushChannel.tryReceive().getOrNull()
 
-                        if (s == null) {
-                            if (flushRequest != null || (samplesChannel.isClosedForReceive && buffer.isEmpty())) {
-                                done =
-                                    true // Stop signal or closed channel, prepare for final processing
-                            } else {
-                                delay(10) // No data, wait briefly
-                                // continue
-                            }
-                        } else {
-                            buffer.addAll(s.toList())
-                        }
+                        if (s != null) {
+                            val currentBufferPosition = fullRecordingBuffer.size
+                            fullRecordingBuffer.addAll(s.toList())
+                            SimulateStreamingAsr.vad.acceptWaveform(s)
 
-                        while (offset + windowSize < buffer.size) {
-                            val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
-                            SimulateStreamingAsr.vad.acceptWaveform(chunk)
-                            offset += windowSize
                             if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
                                 isSpeechStarted = true
-                                launch(Dispatchers.Main) { isRecognizingSpeech = true }
-                                startTime = System.currentTimeMillis()
-
-                                if (!saveVadSegmentsOnly) {
-                                    startOffset = max(0, offset - windowSize - keep)
-                                }
-                            }
-                        }
-
-                        if (isSpeechStarted) {
-                            val elapsed = System.currentTimeMillis() - startTime
-                            if (elapsed > partialIntervalMs) {
-                                val stream = SimulateStreamingAsr.recognizer.createStream()
-                                try {
-                                    stream.acceptWaveform(
-                                        buffer.subList(0, offset).toFloatArray(),
-                                        sampleRateInHz
-                                    )
-                                    SimulateStreamingAsr.recognizer.decode(stream)
-                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                    lastText = result.text
-
-                                    if (lastText.isNotBlank()) {
-                                        if (!added || resultList.isEmpty()) {
-                                            resultList.add(
-                                                Transcript(
-                                                    recognizedText = lastText,
-                                                    wavFilePath = ""
-                                                )
-                                            )
-                                            added = true
-                                        } else {
-                                            val lastItem = resultList.last()
-                                            resultList[resultList.size - 1] =
-                                                lastItem.copy(
-                                                    recognizedText = lastText,
-                                                    modifiedText = lastText
-                                                )
-                                        }
-                                        coroutineScope.launch {
-                                            lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                                        }
-                                    }
-                                } finally {
-                                    stream.release()
-                                }
-                                startTime = System.currentTimeMillis()
+                                speechStartOffset = max(0, currentBufferPosition - keep)
                             }
                         }
 
                         while (!SimulateStreamingAsr.vad.empty()) {
-                            if (!saveVadSegmentsOnly) {
-                                lastSpeechDetectedOffset = offset
-                            }
-                            val seg = SimulateStreamingAsr.vad.front().samples
+                            lastSpeechDetectedOffset = fullRecordingBuffer.size
                             SimulateStreamingAsr.vad.pop()
-                            utteranceSegments.add(seg)
-                            lastVadPacketAt = System.currentTimeMillis()
                         }
 
-                        if (utteranceSegments.isNotEmpty()) {
-                            val since = System.currentTimeMillis() - lastVadPacketAt
-                            val progress = (since.toFloat() / lingerMs).coerceIn(0f, 1f)
-                            launch(Dispatchers.Main) { countdownProgress = progress }
-                            // Process if silence duration is met OR if it's the final flush
-                            if (since >= lingerMs || (done && utteranceSegments.isNotEmpty()) || !isStarted) {
-                                val totalSize = utteranceSegments.sumOf { it.size }
-                                val concatenated = FloatArray(totalSize)
-                                var currentPos = 0
-                                for (segment in utteranceSegments) {
-                                    System.arraycopy(
-                                        segment, 0, concatenated, currentPos, segment.size
-                                    )
-                                    currentPos += segment.size
-                                }
-                                val utteranceForRecognition = concatenated
+                        if (flushRequest != null || (samplesChannel.isClosedForReceive && s == null)) {
+                            done = true
+                        } else if (s == null) {
+                            delay(10)
+                        }
+                    }
 
-                                val audioToSave = if (saveVadSegmentsOnly) {
-                                    utteranceForRecognition
-                                } else {
-                                    lastSpeechDetectedOffset = min(
-                                        buffer.size - 1,
-                                        lastSpeechDetectedOffset + keep
-                                    )
-                                    fullRecordingBuffer.clear()
-                                    fullRecordingBuffer.addAll(
-                                        buffer.subList(
-                                            startOffset,
-                                            lastSpeechDetectedOffset
-                                        )
-                                    )
-                                    fullRecordingBuffer.toFloatArray()
-                                }
+                    // Final recognition and save
+                    if (isSpeechStarted && speechStartOffset != -1) {
+                        withContext(Dispatchers.Main) { isRecognizingSpeech = true }
 
-                                val stream = SimulateStreamingAsr.recognizer.createStream()
-                                try {
-                                    stream.acceptWaveform(
-                                        utteranceForRecognition,
-                                        sampleRateInHz
-                                    )
-                                    SimulateStreamingAsr.recognizer.decode(stream)
-                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                        val endPosition = if (lastSpeechDetectedOffset != -1) {
+                            min(fullRecordingBuffer.size, lastSpeechDetectedOffset + keep)
+                        } else {
+                            fullRecordingBuffer.size
+                        }
 
-                                    val timestamp = SimpleDateFormat(
-                                        "yyyyMMdd-HHmmss",
-                                        Locale.getDefault()
-                                    ).format(
-                                        Date()
-                                    )
+                        val audioToRecognize = if (speechStartOffset < endPosition) {
+                            fullRecordingBuffer.subList(speechStartOffset, endPosition).toFloatArray()
+                        } else {
+                            FloatArray(0)
+                        }
+
+                        if (audioToRecognize.isNotEmpty()) {
+                            val stream = SimulateStreamingAsr.recognizer.createStream()
+                            try {
+                                stream.acceptWaveform(audioToRecognize, sampleRateInHz)
+                                SimulateStreamingAsr.recognizer.decode(stream)
+                                val result = SimulateStreamingAsr.recognizer.getResult(stream)
+
+                                if (result.text.isNotBlank()) {
+                                    val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                                     val filename = "${timestamp}.app"
 
-                                    // Save the WAV file
                                     val wavPath = saveAsWav(
                                         context = context,
-                                        samples = audioToSave,
+                                        samples = audioToRecognize,
                                         sampleRate = sampleRateInHz,
                                         numChannels = 1,
                                         userId = userId,
                                         filename = filename
                                     )
-
-                                    if (wavPath != null) {
-                                        // Save the initial JSONL entry
-                                        saveJsonl(
-                                            context = context,
-                                            userId = userId,
-                                            filename = filename,
-                                            originalText = result.text,
-                                            modifiedText = result.text, // Initially, modified is same as original
-                                            checked = false
-                                        )
-
-                                        // Enqueue for background recognition
-                                        if (userSettings.recognitionUrl.isNotBlank()) {
-                                            recognitionQueue.trySend(wavPath)
-                                        }
-                                    }
 
                                     val newTranscript = Transcript(
                                         recognizedText = result.text,
@@ -456,53 +342,35 @@ fun TranslateScreen(
                                         modifiedText = result.text
                                     )
 
-                                    if (result.text.isNotBlank()) {
-                                        if (added && resultList.isNotEmpty()) {
-                                            resultList[resultList.size - 1] = newTranscript
-                                        } else {
-                                            resultList.add(newTranscript)
+                                    withContext(Dispatchers.Main) {
+                                        resultList.add(newTranscript)
+                                        if (wavPath != null) {
+                                            saveJsonl(
+                                                context = context,
+                                                userId = userId,
+                                                filename = filename,
+                                                originalText = newTranscript.recognizedText,
+                                                modifiedText = newTranscript.modifiedText,
+                                                checked = false
+                                            )
+
+                                            if (userSettings.recognitionUrl.isNotBlank()) {
+                                                //recognitionQueue.trySend(wavPath)
+                                            }
+                                        }
+                                        feedbackRecords.add(newTranscript)
+                                        coroutineScope.launch {
+                                            if (resultList.isNotEmpty()) {
+                                                lazyColumnListState.animateScrollToItem(resultList.size - 1)
+                                            }
                                         }
                                     }
-
-                                    // Add the completed record to our feedback list
-                                    if (result.text.isNotBlank() && resultList.isNotEmpty()) {
-                                        feedbackRecords.add(resultList.last())
-                                    }
-
-                                    coroutineScope.launch {
-                                        if (resultList.isNotEmpty()) {
-                                            lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                                        }
-                                    }
-                                } finally {
-                                    stream.release()
                                 }
-                                utteranceSegments.clear()
-                                fullRecordingBuffer.clear()
-                                isSpeechStarted = false
-                                buffer = arrayListOf()
-                                offset = 0
-                                startOffset = 0
-                                lastSpeechDetectedOffset = 0
-                                added = false
-                                launch(Dispatchers.Main) {
-                                    isRecognizingSpeech = false
-                                    countdownProgress = 0f
-                                }
-                            }
-                        } else {
-                            if (isRecognizingSpeech) {
-                                val sinceLastPacket =
-                                    System.currentTimeMillis() - lastVadPacketAt
-                                if (lastVadPacketAt != 0L && sinceLastPacket > lingerMs) {
-                                    launch(Dispatchers.Main) { countdownProgress = 0f }
-                                }
+                            } finally {
+                                stream.release()
                             }
                         }
-                    }
-                    launch(Dispatchers.Main) {
-                        isRecognizingSpeech = false
-                        countdownProgress = 0f
+                        withContext(Dispatchers.Main) { isRecognizingSpeech = false }
                     }
                 }
             }
@@ -510,6 +378,7 @@ fun TranslateScreen(
             stopAudio()
         }
     }
+
 
     // Function to handle TTS and transcript updates
     fun handleTtsClick(index: Int, text: String) {
@@ -556,8 +425,7 @@ fun TranslateScreen(
                             resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
                                 .joinToString(separator = "\n")
                         clipboardManager.setText(AnnotatedString(s))
-                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT)
-                            .show()
+                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(context, "Nothing to copy", Toast.LENGTH_SHORT).show()
                     }
@@ -582,6 +450,16 @@ fun TranslateScreen(
                         .height(100.dp)
                         .padding(vertical = 8.dp)
                 )
+            }
+            if (isRecognizingSpeech) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
 
             LazyColumn(
@@ -700,13 +578,6 @@ fun TranslateScreen(
                                 text = "${index + 1}: ${result.modifiedText}",
                                 modifier = Modifier.weight(1f)
                             )
-                            if (index == resultList.size - 1 && isRecognizingSpeech && countdownProgress > 0) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                CircularProgressIndicator(
-                                    progress = countdownProgress,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
 
                             if (result.wavFilePath.isNotEmpty()) {
                                 // Talk Button -> IconButton
