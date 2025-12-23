@@ -14,10 +14,8 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
@@ -32,13 +30,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
-import tw.com.johnnyhng.eztalk.asr.TAG
-import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
-import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
-import tw.com.johnnyhng.eztalk.asr.widgets.EditRecognitionDialog
-import tw.com.johnnyhng.eztalk.asr.widgets.EditableDropdown
-import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -46,24 +37,23 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
+import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
 import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
 import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
-import java.io.File
+import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
+import java.util.*
 import kotlin.math.max
 import kotlin.math.min
 
 private var audioRecord: AudioRecord? = null
 private const val sampleRateInHz = 16000
-
-// This dynamic array will keep records for future feedback implementation.
-private val feedbackRecords = mutableListOf<Transcript>()
 
 @Composable
 fun TranslateScreen(
@@ -76,16 +66,13 @@ fun TranslateScreen(
 
     // UI state
     var isStarted by remember { mutableStateOf(false) }
-    val resultList = remember { mutableStateListOf<Transcript>() }
-    val lazyColumnListState = rememberLazyListState()
+    var textInput by remember { mutableStateOf("") }
+    var currentTranscript by remember { mutableStateOf<Transcript?>(null) }
 
-    // State for inline editing
-    var isEditing by remember { mutableStateOf(false) }
-    var editingIndex by remember { mutableIntStateOf(-1) }
-    var editingText by remember { mutableStateOf("") }
+    // Candidate states
     var localCandidate by remember { mutableStateOf<String?>(null) }
+    var remoteCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var isFetchingCandidates by remember { mutableStateOf(false) }
-    var transcriptToEditInDialog by remember { mutableStateOf<Pair<Int, Transcript>?>(null) }
 
     // Waveform and recognition states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
@@ -107,7 +94,6 @@ fun TranslateScreen(
 
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
-    val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
 
     // Initialize recognizer in the background
     LaunchedEffect(key1 = homeViewModel.selectedModel) {
@@ -121,46 +107,6 @@ fun TranslateScreen(
         }
         isAsrModelLoading = false
         Log.i(TAG, "ASR model initialization finished.")
-    }
-
-    // Background recognition queue processor
-    LaunchedEffect(userSettings.recognitionUrl, userSettings.userId) {
-        launch(Dispatchers.IO) {
-            for (wavPath in recognitionQueue) {
-                if (userSettings.recognitionUrl.isBlank()) continue
-
-                var transcript: Transcript? = null
-                // Switch to main thread to safely access resultList
-                withContext(Dispatchers.Main) {
-                    transcript = resultList.find { it.wavFilePath == wavPath }
-                }
-
-                transcript?.let {
-                    val sentences = getRemoteCandidates(
-                        context = context,
-                        wavFilePath = wavPath,
-                        userId = userSettings.userId,
-                        recognitionUrl = userSettings.recognitionUrl,
-                        originalText = it.recognizedText,
-                        currentText = it.modifiedText
-                    )
-
-                    if (sentences.isNotEmpty()) {
-                        withContext(Dispatchers.Main) {
-                            val index =
-                                resultList.indexOfFirst { transcript -> transcript.wavFilePath == wavPath }
-                            if (index != -1) {
-                                resultList[index] =
-                                    resultList[index].copy(remoteCandidates = sentences)
-                            }
-                        }
-                    }
-                } ?: Log.w(
-                    TAG,
-                    "Could not find transcript for wavPath: $wavPath to update remote candidates."
-                )
-            }
-        }
     }
 
     // Initialize TTS
@@ -189,6 +135,53 @@ fun TranslateScreen(
         })
     }
 
+    // Fetch candidates when a new transcript is available
+    LaunchedEffect(currentTranscript) {
+        val transcript = currentTranscript
+        if (transcript != null && transcript.wavFilePath.isNotEmpty()) {
+            isFetchingCandidates = true
+            localCandidate = null
+            remoteCandidates = emptyList()
+
+            // Local re-recognition
+            launch(Dispatchers.IO) {
+                try {
+                    val audioData = readWavFileToFloatArray(transcript.wavFilePath)
+                    if (audioData != null) {
+                        val recognizer = SimulateStreamingAsr.recognizer
+                        val stream = recognizer.createStream()
+                        stream.acceptWaveform(audioData, sampleRateInHz)
+                        recognizer.decode(stream)
+                        val localResultText = recognizer.getResult(stream).text
+                        stream.release()
+                        withContext(Dispatchers.Main) {
+                            localCandidate = localResultText
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Local re-recognition failed", e)
+                }
+            }
+
+            // Remote recognition
+            if (userSettings.recognitionUrl.isNotBlank()) {
+                launch(Dispatchers.IO) {
+                    val sentences = getRemoteCandidates(
+                        context = context,
+                        wavFilePath = transcript.wavFilePath,
+                        userId = userSettings.userId,
+                        recognitionUrl = userSettings.recognitionUrl,
+                        originalText = transcript.recognizedText,
+                        currentText = transcript.modifiedText
+                    )
+                    withContext(Dispatchers.Main) {
+                        remoteCandidates = sentences
+                    }
+                }
+            }
+            isFetchingCandidates = false
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -196,7 +189,6 @@ fun TranslateScreen(
             tts?.stop()
             tts?.shutdown()
             tts = null
-            recognitionQueue.close()
         }
     }
 
@@ -343,7 +335,9 @@ fun TranslateScreen(
                                     )
 
                                     withContext(Dispatchers.Main) {
-                                        resultList.add(newTranscript)
+                                        currentTranscript = newTranscript
+                                        textInput = newTranscript.modifiedText
+
                                         if (wavPath != null) {
                                             saveJsonl(
                                                 context = context,
@@ -353,16 +347,6 @@ fun TranslateScreen(
                                                 modifiedText = newTranscript.modifiedText,
                                                 checked = false
                                             )
-
-                                            if (userSettings.recognitionUrl.isNotBlank()) {
-                                                //recognitionQueue.trySend(wavPath)
-                                            }
-                                        }
-                                        feedbackRecords.add(newTranscript)
-                                        coroutineScope.launch {
-                                            if (resultList.isNotEmpty()) {
-                                                lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                                            }
                                         }
                                     }
                                 }
@@ -379,276 +363,108 @@ fun TranslateScreen(
         }
     }
 
-
-    // Function to handle TTS and transcript updates
-    fun handleTtsClick(index: Int, text: String) {
-        MediaController.stop() // Stop any audio playback
-        val utteranceId = UUID.randomUUID().toString()
-        tts?.speak(
-            text,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            utteranceId
-        )
-        // Update the checked status
-        val updatedItem = resultList[index].copy(modifiedText = text, checked = true)
-        resultList[index] = updatedItem
-
-        // Save the updated record to JSONL
-        val file = File(updatedItem.wavFilePath)
-        val filename = file.nameWithoutExtension
-        coroutineScope.launch(Dispatchers.IO) {
-            saveJsonl(
-                context = context,
-                userId = userId,
-                filename = filename,
-                originalText = updatedItem.recognizedText,
-                modifiedText = updatedItem.modifiedText,
-                checked = updatedItem.checked,
-                remoteCandidates = updatedItem.remoteCandidates
-            )
-        }
-    }
-
-    Box(
+    Column(
         modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.TopCenter,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(modifier = Modifier) {
-            HomeButtonRow(
-                modifier = Modifier.padding(vertical = 16.dp),
-                isStarted = isStarted,
-                onRecordingButtonClick = onRecordingButtonClick,
-                onCopyButtonClick = {
-                    if (resultList.isNotEmpty()) {
-                        val s =
-                            resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
-                                .joinToString(separator = "\n")
-                        clipboardManager.setText(AnnotatedString(s))
-                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "Nothing to copy", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onClearButtonClick = {
-                    resultList.clear()
-                    feedbackRecords.clear() // Also clear the feedback records
-                    Log.i(
-                        TAG,
-                        "Feedback records cleared. Count: ${feedbackRecords.size}"
-                    )
-                },
-                isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
-                isAsrModelLoading = isAsrModelLoading,
-                isEditing = isEditing
-            )
-            if (isStarted) {
-                WaveformDisplay(
-                    samples = latestAudioSamples,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                        .padding(vertical = 8.dp)
-                )
-            }
-            if (isRecognizingSpeech) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-
-            LazyColumn(
+        if (isStarted) {
+            WaveformDisplay(
+                samples = latestAudioSamples,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(),
-                contentPadding = PaddingValues(16.dp),
-                state = lazyColumnListState
+                    .height(100.dp)
+                    .padding(vertical = 8.dp)
+            )
+        }
+
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = textInput,
+                onValueChange = { textInput = it },
+                label = { Text("Recognized Text") },
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = {
+                    val utteranceId = UUID.randomUUID().toString()
+                    tts?.speak(textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                },
+                enabled = !isTtsSpeaking && textInput.isNotEmpty()
             ) {
-                itemsIndexed(resultList, key = { _, item -> item.hashCode() }) { index, result ->
-                    if (editingIndex == index) {
-                        // Inline editing UI
-                        val menuItems = remember(result, localCandidate) {
-                            (listOfNotNull(
-                                result.recognizedText,
-                                result.modifiedText,
-                                localCandidate
-                            ) + result.remoteCandidates).distinct()
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            EditableDropdown(
-                                value = editingText,
-                                onValueChange = { editingText = it },
-                                label = { Text("Edit") },
-                                menuItems = menuItems,
-                                isRecognizing = isFetchingCandidates,
-                                modifier = Modifier.weight(1f),
-                                startExpanded = true
-                            )
-                            IconButton(onClick = {
-                                // Reset editing state
-                                isEditing = false
-                                editingIndex = -1
-                                editingText = ""
-                            }) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Cancel Edit"
-                                )
-                            }
-                            IconButton(onClick = {
-                                handleTtsClick(index, editingText)
-
-                                // Reset editing state
-                                isEditing = false
-                                editingIndex = -1
-                                editingText = ""
-                            }) {
-                                Icon(
-                                    Icons.Default.RecordVoiceOver,
-                                    contentDescription = "Confirm Edit"
-                                )
-                            }
-                        }
-                    } else {
-                        // Normal display Row
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = !isRecognizingSpeech && !isEditing && !isStarted) {
-                                    if (userSettings.inlineEdit) {
-                                        isEditing = true
-                                        editingIndex = index
-                                        editingText = result.modifiedText
-                                        localCandidate = null // Clear old local candidate
-
-                                        if (result.wavFilePath.isNotEmpty()) {
-                                            coroutineScope.launch {
-                                                isFetchingCandidates = true
-                                                val localJob = launch(Dispatchers.IO) {
-                                                    try {
-                                                        val audioData =
-                                                            readWavFileToFloatArray(result.wavFilePath)
-                                                        if (audioData != null) {
-                                                            val recognizer =
-                                                                SimulateStreamingAsr.recognizer
-                                                            val stream =
-                                                                recognizer.createStream()
-                                                            stream.acceptWaveform(
-                                                                audioData,
-                                                                sampleRateInHz
-                                                            )
-                                                            recognizer.decode(stream)
-                                                            val localResultText =
-                                                                recognizer
-                                                                    .getResult(stream).text
-                                                            stream.release()
-                                                            withContext(Dispatchers.Main) {
-                                                                localCandidate = localResultText
-                                                            }
-                                                        }
-                                                    } catch (e: Exception) {
-                                                        Log.e(
-                                                            TAG,
-                                                            "Local re-recognition failed",
-                                                            e
-                                                        )
-                                                    }
-                                                }
-
-                                                localJob.join()
-                                                isFetchingCandidates = false
-                                            }
-                                        }
-                                    } else {
-                                        isEditing = true
-                                        transcriptToEditInDialog = index to result
-                                    }
-                                }
-                        ) {
-                            Text(
-                                text = "${index + 1}: ${result.modifiedText}",
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            if (result.wavFilePath.isNotEmpty()) {
-                                // Talk Button -> IconButton
-                                IconButton(
-                                    onClick = {
-                                        handleTtsClick(index, result.modifiedText)
-                                    },
-                                    enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.RecordVoiceOver,
-                                        contentDescription = "Talk"
-                                    )
-                                }
-
-                                // Play Button -> IconButton
-                                IconButton(
-                                    onClick = {
-                                        if (currentlyPlaying == result.wavFilePath) {
-                                            MediaController.stop()
-                                        } else {
-                                            MediaController.play(result.wavFilePath)
-                                        }
-                                    },
-                                    enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == result.wavFilePath) && !isEditing
-                                ) {
-                                    Icon(
-                                        imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                        contentDescription = if (currentlyPlaying == result.wavFilePath) "Stop" else "Play"
-                                    )
-                                }
-                            }
+                Icon(Icons.Default.RecordVoiceOver, contentDescription = "Speak Text")
+            }
+            IconButton(
+                onClick = {
+                    currentTranscript?.wavFilePath?.let { path ->
+                        if (currentlyPlaying == path) {
+                            MediaController.stop()
+                        } else {
+                            MediaController.play(path)
                         }
                     }
-                }
+                },
+                enabled = !isStarted && currentTranscript?.wavFilePath?.isNotEmpty() == true
+            ) {
+                Icon(
+                    imageVector = if (currentlyPlaying == currentTranscript?.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    contentDescription = if (currentlyPlaying == currentTranscript?.wavFilePath) "Stop" else "Play"
+                )
             }
         }
 
-        transcriptToEditInDialog?.let { (index, transcript) ->
-            EditRecognitionDialog(
-                originalText = transcript.recognizedText,
-                currentText = transcript.modifiedText,
-                wavFilePath = transcript.wavFilePath,
-                onDismiss = {
-                    transcriptToEditInDialog = null
-                    isEditing = false
-                },
-                onConfirm = { newText ->
-                    val updatedItem = transcript.copy(modifiedText = newText, checked = true)
-                    resultList[index] = updatedItem
+        HomeButtonRow(
+            modifier = Modifier.padding(vertical = 16.dp),
+            isStarted = isStarted,
+            onRecordingButtonClick = onRecordingButtonClick,
+            onCopyButtonClick = {
+                if (textInput.isNotEmpty()) {
+                    clipboardManager.setText(AnnotatedString(textInput))
+                    Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Nothing to copy", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onClearButtonClick = {
+                textInput = ""
+                currentTranscript = null
+                localCandidate = null
+                remoteCandidates = emptyList()
+            },
+            isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
+            isAsrModelLoading = isAsrModelLoading
+        )
 
-                    val file = File(updatedItem.wavFilePath)
-                    val filename = file.nameWithoutExtension
-                    coroutineScope.launch(Dispatchers.IO) {
-                        saveJsonl(
-                            context = context,
-                            userId = userId,
-                            filename = filename,
-                            originalText = updatedItem.recognizedText,
-                            modifiedText = updatedItem.modifiedText,
-                            checked = updatedItem.checked,
-                            remoteCandidates = updatedItem.remoteCandidates
-                        )
-                    }
+        if (isRecognizingSpeech) {
+            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+        }
 
-                    transcriptToEditInDialog = null
-                    isEditing = false
-                },
-                userId = userSettings.userId,
-                recognitionUrl = userSettings.recognitionUrl,
-            )
+        val candidates = remember(currentTranscript, localCandidate, remoteCandidates) {
+            (listOfNotNull(
+                currentTranscript?.recognizedText,
+                localCandidate
+            ) + remoteCandidates).distinct().filter { it.isNotBlank() && it != textInput }
+        }
+
+        if (isFetchingCandidates) {
+            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp)
+        ) {
+            items(candidates) { candidate ->
+                Text(
+                    text = candidate,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { textInput = candidate }
+                        .padding(vertical = 12.dp)
+                )
+            }
         }
     }
 }
@@ -670,7 +486,6 @@ private fun HomeButtonRow(
     onClearButtonClick: () -> Unit,
     isPlaybackActive: Boolean,
     isAsrModelLoading: Boolean,
-    isEditing: Boolean,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -678,21 +493,21 @@ private fun HomeButtonRow(
     ) {
         Button(
             onClick = onRecordingButtonClick,
-            enabled = !isPlaybackActive && !isAsrModelLoading && !isEditing
+            enabled = !isPlaybackActive && !isAsrModelLoading
         ) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
         Spacer(modifier = Modifier.width(24.dp))
         Button(
             onClick = onCopyButtonClick,
-            enabled = !isStarted && !isPlaybackActive && !isEditing
+            enabled = !isStarted && !isPlaybackActive
         ) {
             Text(text = stringResource(id = R.string.copy))
         }
         Spacer(modifier = Modifier.width(24.dp))
         Button(
             onClick = onClearButtonClick,
-            enabled = !isStarted && !isPlaybackActive && !isEditing
+            enabled = !isStarted && !isPlaybackActive
         ) {
             Text(text = stringResource(id = R.string.clear))
         }
