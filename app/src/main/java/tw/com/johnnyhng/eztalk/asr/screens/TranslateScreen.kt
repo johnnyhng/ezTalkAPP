@@ -145,7 +145,7 @@ fun TranslateScreen(
     }
 
     // Fetch candidates when a new transcript is available
-    LaunchedEffect(currentTranscript) {
+    LaunchedEffect(currentTranscript?.wavFilePath) {
         val transcript = currentTranscript
         if (transcript != null && transcript.wavFilePath.isNotEmpty()) {
             try {
