@@ -87,7 +87,6 @@ fun TranslateScreen(
     // Waveform and recognition states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
     var isRecognizingSpeech by remember { mutableStateOf(false) }
-    var speechBufferForRealtime by remember { mutableStateOf<FloatArray?>(null) }
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
@@ -195,29 +194,6 @@ fun TranslateScreen(
                 }
             } finally {
                 isFetchingCandidates = false
-            }
-        }
-    }
-
-    // Real-time recognition
-    LaunchedEffect(speechBufferForRealtime) {
-        speechBufferForRealtime?.let { audioData ->
-            if (audioData.isNotEmpty() && isStarted) { // only run if recording
-                launch(IO) {
-                    val stream = SimulateStreamingAsr.recognizer.createStream()
-                    try {
-                        stream.acceptWaveform(audioData, sampleRateInHz)
-                        SimulateStreamingAsr.recognizer.decode(stream)
-                        val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                        if (isStarted) { // Check again in case user stopped while recognizing
-                            withContext(Main) {
-                                textInput = result.text
-                            }
-                        }
-                    } finally {
-                        stream.release()
-                    }
-                }
             }
         }
     }
@@ -333,8 +309,22 @@ fun TranslateScreen(
                                 if (now - lastRealtimeRecognitionTime > realtimeRecognitionInterval) {
                                     lastRealtimeRecognitionTime = now
                                     val audioForRealtime = fullRecordingBuffer.subList(speechStartOffset, fullRecordingBuffer.size).toFloatArray()
-                                    withContext(Main) {
-                                        speechBufferForRealtime = audioForRealtime
+                                    
+                                    // Fire-and-forget recognition job
+                                    launch(IO) {
+                                        val stream = SimulateStreamingAsr.recognizer.createStream()
+                                        try {
+                                            stream.acceptWaveform(audioForRealtime, sampleRateInHz)
+                                            SimulateStreamingAsr.recognizer.decode(stream)
+                                            val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                            if (isStarted) { // check user hasn't stopped
+                                                withContext(Main) {
+                                                    textInput = result.text
+                                                }
+                                            }
+                                        } finally {
+                                            stream.release() 
+                                        }
                                     }
                                 }
                             }
