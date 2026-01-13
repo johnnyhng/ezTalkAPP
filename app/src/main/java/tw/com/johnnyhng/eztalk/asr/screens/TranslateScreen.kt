@@ -463,7 +463,8 @@ fun TranslateScreen(
                             filename = filename,
                             originalText = updatedTranscript.recognizedText,
                             modifiedText = updatedTranscript.modifiedText,
-                            checked = updatedTranscript.checked
+                            checked = updatedTranscript.checked,
+                            remoteCandidates = updatedTranscript.remoteCandidates
                         )
                     }
                 }
