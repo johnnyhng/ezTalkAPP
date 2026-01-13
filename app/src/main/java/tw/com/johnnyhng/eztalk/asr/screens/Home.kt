@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,6 +53,7 @@ import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
 import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
+import tw.com.johnnyhng.eztalk.asr.utils.deleteTranscriptFiles
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -736,6 +738,32 @@ fun HomeScreen(
                                     Icon(
                                         imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
                                         contentDescription = if (currentlyPlaying == result.wavFilePath) "Stop" else "Play"
+                                    )
+                                }
+
+                                // Delete Button
+                                IconButton(
+                                    onClick = {
+                                        if (result.wavFilePath.isNotEmpty()) {
+                                            val deleted = deleteTranscriptFiles(result.wavFilePath)
+                                            if (deleted) {
+                                                // Remove from resultList
+                                                val removedTranscript = resultList.removeAt(index)
+                                                // Also remove from feedbackRecords
+                                                feedbackRecords.remove(removedTranscript)
+                                                Toast.makeText(context, R.string.file_deleted_successfully, Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, R.string.file_deletion_failed, Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            Toast.makeText(context, R.string.no_file_to_delete, Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    enabled = !isStarted && !isTtsSpeaking && currentlyPlaying == null && !isEditing
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete"
                                     )
                                 }
                             }

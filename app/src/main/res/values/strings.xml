@@ -49,4 +49,7 @@
     <string name="no_remote_models_found">No remote models found.</string>
     <string name="download">Download</string>
     <string name="close">Close</string>
+    <string name="file_deleted_successfully">File deleted successfully</string>
+    <string name="file_deletion_failed">Failed to delete file</string>
+    <string name="no_file_to_delete">No file associated with this transcript</string>
 </resources>

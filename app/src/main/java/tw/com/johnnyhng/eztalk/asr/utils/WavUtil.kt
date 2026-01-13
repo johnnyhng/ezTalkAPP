@@ -10,6 +10,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.io.path.Path
+import kotlin.io.path.deleteIfExists
 
 
 /**
@@ -205,6 +207,7 @@ private fun writeWavHeader(
  * @param path The absolute path to the WAV file.
  * @return A FloatArray containing the audio samples normalized to [-1, 1], or null on error.
  */
+
 internal fun readWavFileToFloatArray(path: String): FloatArray? {
     try {
         val file = File(path)
@@ -236,4 +239,49 @@ internal fun readWavFileToFloatArray(path: String): FloatArray? {
         Log.e(TAG, "Error reading WAV file: $path", e)
         return null
     }
+}
+
+/**
+ * Deletes a WAV file and its corresponding JSONL file given the WAV file path.
+ *
+ * @param wavFilePath The absolute path to the WAV file.
+ * @return True if both files were deleted successfully, false otherwise.
+ */
+fun deleteTranscriptFiles(wavFilePath: String): Boolean {
+    var allDeleted = true
+    val wavFile = File(wavFilePath)
+    if (wavFile.exists()) {
+        try {
+            if (wavFile.delete()) {
+                Log.i(TAG, "Successfully deleted WAV file: $wavFilePath")
+            } else {
+                Log.e(TAG, "Failed to delete WAV file: $wavFilePath")
+                allDeleted = false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting WAV file: $wavFilePath", e)
+            allDeleted = false
+        }
+    } else {
+        Log.w(TAG, "WAV file does not exist: $wavFilePath")
+    }
+
+    val jsonlFilePath = wavFilePath.replace(".wav", ".jsonl")
+    val jsonlFile = File(jsonlFilePath)
+    if (jsonlFile.exists()) {
+        try {
+            if (jsonlFile.delete()) {
+                Log.i(TAG, "Successfully deleted JSONL file: $jsonlFilePath")
+            } else {
+                Log.e(TAG, "Failed to delete JSONL file: $jsonlFilePath")
+                allDeleted = false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting JSONL file: $jsonlFilePath", e)
+            allDeleted = false
+        }
+    } else {
+        Log.w(TAG, "JSONL file does not exist: $jsonlFilePath")
+    }
+    return allDeleted
 }
