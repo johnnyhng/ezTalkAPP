@@ -336,10 +336,9 @@ fun HomeScreen(
                                         buffer.subList(0, offset).toFloatArray(),
                                         sampleRateInHz
                                     )
-                                    SimulateStreamingAsr.recognizer.decode(stream)
-                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                    lastText = if (isDataCollectMode) dataCollectText else result.text
-
+                                                                         SimulateStreamingAsr.recognizer.decode(stream)
+                                                                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                                                         lastText = result.text
                                     if (lastText.isNotBlank()) {
                                         if (!added || resultList.isEmpty()) {
                                             resultList.add(
@@ -418,66 +417,70 @@ fun HomeScreen(
                                         utteranceForRecognition,
                                         sampleRateInHz
                                     )
-                                    SimulateStreamingAsr.recognizer.decode(stream)
-                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                    val recognizedText = if (isDataCollectMode) dataCollectText else result.text
+                                     SimulateStreamingAsr.recognizer.decode(stream)
+                                     val result = SimulateStreamingAsr.recognizer.getResult(stream)
 
-                                    val timestamp = SimpleDateFormat(
-                                        "yyyyMMdd-HHmmss",
-                                        Locale.getDefault()
-                                    ).format(
-                                        Date()
-                                    )
-                                    val filename = "${timestamp}.app"
+                                     val (originalText, modifiedText) = if (isDataCollectMode) {
+                                         result.text to dataCollectText
+                                     } else {
+                                         result.text to result.text
+                                     }
 
-                                    // Save the WAV file
-                                    val wavPath = saveAsWav(
-                                        context = context,
-                                        samples = audioToSave,
-                                        sampleRate = sampleRateInHz,
-                                        numChannels = 1,
-                                        userId = userId,
-                                        filename = filename
-                                    )
+                                     val timestamp = SimpleDateFormat(
+                                         "yyyyMMdd-HHmmss",
+                                         Locale.getDefault()
+                                     ).format(
+                                         Date()
+                                     )
+                                     val filename = "${timestamp}.app"
 
-                                    if (wavPath != null) {
-                                        // Save the initial JSONL entry
-                                        saveJsonl(
-                                            context = context,
-                                            userId = userId,
-                                            filename = filename,
-                                            originalText = recognizedText,
-                                            modifiedText = recognizedText, // Initially, modified is same as original
-                                            checked = isDataCollectMode
-                                        )
+                                     // Save the WAV file
+                                     val wavPath = saveAsWav(
+                                         context = context,
+                                         samples = audioToSave,
+                                         sampleRate = sampleRateInHz,
+                                         numChannels = 1,
+                                         userId = userId,
+                                         filename = filename
+                                     )
 
-                                        // Enqueue for background recognition
-                                        if (userSettings.recognitionUrl.isNotBlank() && !isDataCollectMode) {
-                                            recognitionQueue.trySend(wavPath)
-                                        }
-                                    }
+                                     if (wavPath != null) {
+                                         // Save the initial JSONL entry
+                                         saveJsonl(
+                                             context = context,
+                                             userId = userId,
+                                             filename = filename,
+                                             originalText = originalText,
+                                             modifiedText = modifiedText,
+                                             checked = isDataCollectMode
+                                         )
 
-                                    val newTranscript = Transcript(
-                                        recognizedText = recognizedText,
-                                        wavFilePath = wavPath ?: "",
-                                        modifiedText = recognizedText,
-                                        checked = isDataCollectMode,
-                                        canCheck = !isDataCollectMode
-                                    )
+                                         // Enqueue for background recognition
+                                         if (userSettings.recognitionUrl.isNotBlank() && !isDataCollectMode) {
+                                             recognitionQueue.trySend(wavPath)
+                                         }
+                                     }
 
-                                    if (recognizedText.isNotBlank()) {
-                                        if (added && resultList.isNotEmpty()) {
+                                     val newTranscript = Transcript(
+                                         recognizedText = originalText,
+                                         wavFilePath = wavPath ?: "",
+                                         modifiedText = modifiedText,
+                                         checked = isDataCollectMode,
+                                         canCheck = !isDataCollectMode
+                                     )
+
+                                     if (modifiedText.isNotBlank()) {
+                                         if (added && resultList.isNotEmpty()) {
                                             resultList[resultList.size - 1] = newTranscript
                                         } else {
                                             resultList.add(newTranscript)
                                         }
                                     }
 
-                                    // Add the completed record to our feedback list
-                                    if (recognizedText.isNotBlank() && resultList.isNotEmpty()) {
-                                        feedbackRecords.add(resultList.last())
-                                    }
-
+                                     // Add the completed record to our feedback list
+                                     if (modifiedText.isNotBlank() && resultList.isNotEmpty()) {
+                                         feedbackRecords.add(resultList.last())
+                                     }
                                     coroutineScope.launch {
                                         if (resultList.isNotEmpty()) {
                                             lazyColumnListState.animateScrollToItem(resultList.size - 1)
