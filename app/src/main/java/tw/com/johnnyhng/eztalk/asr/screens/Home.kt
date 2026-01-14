@@ -95,6 +95,10 @@ fun HomeScreen(
     var isRecognizingSpeech by remember { mutableStateOf(false) }
     var countdownProgress by remember { mutableFloatStateOf(0f) }
 
+    // Data collect mode state
+    var isDataCollectMode by remember { mutableStateOf(false) }
+    var dataCollectText by remember { mutableStateOf("") }
+
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
@@ -132,7 +136,7 @@ fun HomeScreen(
     LaunchedEffect(userSettings.recognitionUrl, userSettings.userId) {
         launch(Dispatchers.IO) {
             for (wavPath in recognitionQueue) {
-                if (userSettings.recognitionUrl.isBlank()) continue
+                if (userSettings.recognitionUrl.isBlank() || isDataCollectMode) continue
 
                 var transcript: Transcript? = null
                 // Switch to main thread to safely access resultList
@@ -334,7 +338,7 @@ fun HomeScreen(
                                     )
                                     SimulateStreamingAsr.recognizer.decode(stream)
                                     val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                    lastText = result.text
+                                    lastText = if (isDataCollectMode) dataCollectText else result.text
 
                                     if (lastText.isNotBlank()) {
                                         if (!added || resultList.isEmpty()) {
@@ -416,6 +420,7 @@ fun HomeScreen(
                                     )
                                     SimulateStreamingAsr.recognizer.decode(stream)
                                     val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                    val recognizedText = if (isDataCollectMode) dataCollectText else result.text
 
                                     val timestamp = SimpleDateFormat(
                                         "yyyyMMdd-HHmmss",
@@ -441,24 +446,26 @@ fun HomeScreen(
                                             context = context,
                                             userId = userId,
                                             filename = filename,
-                                            originalText = result.text,
-                                            modifiedText = result.text, // Initially, modified is same as original
-                                            checked = false
+                                            originalText = recognizedText,
+                                            modifiedText = recognizedText, // Initially, modified is same as original
+                                            checked = isDataCollectMode
                                         )
 
                                         // Enqueue for background recognition
-                                        if (userSettings.recognitionUrl.isNotBlank()) {
+                                        if (userSettings.recognitionUrl.isNotBlank() && !isDataCollectMode) {
                                             recognitionQueue.trySend(wavPath)
                                         }
                                     }
 
                                     val newTranscript = Transcript(
-                                        recognizedText = result.text,
+                                        recognizedText = recognizedText,
                                         wavFilePath = wavPath ?: "",
-                                        modifiedText = result.text
+                                        modifiedText = recognizedText,
+                                        checked = isDataCollectMode,
+                                        canCheck = !isDataCollectMode
                                     )
 
-                                    if (result.text.isNotBlank()) {
+                                    if (recognizedText.isNotBlank()) {
                                         if (added && resultList.isNotEmpty()) {
                                             resultList[resultList.size - 1] = newTranscript
                                         } else {
@@ -467,7 +474,7 @@ fun HomeScreen(
                                     }
 
                                     // Add the completed record to our feedback list
-                                    if (result.text.isNotBlank() && resultList.isNotEmpty()) {
+                                    if (recognizedText.isNotBlank() && resultList.isNotEmpty()) {
                                         feedbackRecords.add(resultList.last())
                                     }
 
@@ -548,6 +555,35 @@ fun HomeScreen(
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(modifier = Modifier) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text("Data Collect Mode")
+                Switch(
+                    checked = isDataCollectMode,
+                    onCheckedChange = { isDataCollectMode = it }
+                )
+            }
+            if (isDataCollectMode) {
+                DataCollectWidget(
+                    text = dataCollectText,
+                    onTextChange = { dataCollectText = it },
+                    onTtsClick = {
+                        if (dataCollectText.isNotBlank()) {
+                            tts?.speak(
+                                dataCollectText,
+                                TextToSpeech.QUEUE_FLUSH,
+                                null,
+                                UUID.randomUUID().toString()
+                            )
+                        }
+                    }
+                )
+            }
             HomeButtonRow(
                 modifier = Modifier.padding(vertical = 16.dp),
                 isStarted = isStarted,
@@ -574,7 +610,9 @@ fun HomeScreen(
                 },
                 isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
                 isAsrModelLoading = isAsrModelLoading,
-                isEditing = isEditing
+                isEditing = isEditing,
+                isDataCollectMode = isDataCollectMode,
+                dataCollectText = dataCollectText
             )
             if (isStarted) {
                 WaveformDisplay(
@@ -647,7 +685,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable(enabled = !isRecognizingSpeech && !isEditing && !isStarted) {
+                                .clickable(enabled = !isRecognizingSpeech && !isEditing && !isStarted && result.canCheck) {
                                     if (userSettings.inlineEdit) {
                                         isEditing = true
                                         editingIndex = index
@@ -828,6 +866,8 @@ private fun HomeButtonRow(
     isPlaybackActive: Boolean,
     isAsrModelLoading: Boolean,
     isEditing: Boolean,
+    isDataCollectMode: Boolean,
+    dataCollectText: String,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -835,7 +875,7 @@ private fun HomeButtonRow(
     ) {
         Button(
             onClick = onRecordingButtonClick,
-            enabled = !isPlaybackActive && !isAsrModelLoading && !isEditing
+            enabled = !isPlaybackActive && !isAsrModelLoading && !isEditing && (!isDataCollectMode || dataCollectText.isNotBlank())
         ) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
