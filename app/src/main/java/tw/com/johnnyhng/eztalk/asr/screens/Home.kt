@@ -566,6 +566,7 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.End
             ) {
                 Text("Data Collect Mode")
+                Spacer(modifier = Modifier.width(12.dp))
                 Switch(
                     checked = isDataCollectMode,
                     onCheckedChange = { isDataCollectMode = it }
