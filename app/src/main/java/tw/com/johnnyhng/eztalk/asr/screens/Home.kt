@@ -7,10 +7,13 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,12 +21,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -33,13 +38,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
-import tw.com.johnnyhng.eztalk.asr.TAG
-import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
-import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
-import tw.com.johnnyhng.eztalk.asr.widgets.EditRecognitionDialog
-import tw.com.johnnyhng.eztalk.asr.widgets.EditableDropdown
-import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -48,17 +46,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
+import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
+import tw.com.johnnyhng.eztalk.asr.utils.deleteTranscriptFiles
 import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
 import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
-import tw.com.johnnyhng.eztalk.asr.utils.deleteTranscriptFiles
+import tw.com.johnnyhng.eztalk.asr.widgets.EditRecognitionDialog
+import tw.com.johnnyhng.eztalk.asr.widgets.EditableDropdown
+import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
+import java.util.*
 import kotlin.math.max
 import kotlin.math.min
 
@@ -99,10 +102,63 @@ fun HomeScreen(
     var isDataCollectMode by remember { mutableStateOf(false) }
     var dataCollectText by remember { mutableStateOf("") }
 
+    // Sequence mode state
+    var isSequenceMode by rememberSaveable { mutableStateOf(false) }
+    val textQueue = rememberSaveable(saver = listSaver(
+        save = { it.toList() },
+        restore = { it.toMutableStateList() }
+    )) { mutableStateListOf<String>() }
+    var currentQueueIndex by rememberSaveable { mutableIntStateOf(-1) }
+    var lastUserId by rememberSaveable { mutableStateOf<String?>(null) }
+
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
     val userId = userSettings.userId
+
+    // Effect to clear queue when user changes
+    LaunchedEffect(userId) {
+        if (lastUserId != null && lastUserId != userId) {
+            textQueue.clear()
+            currentQueueIndex = -1
+            isSequenceMode = false
+            dataCollectText = ""
+        }
+        lastUserId = userId
+    }
+
+
+    // File picker launcher
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(it)?.use { inputStream ->
+                        val lines = inputStream.bufferedReader().readLines()
+                        withContext(Dispatchers.Main) {
+                            textQueue.clear()
+                            textQueue.addAll(lines)
+                            currentQueueIndex = if (textQueue.isNotEmpty()) 0 else -1
+                            if (currentQueueIndex != -1) {
+                                dataCollectText = textQueue[currentQueueIndex]
+                                isSequenceMode = true
+                            } else {
+                                isSequenceMode = false
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error reading file: ", e)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Error reading file", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
 
     // Playback state
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
@@ -246,7 +302,7 @@ fun HomeScreen(
                 SimulateStreamingAsr.vad.reset()
 
                 // --- Coroutine to record audio ---
-                CoroutineScope(Dispatchers.IO).launch     {
+                CoroutineScope(Dispatchers.IO).launch {
                     Log.i(TAG, "Audio recording started")
                     val interval = 0.1 // 100ms
                     val bufferSize = (interval * sampleRateInHz).toInt()
@@ -336,9 +392,10 @@ fun HomeScreen(
                                         buffer.subList(0, offset).toFloatArray(),
                                         sampleRateInHz
                                     )
-                                                                         SimulateStreamingAsr.recognizer.decode(stream)
-                                                                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                                                         lastText = result.text
+                                    SimulateStreamingAsr.recognizer.decode(stream)
+                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                    lastText = result.text
+
                                     if (lastText.isNotBlank()) {
                                         if (!added || resultList.isEmpty()) {
                                             resultList.add(
@@ -417,70 +474,69 @@ fun HomeScreen(
                                         utteranceForRecognition,
                                         sampleRateInHz
                                     )
-                                     SimulateStreamingAsr.recognizer.decode(stream)
-                                     val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                    SimulateStreamingAsr.recognizer.decode(stream)
+                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
 
-                                     val (originalText, modifiedText) = if (isDataCollectMode) {
-                                         result.text to dataCollectText
-                                     } else {
-                                         result.text to result.text
-                                     }
+                                    val originalText = result.text
+                                    val modifiedText =
+                                        if (isDataCollectMode) dataCollectText else result.text
 
-                                     val timestamp = SimpleDateFormat(
-                                         "yyyyMMdd-HHmmss",
-                                         Locale.getDefault()
-                                     ).format(
-                                         Date()
-                                     )
-                                     val filename = "${timestamp}.app"
+                                    val timestamp = SimpleDateFormat(
+                                        "yyyyMMdd-HHmmss",
+                                        Locale.getDefault()
+                                    ).format(
+                                        Date()
+                                    )
+                                    val filename = "${timestamp}.app"
 
-                                     // Save the WAV file
-                                     val wavPath = saveAsWav(
-                                         context = context,
-                                         samples = audioToSave,
-                                         sampleRate = sampleRateInHz,
-                                         numChannels = 1,
-                                         userId = userId,
-                                         filename = filename
-                                     )
+                                    // Save the WAV file
+                                    val wavPath = saveAsWav(
+                                        context = context,
+                                        samples = audioToSave,
+                                        sampleRate = sampleRateInHz,
+                                        numChannels = 1,
+                                        userId = userId,
+                                        filename = filename
+                                    )
 
-                                     if (wavPath != null) {
-                                         // Save the initial JSONL entry
-                                         saveJsonl(
-                                             context = context,
-                                             userId = userId,
-                                             filename = filename,
-                                             originalText = originalText,
-                                             modifiedText = modifiedText,
-                                             checked = isDataCollectMode
-                                         )
+                                    if (wavPath != null) {
+                                        // Save the initial JSONL entry
+                                        saveJsonl(
+                                            context = context,
+                                            userId = userId,
+                                            filename = filename,
+                                            originalText = originalText,
+                                            modifiedText = modifiedText, // Initially, modified is same as original
+                                            checked = isDataCollectMode
+                                        )
 
-                                         // Enqueue for background recognition
-                                         if (userSettings.recognitionUrl.isNotBlank() && !isDataCollectMode) {
-                                             recognitionQueue.trySend(wavPath)
-                                         }
-                                     }
+                                        // Enqueue for background recognition
+                                        if (userSettings.recognitionUrl.isNotBlank() && !isDataCollectMode) {
+                                            recognitionQueue.trySend(wavPath)
+                                        }
+                                    }
 
-                                     val newTranscript = Transcript(
-                                         recognizedText = originalText,
-                                         wavFilePath = wavPath ?: "",
-                                         modifiedText = modifiedText,
-                                         checked = isDataCollectMode,
-                                         canCheck = !isDataCollectMode
-                                     )
+                                    val newTranscript = Transcript(
+                                        recognizedText = originalText,
+                                        wavFilePath = wavPath ?: "",
+                                        modifiedText = modifiedText,
+                                        checked = isDataCollectMode,
+                                        canCheck = !isDataCollectMode
+                                    )
 
-                                     if (modifiedText.isNotBlank()) {
-                                         if (added && resultList.isNotEmpty()) {
+                                    if (modifiedText.isNotBlank()) {
+                                        if (added && resultList.isNotEmpty()) {
                                             resultList[resultList.size - 1] = newTranscript
                                         } else {
                                             resultList.add(newTranscript)
                                         }
                                     }
 
-                                     // Add the completed record to our feedback list
-                                     if (modifiedText.isNotBlank() && resultList.isNotEmpty()) {
-                                         feedbackRecords.add(resultList.last())
-                                     }
+                                    // Add the completed record to our feedback list
+                                    if (modifiedText.isNotBlank() && resultList.isNotEmpty()) {
+                                        feedbackRecords.add(resultList.last())
+                                    }
+
                                     coroutineScope.launch {
                                         if (resultList.isNotEmpty()) {
                                             lazyColumnListState.animateScrollToItem(resultList.size - 1)
@@ -585,7 +641,38 @@ fun HomeScreen(
                                 UUID.randomUUID().toString()
                             )
                         }
-                    }
+                    },
+                    isSequenceMode = isSequenceMode,
+                    onSequenceModeChange = {
+                        isSequenceMode = it
+                        if (!it) {
+                            // When turning off sequence mode, the switch is disabled if queue is empty
+                            if (textQueue.isEmpty()) {
+                                isSequenceMode = false
+                            }
+                        } else {
+                            // If turning on, and queue is not empty, set the text
+                            if (textQueue.isNotEmpty() && currentQueueIndex != -1) {
+                                dataCollectText = textQueue[currentQueueIndex]
+                            } else {
+                                // cannot enable sequence mode if queue is empty
+                                isSequenceMode = false
+                            }
+                        }
+                    },
+                    onUploadClick = {
+                        filePickerLauncher.launch("text/plain")
+                    },
+                    onNextClick = {
+                        if (currentQueueIndex < textQueue.size - 1) {
+                            currentQueueIndex++
+                            dataCollectText = textQueue[currentQueueIndex]
+                        } else {
+                            // End of queue
+                            isSequenceMode = false
+                        }
+                    },
+                    isNextEnabled = isSequenceMode && textQueue.isNotEmpty() && currentQueueIndex < textQueue.size - 1
                 )
             }
             HomeButtonRow(
@@ -596,7 +683,7 @@ fun HomeScreen(
                     if (resultList.isNotEmpty()) {
                         val s =
                             resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
-                                .joinToString(separator = "\n")
+                                .joinToString(separator = "")
                         clipboardManager.setText(AnnotatedString(s))
                         Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT)
                             .show()
