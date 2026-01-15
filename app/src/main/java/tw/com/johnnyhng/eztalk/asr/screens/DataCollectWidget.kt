@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,16 +81,13 @@ fun DataCollectWidget(
                     contentDescription = "TTS for data collection text"
                 )
             }
-        }
-        if (isSequenceMode) {
-            Button(
-                onClick = onNextClick,
-                enabled = isNextEnabled,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
-            ) {
-                Text("Next")
+            if (isSequenceMode) {
+                IconButton(onClick = onNextClick, enabled = isNextEnabled) {
+                    Icon(
+                        Icons.Filled.SkipNext,
+                        contentDescription = "Next"
+                    )
+                }
             }
         }
     }
