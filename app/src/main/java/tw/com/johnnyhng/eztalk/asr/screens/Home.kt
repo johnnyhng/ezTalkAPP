@@ -108,7 +108,6 @@ fun HomeScreen(
         save = { it.toList() },
         restore = { it.toMutableStateList() }
     )) { mutableStateListOf<String>() }
-    var currentQueueIndex by rememberSaveable { mutableIntStateOf(-1) }
     var lastUserId by rememberSaveable { mutableStateOf<String?>(null) }
 
 
@@ -120,16 +119,15 @@ fun HomeScreen(
     LaunchedEffect(userId) {
         if (lastUserId != null && lastUserId != userId) {
             textQueue.clear()
-            currentQueueIndex = -1
             isSequenceMode = false
             dataCollectText = ""
         }
         lastUserId = userId
     }
 
-    // Effect to reset sequence mode when data collect mode is off or queue is empty
-    LaunchedEffect(isDataCollectMode, textQueue.size) {
-        if (!isDataCollectMode || textQueue.isEmpty()) {
+    // Effect to reset sequence mode when data collect mode is off
+    LaunchedEffect(isDataCollectMode) {
+        if (!isDataCollectMode) {
             isSequenceMode = false
         }
     }
@@ -143,15 +141,16 @@ fun HomeScreen(
             coroutineScope.launch(Dispatchers.IO) {
                 try {
                     context.contentResolver.openInputStream(it)?.use { inputStream ->
-                        val lines = inputStream.bufferedReader().readLines().filter { it.isNotBlank() }
+                        val lines =
+                            inputStream.bufferedReader().readLines().filter { it.isNotBlank() }
                         withContext(Dispatchers.Main) {
                             textQueue.clear()
-                            textQueue.addAll(lines)
-                            currentQueueIndex = if (textQueue.isNotEmpty()) 0 else -1
-                            if (currentQueueIndex != -1) {
-                                dataCollectText = textQueue[currentQueueIndex]
+                            if (lines.isNotEmpty()) {
+                                dataCollectText = lines.first()
+                                textQueue.addAll(lines.drop(1))
                                 isSequenceMode = true
                             } else {
+                                dataCollectText = ""
                                 isSequenceMode = false
                             }
                         }
@@ -650,29 +649,27 @@ fun HomeScreen(
                         }
                     },
                     isSequenceMode = isSequenceMode,
-                    onSequenceModeChange = {
-                        isSequenceMode = it
-                        if (it && textQueue.isNotEmpty() && currentQueueIndex != -1) {
-                            dataCollectText = textQueue[currentQueueIndex]
+                    onSequenceModeChange = { newMode ->
+                        if (!newMode) { // Only handle turning it off
+                            isSequenceMode = false
+                            textQueue.clear()
+                            dataCollectText = ""
                         }
                     },
                     onUploadClick = {
                         filePickerLauncher.launch("text/plain")
                     },
                     onNextClick = {
-                        if (currentQueueIndex < textQueue.size - 1) {
-                            currentQueueIndex++
-                            dataCollectText = textQueue[currentQueueIndex]
+                        if (textQueue.isNotEmpty()) {
+                            dataCollectText = textQueue.removeAt(0)
                         } else {
-                            // End of queue, turn off sequence mode and clear text
+                            // This was the last item, turn off sequence mode
                             isSequenceMode = false
                             dataCollectText = ""
-                            textQueue.clear()
-                            currentQueueIndex = -1
                         }
                     },
-                    isNextEnabled = isSequenceMode && textQueue.isNotEmpty(),
-                    isSequenceModeSwitchEnabled = textQueue.isNotEmpty()
+                    isNextEnabled = isSequenceMode,
+                    isSequenceModeSwitchEnabled = isSequenceMode
                 )
             }
             HomeButtonRow(
