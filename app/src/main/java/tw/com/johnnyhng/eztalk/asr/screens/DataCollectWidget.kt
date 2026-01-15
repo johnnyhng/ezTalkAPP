@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Button
@@ -31,6 +32,7 @@ fun DataCollectWidget(
     onSequenceModeChange: (Boolean) -> Unit,
     onUploadClick: () -> Unit,
     onNextClick: () -> Unit,
+    onDeleteClick: () -> Unit,
     isNextEnabled: Boolean,
     isSequenceModeSwitchEnabled: Boolean,
     showNoQueueMessage: Boolean
@@ -95,6 +97,13 @@ fun DataCollectWidget(
                     Icon(
                         Icons.Filled.SkipNext,
                         contentDescription = "Next"
+                    )
+                }
+            } else {
+                IconButton(onClick = onDeleteClick) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "Clear text"
                     )
                 }
             }

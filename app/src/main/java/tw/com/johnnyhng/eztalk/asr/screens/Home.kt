@@ -520,7 +520,7 @@ fun HomeScreen(
                                             userId = userId,
                                             filename = filename,
                                             originalText = originalText,
-                                            modifiedText = modifiedText, // Initially, modified is same as original
+                                            modifiedText = modifiedText,
                                             checked = isDataCollectMode,
                                             mutable = !isDataCollectMode
                                         )
@@ -689,6 +689,9 @@ fun HomeScreen(
                             dataCollectText = ""
                             deleteQueueState(context, userId)
                         }
+                    },
+                    onDeleteClick = {
+                        dataCollectText = ""
                     },
                     isNextEnabled = isSequenceMode,
                     isSequenceModeSwitchEnabled = true, // Always allow turning on/off
