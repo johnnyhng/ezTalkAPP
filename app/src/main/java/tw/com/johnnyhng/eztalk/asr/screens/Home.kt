@@ -143,7 +143,7 @@ fun HomeScreen(
             coroutineScope.launch(Dispatchers.IO) {
                 try {
                     context.contentResolver.openInputStream(it)?.use { inputStream ->
-                        val lines = inputStream.bufferedReader().readLines()
+                        val lines = inputStream.bufferedReader().readLines().filter { it.isNotBlank() }
                         withContext(Dispatchers.Main) {
                             textQueue.clear()
                             textQueue.addAll(lines)
