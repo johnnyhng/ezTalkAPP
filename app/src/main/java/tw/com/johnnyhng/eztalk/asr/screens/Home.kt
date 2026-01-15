@@ -105,6 +105,7 @@ fun HomeScreen(
         restore = { it.toMutableStateList() }
     )) { mutableStateListOf<String>() }
     var lastUserId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showNoQueueMessage by remember { mutableStateOf(false) }
 
 
     // Collect settings from the ViewModel
@@ -152,9 +153,12 @@ fun HomeScreen(
                                 dataCollectText = lines.first()
                                 textQueue.addAll(lines.drop(1))
                                 isSequenceMode = true
+                                showNoQueueMessage = false
+                                saveQueueState(context, userId, QueueState(dataCollectText, textQueue.toList()))
                             } else {
                                 dataCollectText = ""
                                 isSequenceMode = false
+                                deleteQueueState(context, userId)
                             }
                         }
                     }
@@ -653,11 +657,20 @@ fun HomeScreen(
                     },
                     isSequenceMode = isSequenceMode,
                     onSequenceModeChange = { newMode ->
-                        if (!newMode) { // Only handle turning it off
+                        if (newMode) {
+                            val restoredState = restoreQueueState(context, userId)
+                            if (restoredState != null && (restoredState.currentText.isNotBlank() || restoredState.queue.isNotEmpty())) {
+                                textQueue.clear()
+                                textQueue.addAll(restoredState.queue)
+                                dataCollectText = restoredState.currentText
+                                isSequenceMode = true
+                                showNoQueueMessage = false
+                            } else {
+                                showNoQueueMessage = true
+                            }
+                        } else {
                             isSequenceMode = false
-                            textQueue.clear()
-                            dataCollectText = ""
-                            deleteQueueState(context, userId)
+                            saveQueueState(context, userId, QueueState(dataCollectText, textQueue.toList()))
                         }
                     },
                     onUploadClick = {
@@ -665,7 +678,7 @@ fun HomeScreen(
                     },
                     onNextClick = {
                         if (textQueue.isNotEmpty()) {
-                            dataCollectText = textQueue.removeAt(0)
+                            dataCollectText = textQueue.removeFirst()
                             saveQueueState(context, userId, QueueState(dataCollectText, textQueue.toList()))
                         } else {
                             // This was the last item, turn off sequence mode
@@ -675,7 +688,8 @@ fun HomeScreen(
                         }
                     },
                     isNextEnabled = isSequenceMode,
-                    isSequenceModeSwitchEnabled = isSequenceMode
+                    isSequenceModeSwitchEnabled = true, // Always allow turning on/off
+                    showNoQueueMessage = showNoQueueMessage
                 )
             }
             HomeButtonRow(

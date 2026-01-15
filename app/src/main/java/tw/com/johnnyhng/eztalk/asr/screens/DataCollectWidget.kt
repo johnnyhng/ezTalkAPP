@@ -32,7 +32,8 @@ fun DataCollectWidget(
     onUploadClick: () -> Unit,
     onNextClick: () -> Unit,
     isNextEnabled: Boolean,
-    isSequenceModeSwitchEnabled: Boolean
+    isSequenceModeSwitchEnabled: Boolean,
+    showNoQueueMessage: Boolean
 ) {
     Column(
         modifier = modifier
@@ -53,6 +54,14 @@ fun DataCollectWidget(
             Button(onClick = onUploadClick) {
                 Text("Upload TXT")
             }
+        }
+        if (showNoQueueMessage) {
+            Text(
+                "Please upload a TXT file to use Sequence Mode.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(start = 8.dp)
+            )
         }
 
         Row(
