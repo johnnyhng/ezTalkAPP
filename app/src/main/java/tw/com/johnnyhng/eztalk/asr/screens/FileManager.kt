@@ -101,7 +101,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             val original = json.getString("original")
                             val modified = json.getString("modified")
                             val checked = json.getBoolean("checked")
-                            val mutable = json.optBoolean("mutable", json.optBoolean("canCheck", true))
+                            val mutable = json.optBoolean("mutable", true)
 
                             WavFileEntry(
                                 wavFile = wavFile,
@@ -209,7 +209,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
     ) {
         Row {
             Button(onClick = {
-                val selectedFiles = wavFileEntries.filter { it.checked && it.mutable }
+                val selectedFiles = wavFileEntries.filter { it.checked }
                 coroutineScope.launch {
                     withContext(Dispatchers.IO) {
                         selectedFiles.forEach { entry ->
@@ -231,13 +231,13 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         Toast.LENGTH_SHORT
                     ).show()
                 }
-            }, enabled = wavFileEntries.any { it.checked && it.mutable } && !isFeedbackInProgress) {
+            }, enabled = wavFileEntries.any { it.checked } && !isFeedbackInProgress) {
                 Text(stringResource(R.string.delete_selected))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(onClick = {
-                feedback(wavFileEntries.filter { it.checked && it.mutable })
-            }, enabled = wavFileEntries.any { it.checked && it.mutable } && !isFeedbackInProgress) {
+                feedback(wavFileEntries.filter { it.checked })
+            }, enabled = wavFileEntries.any { it.checked } && !isFeedbackInProgress) {
                 Text(stringResource(R.string.feedback))
             }
         }
