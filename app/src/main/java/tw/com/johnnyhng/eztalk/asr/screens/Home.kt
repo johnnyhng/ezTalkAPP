@@ -129,7 +129,7 @@ fun HomeScreen(
             restoreQueueState(context, userId)?.let {
                 textQueue.addAll(it.queue)
                 dataCollectText = it.currentText
-                isSequenceMode = textQueue.isNotEmpty()
+                isSequenceMode = textQueue.isNotEmpty() || it.currentText.isNotBlank()
             }
         } else {
             isSequenceMode = false
@@ -148,7 +148,9 @@ fun HomeScreen(
                         val lines =
                             inputStream.bufferedReader().readLines().filter { it.isNotBlank() }
                         withContext(Dispatchers.Main) {
+                            deleteQueueState(context, userId) // Delete old state first
                             textQueue.clear()
+
                             if (lines.isNotEmpty()) {
                                 dataCollectText = lines.first()
                                 textQueue.addAll(lines.drop(1))
@@ -158,7 +160,6 @@ fun HomeScreen(
                             } else {
                                 dataCollectText = ""
                                 isSequenceMode = false
-                                deleteQueueState(context, userId)
                             }
                         }
                     }
