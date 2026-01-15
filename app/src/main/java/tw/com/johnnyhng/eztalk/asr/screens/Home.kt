@@ -664,11 +664,14 @@ fun HomeScreen(
                             currentQueueIndex++
                             dataCollectText = textQueue[currentQueueIndex]
                         } else {
-                            // End of queue
+                            // End of queue, turn off sequence mode and clear text
                             isSequenceMode = false
+                            dataCollectText = ""
+                            textQueue.clear()
+                            currentQueueIndex = -1
                         }
                     },
-                    isNextEnabled = isSequenceMode && textQueue.isNotEmpty() && currentQueueIndex < textQueue.size - 1,
+                    isNextEnabled = isSequenceMode && textQueue.isNotEmpty(),
                     isSequenceModeSwitchEnabled = textQueue.isNotEmpty()
                 )
             }
