@@ -48,14 +48,10 @@ import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
-import tw.com.johnnyhng.eztalk.asr.utils.MediaController
-import tw.com.johnnyhng.eztalk.asr.utils.deleteTranscriptFiles
-import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
-import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
-import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
-import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
+import tw.com.johnnyhng.eztalk.asr.utils.*
 import tw.com.johnnyhng.eztalk.asr.widgets.EditRecognitionDialog
 import tw.com.johnnyhng.eztalk.asr.widgets.EditableDropdown
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
@@ -118,6 +114,7 @@ fun HomeScreen(
     // Effect to clear queue when user changes
     LaunchedEffect(userId) {
         if (lastUserId != null && lastUserId != userId) {
+            saveQueueState(context, lastUserId!!, QueueState(dataCollectText, textQueue.toList()))
             textQueue.clear()
             isSequenceMode = false
             dataCollectText = ""
@@ -127,7 +124,13 @@ fun HomeScreen(
 
     // Effect to reset sequence mode when data collect mode is off
     LaunchedEffect(isDataCollectMode) {
-        if (!isDataCollectMode) {
+        if (isDataCollectMode) {
+            restoreQueueState(context, userId)?.let {
+                textQueue.addAll(it.queue)
+                dataCollectText = it.currentText
+                isSequenceMode = textQueue.isNotEmpty()
+            }
+        } else {
             isSequenceMode = false
         }
     }
@@ -654,6 +657,7 @@ fun HomeScreen(
                             isSequenceMode = false
                             textQueue.clear()
                             dataCollectText = ""
+                            deleteQueueState(context, userId)
                         }
                     },
                     onUploadClick = {
@@ -662,10 +666,12 @@ fun HomeScreen(
                     onNextClick = {
                         if (textQueue.isNotEmpty()) {
                             dataCollectText = textQueue.removeAt(0)
+                            saveQueueState(context, userId, QueueState(dataCollectText, textQueue.toList()))
                         } else {
                             // This was the last item, turn off sequence mode
                             isSequenceMode = false
                             dataCollectText = ""
+                            deleteQueueState(context, userId)
                         }
                     },
                     isNextEnabled = isSequenceMode,
