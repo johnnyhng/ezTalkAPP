@@ -79,6 +79,7 @@ fun saveAsWav(
  * @param originalText The original recognized text.
  * @param modifiedText The (potentially) modified text.
  * @param checked Whether the user has listened to the audio.
+ * @param mutable Whether the transcript can be changed.
  * @param remoteCandidates Optional list of remote candidates.
  * @return The absolute path to the saved JSONL file, or null on failure.
  */
@@ -89,6 +90,7 @@ fun saveJsonl(
     originalText: String,
     modifiedText: String,
     checked: Boolean,
+    mutable: Boolean = true,
     remoteCandidates: List<String>? = null
 ): String? {
     val dir = File(context.filesDir, "wavs/$userId")
@@ -104,6 +106,7 @@ fun saveJsonl(
             put("original", originalText)
             put("modified", modifiedText)
             put("checked", checked)
+            put("mutable", mutable)
             remoteCandidates?.let {
                 put("remote_candidates", JSONArray(it))
             }

@@ -53,6 +53,8 @@ suspend fun getRemoteCandidates(
                     val modified =
                         latestJsonlData?.optString("modified", currentText) ?: currentText
                     val checked = latestJsonlData?.optBoolean("checked", false) ?: false
+                    val mutable = latestJsonlData?.optBoolean("mutable", latestJsonlData.optBoolean("canCheck", true)) ?: true
+
 
                     saveJsonl(
                         context = context,
@@ -61,6 +63,7 @@ suspend fun getRemoteCandidates(
                         originalText = original,
                         modifiedText = modified,
                         checked = checked,
+                        mutable = mutable,
                         remoteCandidates = sentences
                     )
                     return@withContext sentences

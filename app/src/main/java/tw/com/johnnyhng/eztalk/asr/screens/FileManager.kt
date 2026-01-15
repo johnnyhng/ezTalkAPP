@@ -45,16 +45,16 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
 import tw.com.johnnyhng.eztalk.asr.utils.feedbackToBackend
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
 import tw.com.johnnyhng.eztalk.asr.widgets.EditRecognitionDialog
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.File
 
 /**
@@ -65,6 +65,7 @@ data class WavFileEntry(
     val originalText: String,
     val modifiedText: String,
     val checked: Boolean,
+    val mutable: Boolean,
 )
 
 @SuppressLint("StringFormatInvalid")
@@ -100,12 +101,14 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             val original = json.getString("original")
                             val modified = json.getString("modified")
                             val checked = json.getBoolean("checked")
+                            val mutable = json.optBoolean("mutable", json.optBoolean("canCheck", true))
 
                             WavFileEntry(
                                 wavFile = wavFile,
                                 originalText = original,
                                 modifiedText = modified,
                                 checked = checked,
+                                mutable = mutable
                             )
                         } catch (e: Exception) {
                             null // Ignore malformed lines
@@ -186,6 +189,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         originalText = editingEntry!!.originalText,
                         modifiedText = newText,
                         checked = editingEntry!!.checked,
+                        mutable = editingEntry!!.mutable
                     )
                     listWavFiles() // Refresh the list
                 }
@@ -205,7 +209,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
     ) {
         Row {
             Button(onClick = {
-                val selectedFiles = wavFileEntries.filter { it.checked }
+                val selectedFiles = wavFileEntries.filter { it.checked && it.mutable }
                 coroutineScope.launch {
                     withContext(Dispatchers.IO) {
                         selectedFiles.forEach { entry ->
@@ -227,13 +231,13 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         Toast.LENGTH_SHORT
                     ).show()
                 }
-            }, enabled = wavFileEntries.any { it.checked } && !isFeedbackInProgress) {
+            }, enabled = wavFileEntries.any { it.checked && it.mutable } && !isFeedbackInProgress) {
                 Text(stringResource(R.string.delete_selected))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(onClick = {
-                feedback(wavFileEntries.filter { it.checked })
-            }, enabled = wavFileEntries.any { it.checked } && !isFeedbackInProgress) {
+                feedback(wavFileEntries.filter { it.checked && it.mutable })
+            }, enabled = wavFileEntries.any { it.checked && it.mutable } && !isFeedbackInProgress) {
                 Text(stringResource(R.string.feedback))
             }
         }
@@ -251,26 +255,30 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 .padding(top = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val allSelected = wavFileEntries.isNotEmpty() && wavFileEntries.all { it.checked }
+            val mutableEntries = wavFileEntries.filter { it.mutable }
+            val allMutableSelected = mutableEntries.isNotEmpty() && mutableEntries.all { it.checked }
             Checkbox(
-                checked = allSelected,
+                checked = allMutableSelected,
                 onCheckedChange = {
-                    val newState = !allSelected
+                    val newState = !allMutableSelected
                     coroutineScope.launch {
                         wavFileEntries.forEach { entry ->
-                            saveJsonl(
-                                context = context,
-                                userId = userSettings.userId,
-                                filename = entry.wavFile.nameWithoutExtension,
-                                originalText = entry.originalText,
-                                modifiedText = entry.modifiedText,
-                                checked = newState,
-                            )
+                            if (entry.mutable) {
+                                saveJsonl(
+                                    context = context,
+                                    userId = userSettings.userId,
+                                    filename = entry.wavFile.nameWithoutExtension,
+                                    originalText = entry.originalText,
+                                    modifiedText = entry.modifiedText,
+                                    checked = newState,
+                                    mutable = entry.mutable
+                                )
+                            }
                         }
                         listWavFiles()
                     }
                 },
-                enabled = !isFeedbackInProgress
+                enabled = !isFeedbackInProgress && mutableEntries.isNotEmpty()
             )
             Text(stringResource(R.string.select_all))
         }
@@ -301,11 +309,12 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                             originalText = entry.originalText,
                                             modifiedText = entry.modifiedText,
                                             checked = it,
+                                            mutable = entry.mutable
                                         )
                                         listWavFiles()
                                     }
                                 },
-                                enabled = !isFeedbackInProgress
+                                enabled = !isFeedbackInProgress && entry.mutable
                             )
                             Text(
                                 entry.wavFile.name,
@@ -329,7 +338,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                     editingEntry = entry
                                     showEditDialog = true
                                 },
-                                enabled = currentlyPlaying == null && !isFeedbackInProgress
+                                enabled = currentlyPlaying == null && !isFeedbackInProgress && entry.mutable
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,

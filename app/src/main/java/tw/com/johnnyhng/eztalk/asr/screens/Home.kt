@@ -521,7 +521,8 @@ fun HomeScreen(
                                             filename = filename,
                                             originalText = originalText,
                                             modifiedText = modifiedText, // Initially, modified is same as original
-                                            checked = isDataCollectMode
+                                            checked = isDataCollectMode,
+                                            mutable = !isDataCollectMode
                                         )
 
                                         // Enqueue for background recognition
@@ -535,7 +536,7 @@ fun HomeScreen(
                                         wavFilePath = wavPath ?: "",
                                         modifiedText = modifiedText,
                                         checked = isDataCollectMode,
-                                        canCheck = !isDataCollectMode
+                                        mutable = !isDataCollectMode
                                     )
 
                                     if (modifiedText.isNotBlank()) {
@@ -618,6 +619,7 @@ fun HomeScreen(
                 originalText = updatedItem.recognizedText,
                 modifiedText = updatedItem.modifiedText,
                 checked = updatedItem.checked,
+                mutable = updatedItem.mutable,
                 remoteCandidates = updatedItem.remoteCandidates
             )
         }
@@ -794,7 +796,7 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable(enabled = !isRecognizingSpeech && !isEditing && !isStarted && result.canCheck) {
+                                .clickable(enabled = !isRecognizingSpeech && !isEditing && !isStarted && result.mutable) {
                                     if (userSettings.inlineEdit) {
                                         isEditing = true
                                         editingIndex = index
@@ -943,6 +945,7 @@ fun HomeScreen(
                             originalText = updatedItem.recognizedText,
                             modifiedText = updatedItem.modifiedText,
                             checked = updatedItem.checked,
+                            mutable = updatedItem.mutable,
                             remoteCandidates = updatedItem.remoteCandidates
                         )
                     }
