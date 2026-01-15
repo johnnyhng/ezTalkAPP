@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -29,7 +30,8 @@ fun DataCollectWidget(
     onSequenceModeChange: (Boolean) -> Unit,
     onUploadClick: () -> Unit,
     onNextClick: () -> Unit,
-    isNextEnabled: Boolean
+    isNextEnabled: Boolean,
+    isSequenceModeSwitchEnabled: Boolean
 ) {
     Column(
         modifier = modifier
@@ -43,7 +45,8 @@ fun DataCollectWidget(
             Spacer(modifier = Modifier.width(8.dp))
             Switch(
                 checked = isSequenceMode,
-                onCheckedChange = onSequenceModeChange
+                onCheckedChange = onSequenceModeChange,
+                enabled = isSequenceModeSwitchEnabled
             )
             Spacer(modifier = Modifier.weight(1f))
             Button(onClick = onUploadClick) {
@@ -52,15 +55,25 @@ fun DataCollectWidget(
         }
 
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 8.dp)
         ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                label = { Text("Text for recording") },
-                modifier = Modifier.weight(1f),
-                enabled = !isSequenceMode
-            )
+            if (isSequenceMode) {
+                Text(
+                    text = text,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(8.dp),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            } else {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    label = { Text("Text for recording") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
             IconButton(onClick = onTtsClick) {
                 Icon(
                     Icons.Default.RecordVoiceOver,
@@ -72,7 +85,9 @@ fun DataCollectWidget(
             Button(
                 onClick = onNextClick,
                 enabled = isNextEnabled,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
             ) {
                 Text("Next")
             }

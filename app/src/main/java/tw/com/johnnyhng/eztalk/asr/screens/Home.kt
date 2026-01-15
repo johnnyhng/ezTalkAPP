@@ -127,6 +127,13 @@ fun HomeScreen(
         lastUserId = userId
     }
 
+    // Effect to reset sequence mode when data collect mode is off or queue is empty
+    LaunchedEffect(isDataCollectMode, textQueue.size) {
+        if (!isDataCollectMode || textQueue.isEmpty()) {
+            isSequenceMode = false
+        }
+    }
+
 
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -622,7 +629,7 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.End
             ) {
                 Text("Data Collect Mode")
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Switch(
                     checked = isDataCollectMode,
                     onCheckedChange = { isDataCollectMode = it }
@@ -645,19 +652,8 @@ fun HomeScreen(
                     isSequenceMode = isSequenceMode,
                     onSequenceModeChange = {
                         isSequenceMode = it
-                        if (!it) {
-                            // When turning off sequence mode, the switch is disabled if queue is empty
-                            if (textQueue.isEmpty()) {
-                                isSequenceMode = false
-                            }
-                        } else {
-                            // If turning on, and queue is not empty, set the text
-                            if (textQueue.isNotEmpty() && currentQueueIndex != -1) {
-                                dataCollectText = textQueue[currentQueueIndex]
-                            } else {
-                                // cannot enable sequence mode if queue is empty
-                                isSequenceMode = false
-                            }
+                        if (it && textQueue.isNotEmpty() && currentQueueIndex != -1) {
+                            dataCollectText = textQueue[currentQueueIndex]
                         }
                     },
                     onUploadClick = {
@@ -672,7 +668,8 @@ fun HomeScreen(
                             isSequenceMode = false
                         }
                     },
-                    isNextEnabled = isSequenceMode && textQueue.isNotEmpty() && currentQueueIndex < textQueue.size - 1
+                    isNextEnabled = isSequenceMode && textQueue.isNotEmpty() && currentQueueIndex < textQueue.size - 1,
+                    isSequenceModeSwitchEnabled = textQueue.isNotEmpty()
                 )
             }
             HomeButtonRow(
