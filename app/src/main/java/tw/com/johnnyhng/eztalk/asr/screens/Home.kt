@@ -324,6 +324,15 @@ fun HomeScreen(
 
                     audioRecord?.startRecording()
                     while (isStarted) {
+                        if (isDataCollectMode && dataCollectText.isBlank()) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Text is empty, stopping recording.", Toast.LENGTH_SHORT).show()
+                                isStarted = false
+                            }
+                            flushChannel.trySend(Unit)
+                            break
+                        }
+
                         if (currentlyPlaying != null || isTtsSpeaking) { // Pause recording during playback and TTS
                             delay(100)
                             continue
