@@ -20,7 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import tw.com.johnnyhng.eztalk.asr.R
 
 @Composable
 fun DataCollectWidget(
@@ -45,7 +47,7 @@ fun DataCollectWidget(
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Sequence Mode")
+            Text(stringResource(id = R.string.sequence_mode))
             Spacer(modifier = Modifier.width(8.dp))
             Switch(
                 checked = isSequenceMode,
@@ -54,12 +56,12 @@ fun DataCollectWidget(
             )
             Spacer(modifier = Modifier.weight(1f))
             Button(onClick = onUploadClick) {
-                Text("Upload TXT")
+                Text(stringResource(id = R.string.upload_txt))
             }
         }
         if (showNoQueueMessage) {
             Text(
-                "Please upload a TXT file to use Sequence Mode.",
+                stringResource(id = R.string.please_upload_txt),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(start = 8.dp)
@@ -82,28 +84,28 @@ fun DataCollectWidget(
                 OutlinedTextField(
                     value = text,
                     onValueChange = onTextChange,
-                    label = { Text("Text for recording") },
+                    label = { Text(stringResource(id = R.string.text_for_recording)) },
                     modifier = Modifier.weight(1f)
                 )
             }
             IconButton(onClick = onTtsClick) {
                 Icon(
                     Icons.Default.RecordVoiceOver,
-                    contentDescription = "TTS for data collection text"
+                    contentDescription = stringResource(id = R.string.tts_for_data_collection)
                 )
             }
             if (isSequenceMode) {
                 IconButton(onClick = onNextClick, enabled = isNextEnabled) {
                     Icon(
                         Icons.Filled.SkipNext,
-                        contentDescription = "Next"
+                        contentDescription = stringResource(id = R.string.next)
                     )
                 }
             } else {
                 IconButton(onClick = onDeleteClick) {
                     Icon(
                         Icons.Filled.Delete,
-                        contentDescription = "Clear text"
+                        contentDescription = stringResource(id = R.string.clear_text)
                     )
                 }
             }

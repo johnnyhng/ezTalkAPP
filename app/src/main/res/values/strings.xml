@@ -52,4 +52,22 @@
     <string name="file_deleted_successfully">File deleted successfully</string>
     <string name="file_deletion_failed">Failed to delete file</string>
     <string name="no_file_to_delete">No file associated with this transcript</string>
+    <string name="data_collect_mode">Data Collect Mode</string>
+    <string name="text_empty_stopping_recording">Text is empty, stopping recording.</string>
+    <string name="error_reading_file">Error reading file</string>
+    <string name="copied_to_clipboard">Copied to clipboard</string>
+    <string name="nothing_to_copy">Nothing to copy</string>
+    <string name="cancel_edit">Cancel Edit</string>
+    <string name="confirm_edit">Confirm Edit</string>
+    <string name="talk">Talk</string>
+    <string name="play">Play</string>
+    <string name="sequence_mode">Sequence Mode</string>
+    <string name="upload_txt">Upload TXT</string>
+    <string name="please_upload_txt">Please upload a TXT file to use Sequence Mode.</string>
+    <string name="text_for_recording">Text for recording</string>
+    <string name="tts_for_data_collection">TTS for data collection text</string>
+    <string name="next">Next</string>
+    <string name="clear_text">Clear text</string>
+    <string name="recognized_text">Recognized Text</string>
+    <string name="speak_text">Speak Text</string>
 </resources>

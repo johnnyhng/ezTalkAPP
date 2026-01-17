@@ -166,7 +166,7 @@ fun HomeScreen(
                 } catch (e: Exception) {
                     Log.e(TAG, "Error reading file: ", e)
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Error reading file", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, R.string.error_reading_file, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -246,7 +246,12 @@ fun HomeScreen(
     LaunchedEffect(key1 = Unit) {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.getDefault()
+                if (tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE) {
+                    tts?.language = Locale.TRADITIONAL_CHINESE
+                } else {
+                    Log.w(TAG, "Traditional Chinese is not available for TTS, using default.")
+                    tts?.language = Locale.getDefault()
+                }
                 Log.i(TAG, "TTS initialized successfully.")
             } else {
                 Log.e(TAG, "TTS initialization failed.")
@@ -326,7 +331,7 @@ fun HomeScreen(
                     while (isStarted) {
                         if (isDataCollectMode && dataCollectText.isBlank()) {
                             withContext(Dispatchers.Main) {
-                                Toast.makeText(context, "Text is empty, stopping recording.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, R.string.text_empty_stopping_recording, Toast.LENGTH_SHORT).show()
                                 isStarted = false
                             }
                             flushChannel.trySend(Unit)
@@ -646,7 +651,7 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.End
             ) {
-                Text("Data Collect Mode")
+                Text(stringResource(id = R.string.data_collect_mode))
                 Spacer(modifier = Modifier.width(8.dp))
                 Switch(
                     checked = isDataCollectMode,
@@ -717,10 +722,10 @@ fun HomeScreen(
                             resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
                                 .joinToString(separator = "")
                         clipboardManager.setText(AnnotatedString(s))
-                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT)
+                        Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT)
                             .show()
                     } else {
-                        Toast.makeText(context, "Nothing to copy", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, R.string.nothing_to_copy, Toast.LENGTH_SHORT).show()
                     }
                 },
                 onClearButtonClick = {
@@ -771,7 +776,7 @@ fun HomeScreen(
                             EditableDropdown(
                                 value = editingText,
                                 onValueChange = { editingText = it },
-                                label = { Text("Edit") },
+                                label = { Text(stringResource(id = R.string.edit)) },
                                 menuItems = menuItems,
                                 isRecognizing = isFetchingCandidates,
                                 modifier = Modifier.weight(1f),
@@ -785,7 +790,7 @@ fun HomeScreen(
                             }) {
                                 Icon(
                                     Icons.Default.Close,
-                                    contentDescription = "Cancel Edit"
+                                    contentDescription = stringResource(id = R.string.cancel_edit)
                                 )
                             }
                             IconButton(onClick = {
@@ -798,7 +803,7 @@ fun HomeScreen(
                             }) {
                                 Icon(
                                     Icons.Default.RecordVoiceOver,
-                                    contentDescription = "Confirm Edit"
+                                    contentDescription = stringResource(id = R.string.confirm_edit)
                                 )
                             }
                         }
@@ -881,7 +886,7 @@ fun HomeScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.RecordVoiceOver,
-                                        contentDescription = "Talk"
+                                        contentDescription = stringResource(id = R.string.talk)
                                     )
                                 }
 
@@ -898,7 +903,7 @@ fun HomeScreen(
                                 ) {
                                     Icon(
                                         imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                        contentDescription = if (currentlyPlaying == result.wavFilePath) "Stop" else "Play"
+                                        contentDescription = if (currentlyPlaying == result.wavFilePath) stringResource(id = R.string.stop) else stringResource(id = R.string.play)
                                     )
                                 }
 
@@ -924,7 +929,7 @@ fun HomeScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete"
+                                        contentDescription = stringResource(id = R.string.delete)
                                     )
                                 }
                             }

@@ -35,6 +35,7 @@
     <string name="delete">刪除</string>
     <string name="original_text">原文: %1$s</string>
     <string name="modified_text">修改後: %1$s</string>
+    <string name="modified_text_label">修改後的文字</string>
     <string name="files_deleted">%1$d 個檔案已刪除</string>
     <string name="feedback_submitted">已回傳 %1$d/%2$d 個檔案</string>
     <string name="edit_recognition">編輯辨識結果</string>
@@ -48,4 +49,25 @@
     <string name="no_remote_models_found">找不到遠端模型。</string>
     <string name="download">下載</string>
     <string name="close">關閉</string>
+    <string name="file_deleted_successfully">檔案刪除成功</string>
+    <string name="file_deletion_failed">檔案刪除失敗</string>
+    <string name="no_file_to_delete">沒有與此轉錄稿關聯的檔案</string>
+    <string name="data_collect_mode">資料收集模式</string>
+    <string name="text_empty_stopping_recording">文字為空，停止錄音。</string>
+    <string name="error_reading_file">讀取檔案時發生錯誤</string>
+    <string name="copied_to_clipboard">已複製到剪貼簿</string>
+    <string name="nothing_to_copy">沒有可複製的內容</string>
+    <string name="cancel_edit">取消編輯</string>
+    <string name="confirm_edit">確認編輯</string>
+    <string name="talk">說話</string>
+    <string name="play">播放</string>
+    <string name="sequence_mode">整批錄音模式</string>
+    <string name="upload_txt">上傳 TXT</string>
+    <string name="please_upload_txt">請上傳 TXT 檔案以使用整批錄音模式。</string>
+    <string name="text_for_recording">用於錄音的文字</string>
+    <string name="tts_for_data_collection">資料收集文字的 TTS</string>
+    <string name="next">下一個</string>
+    <string name="clear_text">清除文字</string>
+    <string name="recognized_text">辨識結果</string>
+    <string name="speak_text">朗讀文字</string>
 </resources>

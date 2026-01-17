@@ -123,7 +123,12 @@ fun TranslateScreen(
     LaunchedEffect(key1 = Unit) {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.getDefault()
+                if (tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE) {
+                    tts?.language = Locale.TRADITIONAL_CHINESE
+                } else {
+                    Log.w(TAG, "Traditional Chinese is not available for TTS, using default.")
+                    tts?.language = Locale.getDefault()
+                }
                 Log.i(TAG, "TTS initialized successfully.")
             } else {
                 Log.e(TAG, "TTS initialization failed.")
@@ -420,7 +425,7 @@ fun TranslateScreen(
         OutlinedTextField(
             value = textInput,
             onValueChange = { textInput = it },
-            label = { Text("Recognized Text") },
+            label = { Text(stringResource(id = R.string.recognized_text)) },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -434,9 +439,9 @@ fun TranslateScreen(
             onCopyButtonClick = {
                 if (textInput.isNotEmpty()) {
                     clipboardManager.setText(AnnotatedString(textInput))
-                    Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(context, "Nothing to copy", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, R.string.nothing_to_copy, Toast.LENGTH_SHORT).show()
                 }
             },
             onClearButtonClick = {
@@ -562,7 +567,7 @@ private fun HomeButtonRow(
         ) {
             Icon(
                 imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-                contentDescription = if (isPlaying) "Stop" else "Play",
+                contentDescription = if (isPlaying) stringResource(id = R.string.stop) else stringResource(id = R.string.play),
                 modifier = Modifier.size(36.dp)
             )
         }
@@ -573,7 +578,7 @@ private fun HomeButtonRow(
         ) {
             Icon(
                 imageVector = Icons.Default.RecordVoiceOver,
-                contentDescription = "Speak Text",
+                contentDescription = stringResource(id = R.string.speak_text),
                 modifier = Modifier.size(36.dp)
             )
         }
