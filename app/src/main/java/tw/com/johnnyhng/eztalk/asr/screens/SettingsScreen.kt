@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
@@ -80,7 +82,6 @@ fun SettingsScreen(
     val downloadProgress = homeViewModel.downloadProgress
     val canDeleteModel = homeViewModel.canDeleteModel
 
-    var languageMenuExpanded by remember { mutableStateOf(false) }
     val languages = listOf("en" to "English", "zh" to "Chinese")
 
     val gso = remember {
@@ -124,38 +125,11 @@ fun SettingsScreen(
         RemoteModelsManager(homeViewModel = homeViewModel)
     }
 
-    Column(modifier = Modifier.padding(16.dp)) {
-//        // Language selection
-//        ExposedDropdownMenuBox(
-//            expanded = languageMenuExpanded,
-//            onExpandedChange = { languageMenuExpanded = !languageMenuExpanded },
-//        ) {
-//            OutlinedTextField(
-//                modifier = Modifier.menuAnchor().fillMaxWidth(),
-//                readOnly = true,
-//                value = Locale(userSettings.language).displayName,
-//                onValueChange = {},
-//                label = { Text(stringResource(R.string.language)) },
-//                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageMenuExpanded) },
-//            )
-//            ExposedDropdownMenu(
-//                expanded = languageMenuExpanded,
-//                onDismissRequest = { languageMenuExpanded = false },
-//            ) {
-//                languages.forEach { (code, name) ->
-//                    DropdownMenuItem(
-//                        text = { Text(name) },
-//                        onClick = {
-//                            coroutineScope.launch {
-//                                homeViewModel.updateLanguage(code)
-//                                val appLocale = LocaleListCompat.forLanguageTags(code)
-//                                AppCompatDelegate.setApplicationLocales(appLocale)
-//                            }
-//                        }
-//                    )
-//                }
-//            }
-//        }
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
         Spacer(modifier = Modifier.height(16.dp))
 
         // User ID setting
@@ -332,6 +306,22 @@ fun SettingsScreen(
             Switch(
                 checked = userSettings.inlineEdit,
                 onCheckedChange = { homeViewModel.updateInlineEdit(it) },
+                enabled = !isDownloading
+            )
+        }
+
+        // TTS Feedback Switch (New)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = stringResource(R.string.enable_tts_feedback))
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = userSettings.enableTtsFeedback,
+                onCheckedChange = { homeViewModel.updateEnableTtsFeedback(it) },
                 enabled = !isDownloading
             )
         }
