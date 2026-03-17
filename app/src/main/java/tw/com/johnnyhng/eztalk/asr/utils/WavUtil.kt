@@ -10,8 +10,6 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.io.path.Path
-import kotlin.io.path.deleteIfExists
 
 
 /**
@@ -80,6 +78,7 @@ fun saveAsWav(
  * @param modifiedText The (potentially) modified text.
  * @param checked Whether the user has listened to the audio.
  * @param mutable Whether the transcript can be changed.
+ * @param removable Whether the transcript should be deleted after feedback.
  * @param remoteCandidates Optional list of remote candidates.
  * @return The absolute path to the saved JSONL file, or null on failure.
  */
@@ -91,6 +90,7 @@ fun saveJsonl(
     modifiedText: String,
     checked: Boolean,
     mutable: Boolean = true,
+    removable: Boolean = false,
     remoteCandidates: List<String>? = null
 ): String? {
     val dir = File(context.filesDir, "wavs/$userId")
@@ -107,6 +107,7 @@ fun saveJsonl(
             put("modified", modifiedText)
             put("checked", checked)
             put("mutable", mutable)
+            put("removable", removable)
             remoteCandidates?.let {
                 put("remote_candidates", JSONArray(it))
             }

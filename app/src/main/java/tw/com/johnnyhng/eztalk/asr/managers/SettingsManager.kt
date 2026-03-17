@@ -51,6 +51,7 @@ data class UserSettings(
     val modelUrl: String,
     val backendUrl: String,
     val inlineEdit: Boolean,
+    val enableTtsFeedback: Boolean,
     val language: String
 ) {
     val recognitionUrl: String
@@ -73,6 +74,7 @@ class SettingsManager(context: Context) {
         val MODEL_URL_KEY = stringPreferencesKey("model_url")
         val BACKEND_URL_KEY = stringPreferencesKey("backend_url")
         val INLINE_EDIT_KEY = booleanPreferencesKey("inline_edit")
+        val ENABLE_TTS_FEEDBACK_KEY = booleanPreferencesKey("enable_tts_feedback")
         val LANGUAGE_KEY = stringPreferencesKey("language")
     }
 
@@ -87,6 +89,7 @@ class SettingsManager(context: Context) {
         val modelUrl = preferences[MODEL_URL_KEY] ?: "http://120.126.151.159:8081"
         val backendUrl = preferences[BACKEND_URL_KEY] ?: "https://120.126.151.159:56432"
         val inlineEdit = preferences[INLINE_EDIT_KEY] ?: false
+        val enableTtsFeedback = preferences[ENABLE_TTS_FEEDBACK_KEY] ?: false
         val language = preferences[LANGUAGE_KEY] ?: "en"
         UserSettings(
             lingerMs,
@@ -97,6 +100,7 @@ class SettingsManager(context: Context) {
             modelUrl,
             backendUrl,
             inlineEdit,
+            enableTtsFeedback,
             language
         )
     }
@@ -154,6 +158,12 @@ class SettingsManager(context: Context) {
         }
     }
 
+    suspend fun updateEnableTtsFeedback(enabled: Boolean) {
+        appContext.dataStore.edit { settings ->
+            settings[ENABLE_TTS_FEEDBACK_KEY] = enabled
+        }
+    }
+
     suspend fun updateLanguage(language: String) {
         appContext.dataStore.edit { settings ->
             settings[LANGUAGE_KEY] = language
@@ -176,7 +186,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val userSettings: StateFlow<UserSettings> = settingsManager.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "", "https://120.126.151.159:56432", false, "en") // Initial default values
+        initialValue = UserSettings(800f, 500f, false, "user@example.com", null, "", "https://120.126.151.159:56432", false, false, "en") // Initial default values
     )
 
     var models by mutableStateOf<List<Model>>(emptyList())
@@ -267,6 +277,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun updateInlineEdit(inlineEdit: Boolean) {
         viewModelScope.launch {
             settingsManager.updateInlineEdit(inlineEdit)
+        }
+    }
+
+    fun updateEnableTtsFeedback(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.updateEnableTtsFeedback(enabled)
         }
     }
 

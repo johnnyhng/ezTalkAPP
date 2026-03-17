@@ -21,6 +21,7 @@
     <string name="save_vad_segments">Save VAD Segments</string>
     <string name="save_full_audio">Save Full Audio</string>
     <string name="inline_edit">Inline Edit</string>
+    <string name="enable_tts_feedback">Enable TTS Feedback</string>
     <string name="home">Home</string>
     <string name="translate">Translate</string>
     <string name="file_manager">File Manager</string>

@@ -6,5 +6,6 @@ data class Transcript(
     var wavFilePath: String,
     var checked: Boolean = false,
     var mutable: Boolean = true,
+    var removable: Boolean = false,
     var remoteCandidates: List<String> = emptyList()
 )
