@@ -422,6 +422,7 @@ fun TranslateScreen(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        val isInputEnabled = currentTranscript?.mutable != false
         OutlinedTextField(
             value = textInput,
             onValueChange = { textInput = it },
@@ -429,7 +430,8 @@ fun TranslateScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            textStyle = TextStyle(fontSize = 20.sp, textAlign = TextAlign.Center)
+            textStyle = TextStyle(fontSize = 20.sp, textAlign = TextAlign.Center),
+            enabled = isInputEnabled
         )
 
         HomeButtonRow(
@@ -455,7 +457,20 @@ fun TranslateScreen(
                 tts?.speak(textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
 
                 currentTranscript?.let { transcript ->
-                    val updatedTranscript = transcript.copy(modifiedText = textInput, checked = true)
+                    val useFeedbackLogic = userSettings.enableTtsFeedback
+                    val updatedTranscript = if (useFeedbackLogic) {
+                        transcript.copy(
+                            modifiedText = textInput,
+                            checked = true,
+                            mutable = false,
+                            removable = true
+                        )
+                    } else {
+                        transcript.copy(
+                            modifiedText = textInput,
+                            checked = true
+                        )
+                    }
                     currentTranscript = updatedTranscript
 
                     val file = File(transcript.wavFilePath)
@@ -469,6 +484,8 @@ fun TranslateScreen(
                             originalText = updatedTranscript.recognizedText,
                             modifiedText = updatedTranscript.modifiedText,
                             checked = updatedTranscript.checked,
+                            mutable = updatedTranscript.mutable,
+                            removable = updatedTranscript.removable,
                             remoteCandidates = updatedTranscript.remoteCandidates
                         )
                     }
@@ -519,7 +536,7 @@ fun TranslateScreen(
                     text = "${index + 1}: $candidate",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { textInput = candidate }
+                        .clickable(enabled = isInputEnabled) { textInput = candidate }
                         .padding(vertical = 12.dp),
                     textAlign = TextAlign.Center,
                     fontSize = 20.sp

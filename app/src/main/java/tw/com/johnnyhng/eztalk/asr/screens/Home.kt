@@ -618,8 +618,24 @@ fun HomeScreen(
             null,
             utteranceId
         )
-        // Update the checked status
-        val updatedItem = resultList[index].copy(modifiedText = text, checked = true)
+        
+        val item = resultList[index]
+        val useFeedbackLogic = userSettings.enableTtsFeedback && !isDataCollectMode
+
+        // Update the item states based on enableTtsFeedback
+        val updatedItem = if (useFeedbackLogic) {
+            item.copy(
+                modifiedText = text,
+                checked = true,
+                mutable = false,
+                removable = true
+            )
+        } else {
+            item.copy(
+                modifiedText = text,
+                checked = true
+            )
+        }
         resultList[index] = updatedItem
 
         // Save the updated record to JSONL
@@ -634,6 +650,7 @@ fun HomeScreen(
                 modifiedText = updatedItem.modifiedText,
                 checked = updatedItem.checked,
                 mutable = updatedItem.mutable,
+                removable = updatedItem.removable,
                 remoteCandidates = updatedItem.remoteCandidates
             )
         }
@@ -963,6 +980,7 @@ fun HomeScreen(
                             modifiedText = updatedItem.modifiedText,
                             checked = updatedItem.checked,
                             mutable = updatedItem.mutable,
+                            removable = updatedItem.removable,
                             remoteCandidates = updatedItem.remoteCandidates
                         )
                     }
