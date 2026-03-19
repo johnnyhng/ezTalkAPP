@@ -66,6 +66,7 @@ data class WavFileEntry(
     val modifiedText: String,
     val checked: Boolean,
     val mutable: Boolean,
+    val removable: Boolean,
 )
 
 @SuppressLint("StringFormatInvalid")
@@ -102,13 +103,15 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             val modified = json.getString("modified")
                             val checked = json.getBoolean("checked")
                             val mutable = json.optBoolean("mutable", true)
+                            val removable = json.optBoolean("removable", false)
 
                             WavFileEntry(
                                 wavFile = wavFile,
                                 originalText = original,
                                 modifiedText = modified,
                                 checked = checked,
-                                mutable = mutable
+                                mutable = mutable,
+                                removable = removable
                             )
                         } catch (e: Exception) {
                             null // Ignore malformed lines
@@ -130,12 +133,16 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
             var successCount = 0
             withContext(Dispatchers.IO) {
                 selectedFiles.forEachIndexed { index, entry ->
-                    val success =
+                    val success = if (entry.removable) {
+                        true // Treat it as success for counting purposes
+                    } else {
                         feedbackToBackend(
                             userSettings.backendUrl,
                             entry.wavFile.absolutePath,
                             userSettings.userId
                         )
+                    }
+
                     if (success) {
                         successCount++
                         // Delete the wav and jsonl files
@@ -189,7 +196,8 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         originalText = editingEntry!!.originalText,
                         modifiedText = newText,
                         checked = editingEntry!!.checked,
-                        mutable = editingEntry!!.mutable
+                        mutable = editingEntry!!.mutable,
+                        removable = editingEntry!!.removable
                     )
                     listWavFiles() // Refresh the list
                 }
@@ -271,7 +279,8 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                     originalText = entry.originalText,
                                     modifiedText = entry.modifiedText,
                                     checked = newState,
-                                    mutable = entry.mutable
+                                    mutable = entry.mutable,
+                                    removable = entry.removable
                                 )
                             }
                         }
@@ -309,7 +318,8 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                             originalText = entry.originalText,
                                             modifiedText = entry.modifiedText,
                                             checked = it,
-                                            mutable = entry.mutable
+                                            mutable = entry.mutable,
+                                            removable = entry.removable
                                         )
                                         listWavFiles()
                                     }
