@@ -621,38 +621,72 @@ fun HomeScreen(
         
         val item = resultList[index]
         val useFeedbackLogic = userSettings.enableTtsFeedback && !isDataCollectMode
+        Log.d(TAG, "handleTtsClick: useFeedbackLogic=$useFeedbackLogic, index=$index")
 
-        // Update the item states based on enableTtsFeedback
-        val updatedItem = if (useFeedbackLogic) {
-            item.copy(
-                modifiedText = text,
-                checked = true,
-                mutable = false,
-                removable = true
-            )
+        if (useFeedbackLogic) {
+            coroutineScope.launch {
+                Log.d(TAG, "Starting feedbackToBackend for ${item.wavFilePath}")
+                val success = withContext(Dispatchers.IO) {
+                    feedbackToBackend(
+                        userSettings.backendUrl,
+                        item.wavFilePath,
+                        userSettings.userId
+                    )
+                }
+                Log.d(TAG, "feedbackToBackend success=$success")
+                if (success) {
+                    withContext(Dispatchers.Main) {
+                        val updatedItem = item.copy(
+                            modifiedText = text,
+                            checked = true,
+                            mutable = false,
+                            removable = true
+                        )
+                        resultList[index] = updatedItem
+                        Log.d(TAG, "Updated resultList at index $index: mutable=${updatedItem.mutable}")
+
+                        // Save the updated record to JSONL
+                        val file = File(updatedItem.wavFilePath)
+                        val filename = file.nameWithoutExtension
+                        withContext(Dispatchers.IO) {
+                            saveJsonl(
+                                context = context,
+                                userId = userId,
+                                filename = filename,
+                                originalText = updatedItem.recognizedText,
+                                modifiedText = updatedItem.modifiedText,
+                                checked = updatedItem.checked,
+                                mutable = updatedItem.mutable,
+                                removable = updatedItem.removable,
+                                remoteCandidates = updatedItem.remoteCandidates
+                            )
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, R.string.feedback_failed, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         } else {
-            item.copy(
-                modifiedText = text,
-                checked = true
-            )
-        }
-        resultList[index] = updatedItem
-
-        // Save the updated record to JSONL
-        val file = File(updatedItem.wavFilePath)
-        val filename = file.nameWithoutExtension
-        coroutineScope.launch(Dispatchers.IO) {
-            saveJsonl(
-                context = context,
-                userId = userId,
-                filename = filename,
-                originalText = updatedItem.recognizedText,
-                modifiedText = updatedItem.modifiedText,
-                checked = updatedItem.checked,
-                mutable = updatedItem.mutable,
-                removable = updatedItem.removable,
-                remoteCandidates = updatedItem.remoteCandidates
-            )
+            Log.d(TAG, "Feedback logic skipped (data collect or disabled)")
+            val updatedItem = item.copy(modifiedText = text, checked = true)
+            resultList[index] = updatedItem
+            val file = File(updatedItem.wavFilePath)
+            val filename = file.nameWithoutExtension
+            coroutineScope.launch(Dispatchers.IO) {
+                saveJsonl(
+                    context = context,
+                    userId = userId,
+                    filename = filename,
+                    originalText = updatedItem.recognizedText,
+                    modifiedText = updatedItem.modifiedText,
+                    checked = updatedItem.checked,
+                    mutable = updatedItem.mutable,
+                    removable = updatedItem.removable,
+                    remoteCandidates = updatedItem.remoteCandidates
+                )
+            }
         }
     }
 
