@@ -636,30 +636,36 @@ fun HomeScreen(
                 Log.d(TAG, "feedbackToBackend success=$success")
                 if (success) {
                     withContext(Dispatchers.Main) {
-                        val updatedItem = item.copy(
-                            modifiedText = text,
-                            checked = true,
-                            mutable = false,
-                            removable = true
-                        )
-                        resultList[index] = updatedItem
-                        Log.d(TAG, "Updated resultList at index $index: mutable=${updatedItem.mutable}")
-
-                        // Save the updated record to JSONL
-                        val file = File(updatedItem.wavFilePath)
-                        val filename = file.nameWithoutExtension
-                        withContext(Dispatchers.IO) {
-                            saveJsonl(
-                                context = context,
-                                userId = userId,
-                                filename = filename,
-                                originalText = updatedItem.recognizedText,
-                                modifiedText = updatedItem.modifiedText,
-                                checked = updatedItem.checked,
-                                mutable = updatedItem.mutable,
-                                removable = updatedItem.removable,
-                                remoteCandidates = updatedItem.remoteCandidates
+                        // Use actual item from list if index changed
+                        val currentItemIndex = resultList.indexOfFirst { it.wavFilePath == item.wavFilePath }
+                        if (currentItemIndex != -1) {
+                            val updatedItem = resultList[currentItemIndex].copy(
+                                modifiedText = text,
+                                checked = true,
+                                mutable = false,
+                                removable = true
                             )
+                            resultList[currentItemIndex] = updatedItem
+                            Log.d(TAG, "Updated resultList at index $currentItemIndex: mutable=${updatedItem.mutable}")
+
+                            // Save the updated record to JSONL
+                            val file = File(updatedItem.wavFilePath)
+                            val filename = file.nameWithoutExtension
+                            withContext(Dispatchers.IO) {
+                                saveJsonl(
+                                    context = context,
+                                    userId = userId,
+                                    filename = filename,
+                                    originalText = updatedItem.recognizedText,
+                                    modifiedText = updatedItem.modifiedText,
+                                    checked = updatedItem.checked,
+                                    mutable = updatedItem.mutable,
+                                    removable = updatedItem.removable,
+                                    remoteCandidates = updatedItem.remoteCandidates
+                                )
+                            }
+                        } else {
+                            Log.w(TAG, "Could find item in list to update after feedback.")
                         }
                     }
                 } else {
@@ -810,7 +816,7 @@ fun HomeScreen(
                 contentPadding = PaddingValues(16.dp),
                 state = lazyColumnListState
             ) {
-                itemsIndexed(resultList, key = { _, item -> item.hashCode() }) { index, result ->
+                itemsIndexed(resultList, key = { _, item -> item.wavFilePath.ifEmpty { item.hashCode() } }) { index, result ->
                     if (editingIndex == index) {
                         // Inline editing UI
                         val menuItems = remember(result, localCandidate) {
@@ -929,16 +935,19 @@ fun HomeScreen(
 
                             if (result.wavFilePath.isNotEmpty()) {
                                 // Talk Button -> IconButton
-                                IconButton(
-                                    onClick = {
-                                        handleTtsClick(index, result.modifiedText)
-                                    },
-                                    enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.RecordVoiceOver,
-                                        contentDescription = stringResource(id = R.string.talk)
-                                    )
+                                // Hidden if data collect mode or already locked (feedback done)
+                                if (!isDataCollectMode && result.mutable) {
+                                    IconButton(
+                                        onClick = {
+                                            handleTtsClick(index, result.modifiedText)
+                                        },
+                                        enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.RecordVoiceOver,
+                                            contentDescription = stringResource(id = R.string.talk)
+                                        )
+                                    }
                                 }
 
                                 // Play Button -> IconButton
