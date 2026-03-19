@@ -71,4 +71,5 @@
     <string name="clear_text">Clear text</string>
     <string name="recognized_text">Recognized Text</string>
     <string name="speak_text">Speak Text</string>
+    <string name="feedback_failed">Feedback failed.</string>
 </resources>

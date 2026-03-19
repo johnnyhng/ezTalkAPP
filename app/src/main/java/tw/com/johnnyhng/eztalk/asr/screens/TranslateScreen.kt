@@ -51,6 +51,7 @@ import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
+import tw.com.johnnyhng.eztalk.asr.utils.feedbackToBackend
 import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
 import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
@@ -458,36 +459,63 @@ fun TranslateScreen(
 
                 currentTranscript?.let { transcript ->
                     val useFeedbackLogic = userSettings.enableTtsFeedback
-                    val updatedTranscript = if (useFeedbackLogic) {
-                        transcript.copy(
-                            modifiedText = textInput,
-                            checked = true,
-                            mutable = false,
-                            removable = true
-                        )
+                    if (useFeedbackLogic) {
+                        coroutineScope.launch {
+                            val success = withContext(IO) {
+                                feedbackToBackend(
+                                    userSettings.backendUrl,
+                                    transcript.wavFilePath,
+                                    userSettings.userId
+                                )
+                            }
+                            if (success) {
+                                val updatedTranscript = transcript.copy(
+                                    modifiedText = textInput,
+                                    checked = true,
+                                    mutable = false,
+                                    removable = true
+                                )
+                                currentTranscript = updatedTranscript
+
+                                val file = File(transcript.wavFilePath)
+                                val filename = file.nameWithoutExtension
+                                withContext(IO) {
+                                    saveJsonl(
+                                        context = context,
+                                        userId = userId,
+                                        filename = filename,
+                                        originalText = updatedTranscript.recognizedText,
+                                        modifiedText = updatedTranscript.modifiedText,
+                                        checked = updatedTranscript.checked,
+                                        mutable = updatedTranscript.mutable,
+                                        removable = updatedTranscript.removable,
+                                        remoteCandidates = updatedTranscript.remoteCandidates
+                                    )
+                                }
+                            } else {
+                                withContext(Main) {
+                                    Toast.makeText(context, R.string.feedback_failed, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
                     } else {
-                        transcript.copy(
-                            modifiedText = textInput,
-                            checked = true
-                        )
-                    }
-                    currentTranscript = updatedTranscript
-
-                    val file = File(transcript.wavFilePath)
-                    val filename = file.nameWithoutExtension
-
-                    coroutineScope.launch(IO) {
-                        saveJsonl(
-                            context = context,
-                            userId = userId,
-                            filename = filename,
-                            originalText = updatedTranscript.recognizedText,
-                            modifiedText = updatedTranscript.modifiedText,
-                            checked = updatedTranscript.checked,
-                            mutable = updatedTranscript.mutable,
-                            removable = updatedTranscript.removable,
-                            remoteCandidates = updatedTranscript.remoteCandidates
-                        )
+                        val updatedTranscript = transcript.copy(modifiedText = textInput, checked = true)
+                        currentTranscript = updatedTranscript
+                        val file = File(transcript.wavFilePath)
+                        val filename = file.nameWithoutExtension
+                        coroutineScope.launch(IO) {
+                            saveJsonl(
+                                context = context,
+                                userId = userId,
+                                filename = filename,
+                                originalText = updatedTranscript.recognizedText,
+                                modifiedText = updatedTranscript.modifiedText,
+                                checked = updatedTranscript.checked,
+                                mutable = updatedTranscript.mutable,
+                                removable = updatedTranscript.removable,
+                                remoteCandidates = updatedTranscript.remoteCandidates
+                            )
+                        }
                     }
                 }
             },
