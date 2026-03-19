@@ -315,7 +315,7 @@ fun TranslateScreen(
                                 if (now - lastRealtimeRecognitionTime > realtimeRecognitionInterval) {
                                     lastRealtimeRecognitionTime = now
                                     val audioForRealtime = fullRecordingBuffer.subList(speechStartOffset, fullRecordingBuffer.size).toFloatArray()
-                                    
+
                                     // Fire-and-forget recognition job
                                     launch(IO) {
                                         val stream = SimulateStreamingAsr.recognizer.createStream()
@@ -329,7 +329,7 @@ fun TranslateScreen(
                                                 }
                                             }
                                         } finally {
-                                            stream.release() 
+                                            stream.release()
                                         }
                                     }
                                 }
@@ -423,17 +423,31 @@ fun TranslateScreen(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val isInputEnabled = currentTranscript?.mutable != false
-        OutlinedTextField(
-            value = textInput,
-            onValueChange = { textInput = it },
-            label = { Text(stringResource(id = R.string.recognized_text)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            textStyle = TextStyle(fontSize = 20.sp, textAlign = TextAlign.Center),
-            enabled = isInputEnabled
-        )
+        val isMutable = currentTranscript?.mutable != false
+
+        if (isMutable) {
+            OutlinedTextField(
+                value = textInput,
+                onValueChange = { textInput = it },
+                label = { Text(stringResource(id = R.string.recognized_text)) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                textStyle = TextStyle(fontSize = 20.sp, textAlign = TextAlign.Center)
+            )
+        } else {
+            Text(
+                text = textInput,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                style = TextStyle(
+                    fontSize = 24.sp,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
 
         HomeButtonRow(
             modifier = Modifier.padding(vertical = 16.dp),
@@ -564,7 +578,7 @@ fun TranslateScreen(
                     text = "${index + 1}: $candidate",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = isInputEnabled) { textInput = candidate }
+                        .clickable(enabled = isMutable) { textInput = candidate }
                         .padding(vertical = 12.dp),
                     textAlign = TextAlign.Center,
                     fontSize = 20.sp
