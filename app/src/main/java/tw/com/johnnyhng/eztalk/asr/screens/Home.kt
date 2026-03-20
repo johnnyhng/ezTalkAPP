@@ -41,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -88,6 +89,9 @@ fun HomeScreen(
     var localCandidate by remember { mutableStateOf<String?>(null) }
     var isFetchingCandidates by remember { mutableStateOf(false) }
     var transcriptToEditInDialog by remember { mutableStateOf<Pair<Int, Transcript>?>(null) }
+
+    // Map to track background recognition jobs per file path to avoid race conditions
+    val fetchingJobs = remember { mutableStateMapOf<String, Job>() }
 
     // Waveform and countdown states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
@@ -208,6 +212,9 @@ fun HomeScreen(
             for (wavPath in recognitionQueue) {
                 if (userSettings.recognitionUrl.isBlank() || isDataCollectMode) continue
 
+                // Store reference to this job to allow joining later
+                fetchingJobs[wavPath] = coroutineContext[Job]!!
+
                 var transcript: Transcript? = null
                 // Switch to main thread to safely access resultList
                 withContext(Dispatchers.Main) {
@@ -238,6 +245,8 @@ fun HomeScreen(
                     TAG,
                     "Could not find transcript for wavPath: $wavPath to update remote candidates."
                 )
+                
+                fetchingJobs.remove(wavPath)
             }
         }
     }
@@ -625,6 +634,15 @@ fun HomeScreen(
 
         if (useFeedbackLogic) {
             coroutineScope.launch {
+                // Wait for background recognition job to finish if it exists (Scheme 2)
+                fetchingJobs[item.wavFilePath]?.join()
+
+                // If already marked as removable, it's already synced. Skip backend feedback call.
+                if (item.removable) {
+                    Log.d(TAG, "Record already removable (synced), skip feedbackToBackend.")
+                    return@launch
+                }
+
                 Log.d(TAG, "Starting feedbackToBackend for ${item.wavFilePath}")
                 val success = withContext(Dispatchers.IO) {
                     feedbackToBackend(
@@ -935,8 +953,9 @@ fun HomeScreen(
 
                             if (result.wavFilePath.isNotEmpty()) {
                                 // Talk Button -> IconButton
-                                // Hidden if data collect mode or already locked (feedback done)
-                                if (!isDataCollectMode && result.mutable) {
+                                // Hidden ONLY in data collect mode.
+                                // If already synced (removable), it stays visible and enabled but won't feedback.
+                                if (!isDataCollectMode) {
                                     IconButton(
                                         onClick = {
                                             handleTtsClick(index, result.modifiedText)
