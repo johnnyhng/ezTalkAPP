@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +41,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.Default
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -84,6 +86,7 @@ fun TranslateScreen(
     var localCandidate by remember { mutableStateOf<String?>(null) }
     var remoteCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var isFetchingCandidates by remember { mutableStateOf(false) }
+    var fetchJob by remember { mutableStateOf<Job?>(null) }
 
     // Waveform and recognition states
     var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
@@ -153,6 +156,7 @@ fun TranslateScreen(
 
     // Fetch candidates when a new transcript is available
     LaunchedEffect(currentTranscript?.wavFilePath) {
+        fetchJob = coroutineContext[Job] // Capture the job of this effect
         val transcript = currentTranscript
         if (transcript != null && transcript.wavFilePath.isNotEmpty()) {
             try {
@@ -315,7 +319,7 @@ fun TranslateScreen(
                                 if (now - lastRealtimeRecognitionTime > realtimeRecognitionInterval) {
                                     lastRealtimeRecognitionTime = now
                                     val audioForRealtime = fullRecordingBuffer.subList(speechStartOffset, fullRecordingBuffer.size).toFloatArray()
-
+                                    
                                     // Fire-and-forget recognition job
                                     launch(IO) {
                                         val stream = SimulateStreamingAsr.recognizer.createStream()
@@ -329,7 +333,7 @@ fun TranslateScreen(
                                                 }
                                             }
                                         } finally {
-                                            stream.release()
+                                            stream.release() 
                                         }
                                     }
                                 }
@@ -424,7 +428,7 @@ fun TranslateScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         val isMutable = currentTranscript?.mutable != false
-
+        
         if (isMutable) {
             OutlinedTextField(
                 value = textInput,
@@ -436,17 +440,25 @@ fun TranslateScreen(
                 textStyle = TextStyle(fontSize = 20.sp, textAlign = TextAlign.Center)
             )
         } else {
-            Text(
-                text = textInput,
+            // TextView style replacement for read-only state
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 24.dp),
-                style = TextStyle(
-                    fontSize = 24.sp,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.primary
+                    .padding(16.dp),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Text(
+                    text = textInput,
+                    modifier = Modifier.padding(24.dp),
+                    style = TextStyle(
+                        fontSize = 24.sp, 
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 )
-            )
+            }
         }
 
         HomeButtonRow(
@@ -475,6 +487,15 @@ fun TranslateScreen(
                     val useFeedbackLogic = userSettings.enableTtsFeedback
                     if (useFeedbackLogic) {
                         coroutineScope.launch {
+                            // IMPROVEMENT: If removable is already true, skip backend sync
+                            if (transcript.removable) {
+                                Log.d(TAG, "Already synced, skip feedback.")
+                                return@launch
+                            }
+
+                            // wait for candidates to avoid race condition (方案二)
+                            fetchJob?.join()
+                            
                             val success = withContext(IO) {
                                 feedbackToBackend(
                                     userSettings.backendUrl,
@@ -487,7 +508,8 @@ fun TranslateScreen(
                                     modifiedText = textInput,
                                     checked = true,
                                     mutable = false,
-                                    removable = true
+                                    removable = true,
+                                    remoteCandidates = remoteCandidates // Ensure candidates are included
                                 )
                                 currentTranscript = updatedTranscript
 
