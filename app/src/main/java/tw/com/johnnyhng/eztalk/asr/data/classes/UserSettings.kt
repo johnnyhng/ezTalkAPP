@@ -11,4 +11,12 @@ data class UserSettings(
     val enableTtsFeedback: Boolean = false,
     val modelUrl: String = "",
     val selectedModelName: String = ""
-)
+) {
+    val effectiveRecognitionUrl: String
+        get() = if (recognitionUrl.isNotBlank()) {
+            recognitionUrl
+        } else {
+            val base = backendUrl.trim().removeSuffix("/")
+            if (base.isNotBlank()) "$base/api/process_audio" else ""
+        }
+}

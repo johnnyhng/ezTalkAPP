@@ -78,7 +78,6 @@ fun HomeScreen(
         save = { it.toList() },
         restore = { it.toMutableStateList() }
     )) { mutableStateListOf<String>() }
-    var lastUserId by rememberSaveable { mutableStateOf<String?>(null) }
     var showNoQueueMessage by remember { mutableStateOf(false) }
 
     // TTS and Background Logic
@@ -99,10 +98,11 @@ fun HomeScreen(
         }
     }
 
-    // Background recognition queue processor (Restored)
-    LaunchedEffect(userSettings.recognitionUrl, userSettings.userId) {
+    // Background recognition queue processor
+    LaunchedEffect(userSettings.effectiveRecognitionUrl, userSettings.userId) {
         for (wavPath in recognitionQueue) {
-            if (userSettings.recognitionUrl.isBlank() || isDataCollectMode) continue
+            val url = userSettings.effectiveRecognitionUrl
+            if (url.isBlank() || isDataCollectMode) continue
 
             coroutineScope.launch(Dispatchers.IO) {
                 val transcript = resultList.find { it.wavFilePath == wavPath }
@@ -111,7 +111,7 @@ fun HomeScreen(
                         context = context,
                         wavFilePath = wavPath,
                         userId = userSettings.userId,
-                        recognitionUrl = userSettings.recognitionUrl,
+                        recognitionUrl = url,
                         originalText = it.recognizedText,
                         currentText = it.modifiedText
                     )
@@ -176,7 +176,7 @@ fun HomeScreen(
                 }
                 lazyColumnListState.animateScrollToItem(resultList.size - 1)
                 
-                if (userSettings.recognitionUrl.isNotBlank() && !isDataCollectMode) {
+                if (userSettings.effectiveRecognitionUrl.isNotBlank() && !isDataCollectMode) {
                     recognitionQueue.trySend(transcript.wavFilePath)
                 }
             }
@@ -318,35 +318,37 @@ fun HomeScreen(
                 onCancelEdit = { isEditing = false },
                 onConfirmEdit = { idx, txt -> handleTtsClick(idx, txt); isEditing = false },
                 onItemClick = { idx, res -> 
-                    isEditing = true
-                    editingIndex = idx
-                    editingText = res.modifiedText
-                    
-                    // Restore: Trigger local candidate fetch on edit
-                    if (res.wavFilePath.isNotEmpty()) {
-                        coroutineScope.launch {
-                            isFetchingCandidates = true
-                            val localJob = launch(Dispatchers.IO) {
-                                try {
-                                    val audioData = readWavFileToFloatArray(res.wavFilePath)
-                                    if (audioData != null) {
-                                        val recognizer = SimulateStreamingAsr.recognizer
-                                        val stream = recognizer.createStream()
-                                        stream.acceptWaveform(audioData, 16000)
-                                        recognizer.decode(stream)
-                                        val localResultText = recognizer.getResult(stream).text
-                                        stream.release()
-                                        withContext(Dispatchers.Main) {
-                                            localCandidate = localResultText
+                    if (userSettings.inlineEdit) {
+                        isEditing = true
+                        editingIndex = idx
+                        editingText = res.modifiedText
+                        
+                        if (res.wavFilePath.isNotEmpty()) {
+                            coroutineScope.launch {
+                                isFetchingCandidates = true
+                                val localJob = launch(Dispatchers.IO) {
+                                    try {
+                                        val audioData = readWavFileToFloatArray(res.wavFilePath)
+                                        if (audioData != null) {
+                                            val recognizer = SimulateStreamingAsr.recognizer
+                                            val stream = recognizer.createStream()
+                                            stream.acceptWaveform(audioData, 16000)
+                                            recognizer.decode(stream)
+                                            val localResultText = recognizer.getResult(stream).text
+                                            stream.release()
+                                            withContext(Dispatchers.Main) { localCandidate = localResultText }
                                         }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Local re-recognition failed", e)
                                     }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Local re-recognition failed", e)
                                 }
+                                localJob.join()
+                                isFetchingCandidates = false
                             }
-                            localJob.join()
-                            isFetchingCandidates = false
                         }
+                    } else {
+                        isEditing = true
+                        transcriptToEditInDialog = idx to res
                     }
                 },
                 onTtsClick = { idx, txt -> handleTtsClick(idx, txt) },
@@ -360,6 +362,29 @@ fun HomeScreen(
                 isDataCollectMode = isDataCollectMode,
                 localCandidate = localCandidate,
                 isFetchingCandidates = isFetchingCandidates
+            )
+        }
+
+        transcriptToEditInDialog?.let { (index, transcript) ->
+            EditRecognitionDialog(
+                originalText = transcript.recognizedText,
+                currentText = transcript.modifiedText,
+                wavFilePath = transcript.wavFilePath,
+                onDismiss = {
+                    transcriptToEditInDialog = null
+                    isEditing = false
+                },
+                onConfirm = { newText ->
+                    val updatedItem = transcript.copy(modifiedText = newText, checked = true)
+                    resultList[index] = updatedItem
+                    coroutineScope.launch(Dispatchers.IO) {
+                        saveJsonl(context, userSettings.userId, File(updatedItem.wavFilePath).nameWithoutExtension, updatedItem.recognizedText, newText, true, updatedItem.mutable)
+                    }
+                    transcriptToEditInDialog = null
+                    isEditing = false
+                },
+                userId = userSettings.userId,
+                recognitionUrl = userSettings.effectiveRecognitionUrl,
             )
         }
     }

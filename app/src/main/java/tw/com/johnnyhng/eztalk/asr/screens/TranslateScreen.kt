@@ -186,13 +186,13 @@ fun TranslateScreen(
                     }
 
                     // Remote recognition
-                    if (userSettings.recognitionUrl.isNotBlank()) {
+                    if (userSettings.effectiveRecognitionUrl.isNotBlank()) {
                         launch(IO) {
                             val sentences = getRemoteCandidates(
                                 context = context,
                                 wavFilePath = transcript.wavFilePath,
                                 userId = userSettings.userId,
-                                recognitionUrl = userSettings.recognitionUrl,
+                                recognitionUrl = userSettings.effectiveRecognitionUrl,
                                 originalText = transcript.recognizedText,
                                 currentText = transcript.modifiedText
                             )
