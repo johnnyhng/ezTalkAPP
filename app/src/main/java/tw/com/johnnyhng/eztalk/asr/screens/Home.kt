@@ -1,12 +1,8 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.pm.PackageManager
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -29,12 +25,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.R
@@ -46,52 +39,40 @@ import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.*
 import tw.com.johnnyhng.eztalk.asr.widgets.*
 import java.io.File
-import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.max
-import kotlin.math.min
-
-private var audioRecord: AudioRecord? = null
-private const val sampleRateInHz = 16000
-
-// This dynamic array will keep records for future feedback implementation.
-private val feedbackRecords = mutableListOf<Transcript>()
 
 @Composable
 fun HomeScreen(
     homeViewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val activity = context as Activity
     val clipboardManager = LocalClipboardManager.current
-    val activity = LocalContext.current as Activity
     val coroutineScope = rememberCoroutineScope()
 
-    // UI state
-    var isStarted by remember { mutableStateOf(false) }
+    // UI state tied to ViewModel
+    val isStarted by homeViewModel.isRecording.collectAsState()
+    val latestAudioSamples by homeViewModel.latestSamples.collectAsState()
+    val isRecognizingSpeech by homeViewModel.isRecognizingSpeech.collectAsState()
+    val countdownProgress by homeViewModel.countdownProgress.collectAsState()
+    val userSettings by homeViewModel.userSettings.collectAsState()
+    val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
+    
     val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
 
-    // State for inline editing
+    // Local UI states
     var isEditing by remember { mutableStateOf(false) }
     var editingIndex by remember { mutableIntStateOf(-1) }
     var editingText by remember { mutableStateOf("") }
     var localCandidate by remember { mutableStateOf<String?>(null) }
     var isFetchingCandidates by remember { mutableStateOf(false) }
     var transcriptToEditInDialog by remember { mutableStateOf<Pair<Int, Transcript>?>(null) }
-
-    // Map to track background recognition jobs per file path to avoid race conditions
     val fetchingJobs = remember { mutableStateMapOf<String, Job>() }
 
-    // Waveform and countdown states
-    var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
-    var isRecognizingSpeech by remember { mutableStateOf(false) }
-    var countdownProgress by remember { mutableFloatStateOf(0f) }
-
-    // Data collect mode state
+    // Data collect states
     var isDataCollectMode by remember { mutableStateOf(false) }
     var dataCollectText by remember { mutableStateOf("") }
-
-    // Sequence mode state
     var isSequenceMode by rememberSaveable { mutableStateOf(false) }
     val textQueue = rememberSaveable(saver = listSaver(
         save = { it.toList() },
@@ -100,116 +81,31 @@ fun HomeScreen(
     var lastUserId by rememberSaveable { mutableStateOf<String?>(null) }
     var showNoQueueMessage by remember { mutableStateOf(false) }
 
-
-    // Collect settings from the ViewModel
-    val userSettings by homeViewModel.userSettings.collectAsState()
-    val userId = userSettings.userId
-
-    // Effect to clear queue when user changes
-    LaunchedEffect(userId) {
-        if (lastUserId != null && lastUserId != userId) {
-            saveQueueState(context, lastUserId!!, QueueState(dataCollectText, textQueue.toList()))
-            textQueue.clear()
-            isSequenceMode = false
-            dataCollectText = ""
-        }
-        lastUserId = userId
-    }
-
-    // Effect to reset sequence mode when data collect mode is off
-    LaunchedEffect(isDataCollectMode) {
-        if (isDataCollectMode) {
-            restoreQueueState(context, userId)?.let {
-                textQueue.addAll(it.queue)
-                dataCollectText = it.currentText
-                isSequenceMode = textQueue.isNotEmpty() || it.currentText.isNotBlank()
-            }
-        } else {
-            isSequenceMode = false
-        }
-    }
-
-
-    // File picker launcher
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            coroutineScope.launch(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(it)?.use { inputStream ->
-                        val lines =
-                            inputStream.bufferedReader().readLines().filter { it.isNotBlank() }
-                        withContext(Dispatchers.Main) {
-                            deleteQueueState(context, userId) // Delete old state first
-                            textQueue.clear()
-
-                            if (lines.isNotEmpty()) {
-                                dataCollectText = lines.first()
-                                textQueue.addAll(lines.drop(1))
-                                isSequenceMode = true
-                                showNoQueueMessage = false
-                                saveQueueState(context, userId, QueueState(dataCollectText, textQueue.toList()))
-                            } else {
-                                dataCollectText = ""
-                                isSequenceMode = false
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error reading file: ", e)
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, R.string.error_reading_file, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-    }
-
-
-    // Playback state
+    // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
-
-    // TTS state
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsSpeaking by remember { mutableStateOf(false) }
-
-    // ASR model loading state
-    var isAsrModelLoading by remember { mutableStateOf(true) }
-
-    // Channel to signal the audio processor to flush remaining buffers
-    val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
     val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
 
-    // Initialize recognizer in the background
-    LaunchedEffect(key1 = homeViewModel.selectedModel) {
-        isAsrModelLoading = true
-        Log.i(TAG, "ASR model initialization started.")
-        withContext(Dispatchers.IO) {
-            SimulateStreamingAsr.initOfflineRecognizer(
-                context.assets,
-                homeViewModel.selectedModel
-            )
+    // Model Loading
+    var isAsrModelLoading by remember { mutableStateOf(true) }
+    LaunchedEffect(selectedModel) {
+        selectedModel?.let { model ->
+            isAsrModelLoading = true
+            withContext(Dispatchers.IO) {
+                SimulateStreamingAsr.initOfflineRecognizer(context.assets, model)
+            }
+            isAsrModelLoading = false
         }
-        isAsrModelLoading = false
-        Log.i(TAG, "ASR model initialization finished.")
     }
 
-    // Background recognition queue processor
+    // Background recognition queue processor (Restored)
     LaunchedEffect(userSettings.recognitionUrl, userSettings.userId) {
-        launch(Dispatchers.IO) {
-            for (wavPath in recognitionQueue) {
-                if (userSettings.recognitionUrl.isBlank() || isDataCollectMode) continue
+        for (wavPath in recognitionQueue) {
+            if (userSettings.recognitionUrl.isBlank() || isDataCollectMode) continue
 
-                // Store reference to this job to allow joining later
-                fetchingJobs[wavPath] = coroutineContext[Job]!!
-
-                var transcript: Transcript? = null
-                // Switch to main thread to safely access resultList
-                withContext(Dispatchers.Main) {
-                    transcript = resultList.find { it.wavFilePath == wavPath }
-                }
-
+            coroutineScope.launch(Dispatchers.IO) {
+                val transcript = resultList.find { it.wavFilePath == wavPath }
                 transcript?.let {
                     val sentences = getRemoteCandidates(
                         context = context,
@@ -222,598 +118,194 @@ fun HomeScreen(
 
                     if (sentences.isNotEmpty()) {
                         withContext(Dispatchers.Main) {
-                            val index =
-                                resultList.indexOfFirst { transcript -> transcript.wavFilePath == wavPath }
+                            val index = resultList.indexOfFirst { r -> r.wavFilePath == wavPath }
                             if (index != -1) {
-                                resultList[index] =
-                                    resultList[index].copy(remoteCandidates = sentences)
+                                resultList[index] = resultList[index].copy(remoteCandidates = sentences)
                             }
                         }
                     }
-                } ?: Log.w(
-                    TAG,
-                    "Could not find transcript for wavPath: $wavPath to update remote candidates."
-                )
-                
-                fetchingJobs.remove(wavPath)
+                }
             }
         }
     }
 
-    // Initialize TTS
-    LaunchedEffect(key1 = Unit) {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                if (tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE) {
-                    tts?.language = Locale.TRADITIONAL_CHINESE
-                } else {
-                    Log.w(TAG, "Traditional Chinese is not available for TTS, using default.")
-                    tts?.language = Locale.getDefault()
+    // Handlers
+    fun handleTtsClick(index: Int, text: String) {
+        MediaController.stop()
+        val utteranceId = UUID.randomUUID().toString()
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        
+        val item = resultList[index]
+        if (userSettings.enableTtsFeedback && !isDataCollectMode) {
+            coroutineScope.launch {
+                fetchingJobs[item.wavFilePath]?.join()
+                if (item.removable) return@launch
+                val success = withContext(Dispatchers.IO) {
+                    feedbackToBackend(userSettings.backendUrl, item.wavFilePath, userSettings.userId)
                 }
-                Log.i(TAG, "TTS initialized successfully.")
-            } else {
-                Log.e(TAG, "TTS initialization failed.")
+                if (success) {
+                    withContext(Dispatchers.Main) {
+                        val cIndex = resultList.indexOfFirst { it.wavFilePath == item.wavFilePath }
+                        if (cIndex != -1) {
+                            val updated = resultList[cIndex].copy(modifiedText = text, checked = true, mutable = false, removable = true)
+                            resultList[cIndex] = updated
+                            withContext(Dispatchers.IO) {
+                                saveJsonl(context, userSettings.userId, File(updated.wavFilePath).nameWithoutExtension, updated.recognizedText, text, true, false, true)
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            val updated = item.copy(modifiedText = text, checked = true)
+            resultList[index] = updated
+            coroutineScope.launch(Dispatchers.IO) {
+                saveJsonl(context, userSettings.userId, File(updated.wavFilePath).nameWithoutExtension, updated.recognizedText, text, true, updated.mutable)
             }
         }
+    }
+
+    // Connect ViewModel events to resultList
+    LaunchedEffect(Unit) {
+        homeViewModel.finalTranscript.collect { transcript ->
+            if (transcript.modifiedText.isNotBlank()) {
+                if (resultList.isNotEmpty() && resultList.last().wavFilePath.isEmpty()) {
+                    resultList[resultList.size - 1] = transcript
+                } else {
+                    resultList.add(transcript)
+                }
+                lazyColumnListState.animateScrollToItem(resultList.size - 1)
+                
+                if (userSettings.recognitionUrl.isNotBlank() && !isDataCollectMode) {
+                    recognitionQueue.trySend(transcript.wavFilePath)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        homeViewModel.partialText.collect { text ->
+            if (resultList.isEmpty() || resultList.last().wavFilePath.isNotEmpty()) {
+                resultList.add(Transcript(recognizedText = text, modifiedText = text, wavFilePath = ""))
+            } else {
+                resultList[resultList.size - 1] = resultList.last().copy(recognizedText = text, modifiedText = text)
+            }
+            lazyColumnListState.animateScrollToItem(resultList.size - 1)
+        }
+    }
+
+    // TTS Init
+    LaunchedEffect(Unit) {
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) tts?.language = Locale.TRADITIONAL_CHINESE
+        }
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                isTtsSpeaking = true
-            }
-
-            override fun onDone(utteranceId: String?) {
-                isTtsSpeaking = false
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                isTtsSpeaking = false
-            }
+            override fun onStart(id: String?) { isTtsSpeaking = true }
+            override fun onDone(id: String?) { isTtsSpeaking = false }
+            override fun onError(id: String?) { isTtsSpeaking = false }
         })
     }
 
-
     DisposableEffect(Unit) {
         onDispose {
-            stopAudio()
             tts?.stop()
             tts?.shutdown()
-            tts = null
             recognitionQueue.close()
         }
     }
 
-    // Function to handle TTS and transcript updates
-    fun handleTtsClick(index: Int, text: String) {
-        MediaController.stop() // Stop any audio playback
-        val utteranceId = UUID.randomUUID().toString()
-        tts?.speak(
-            text,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            utteranceId
-        )
-        
-        val item = resultList[index]
-        val useFeedbackLogic = userSettings.enableTtsFeedback && !isDataCollectMode
-        Log.d(TAG, "handleTtsClick: useFeedbackLogic=$useFeedbackLogic, index=$index")
-
-        if (useFeedbackLogic) {
-            coroutineScope.launch {
-                // Wait for background recognition job to finish if it exists (Scheme 2)
-                fetchingJobs[item.wavFilePath]?.join()
-
-                // If already marked as removable, it's already synced. Skip backend feedback call.
-                if (item.removable) {
-                    Log.d(TAG, "Record already removable (synced), skip feedbackToBackend.")
-                    return@launch
-                }
-
-                Log.d(TAG, "Starting feedbackToBackend for ${item.wavFilePath}")
-                val success = withContext(Dispatchers.IO) {
-                    feedbackToBackend(
-                        userSettings.backendUrl,
-                        item.wavFilePath,
-                        userSettings.userId
-                    )
-                }
-                Log.d(TAG, "feedbackToBackend success=$success")
-                if (success) {
-                    withContext(Dispatchers.Main) {
-                        // Use actual item from list if index changed
-                        val currentItemIndex = resultList.indexOfFirst { it.wavFilePath == item.wavFilePath }
-                        if (currentItemIndex != -1) {
-                            val updatedItem = resultList[currentItemIndex].copy(
-                                modifiedText = text,
-                                checked = true,
-                                mutable = false,
-                                removable = true
-                            )
-                            resultList[currentItemIndex] = updatedItem
-                            Log.d(TAG, "Updated resultList at index $currentItemIndex: mutable=${updatedItem.mutable}")
-
-                            // Save the updated record to JSONL
-                            val file = File(updatedItem.wavFilePath)
-                            val filename = file.nameWithoutExtension
-                            withContext(Dispatchers.IO) {
-                                saveJsonl(
-                                    context = context,
-                                    userId = userId,
-                                    filename = filename,
-                                    originalText = updatedItem.recognizedText,
-                                    modifiedText = updatedItem.modifiedText,
-                                    checked = updatedItem.checked,
-                                    mutable = updatedItem.mutable,
-                                    removable = updatedItem.removable,
-                                    remoteCandidates = updatedItem.remoteCandidates
-                                )
-                            }
-                        } else {
-                            Log.w(TAG, "Could find item in list to update after feedback.")
-                        }
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, R.string.feedback_failed, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        } else {
-            Log.d(TAG, "Feedback logic skipped (data collect or disabled)")
-            val updatedItem = item.copy(modifiedText = text, checked = true)
-            resultList[index] = updatedItem
-            val file = File(updatedItem.wavFilePath)
-            val filename = file.nameWithoutExtension
+    // File Picker
+    val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
             coroutineScope.launch(Dispatchers.IO) {
-                saveJsonl(
-                    context = context,
-                    userId = userId,
-                    filename = filename,
-                    originalText = updatedItem.recognizedText,
-                    modifiedText = updatedItem.modifiedText,
-                    checked = updatedItem.checked,
-                    mutable = updatedItem.mutable,
-                    removable = updatedItem.removable,
-                    remoteCandidates = updatedItem.remoteCandidates
-                )
-            }
-        }
-    }
-
-    val onRecordingButtonClick: () -> Unit = {
-        if (isStarted) { // User is clicking "Stop"
-            coroutineScope.launch {
-                flushChannel.send(Unit) // Signal the processor to flush
-            }
-        }
-        isStarted = !isStarted
-    }
-
-    LaunchedEffect(isStarted, userSettings) {
-        if (isStarted) {
-            if (ActivityCompat.checkSelfPermission(
-                    activity,
-                    Manifest.permission.RECORD_AUDIO
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Log.i(TAG, "Recording is not allowed")
-                isStarted = false
-            } else {
-                stopAudio()
-                val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
-
-                val audioSource = MediaRecorder.AudioSource.MIC
-                val channelConfig = AudioFormat.CHANNEL_IN_MONO
-                val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-                val numBytes =
-                    AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat)
-                audioRecord = AudioRecord(
-                    audioSource,
-                    sampleRateInHz,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    numBytes * 2
-                )
-                SimulateStreamingAsr.vad.reset()
-
-                // --- Coroutine to record audio ---
-                CoroutineScope(Dispatchers.IO).launch {
-                    Log.i(TAG, "Audio recording started")
-                    val interval = 0.1 // 100ms
-                    val bufferSize = (interval * sampleRateInHz).toInt()
-                    val buffer = ShortArray(bufferSize)
-
-                    audioRecord?.startRecording()
-                    while (isStarted) {
-                        if (isDataCollectMode && dataCollectText.isBlank()) {
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(context, R.string.text_empty_stopping_recording, Toast.LENGTH_SHORT).show()
-                                isStarted = false
-                            }
-                            flushChannel.trySend(Unit)
-                            break
+                context.contentResolver.openInputStream(it)?.use { stream ->
+                    val lines = stream.bufferedReader().readLines().filter { it.isNotBlank() }
+                    withContext(Dispatchers.Main) {
+                        textQueue.clear()
+                        if (lines.isNotEmpty()) {
+                            dataCollectText = lines.first()
+                            textQueue.addAll(lines.drop(1))
+                            isSequenceMode = true
+                            saveQueueState(context, userSettings.userId, QueueState(dataCollectText, textQueue.toList()))
                         }
-
-                        if (currentlyPlaying != null || isTtsSpeaking) { // Pause recording during playback and TTS
-                            delay(100)
-                            continue
-                        }
-                        val ret = audioRecord?.read(buffer, 0, buffer.size)
-                        if (ret != null && ret > 0) {
-                            val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
-                            samplesChannel.send(samples)
-                            launch(Dispatchers.Main) {
-                                latestAudioSamples = samples
-                            }
-                        }
-                    }
-                    samplesChannel.close() // Close the channel to signal the end
-                    Log.i(TAG, "Audio recording stopped")
-                }
-
-                // --- Coroutine to process audio ---
-                @OptIn(DelicateCoroutinesApi::class)
-                CoroutineScope(Dispatchers.Default).launch {
-                    val lingerMs = userSettings.lingerMs
-                    val partialIntervalMs = userSettings.partialIntervalMs
-                    val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
-
-                    var buffer = arrayListOf<Float>()
-                    val reserveForPreviousSpeechDetectedMs = 500
-                    val keep = (sampleRateInHz / 1000) * reserveForPreviousSpeechDetectedMs
-                    var offset = 0
-                    val windowSize = 512
-                    var startOffset = 0
-                    var lastSpeechDetectedOffset = 0
-                    var isSpeechStarted = false
-                    var startTime = System.currentTimeMillis()
-                    var lastText: String
-                    var added = false
-
-                    val utteranceSegments = mutableListOf<FloatArray>()
-                    var lastVadPacketAt = 0L
-
-                    val fullRecordingBuffer = arrayListOf<Float>()
-
-                    var done = false
-                    while (!done) {
-                        val s = samplesChannel.tryReceive().getOrNull()
-                        val flushRequest = flushChannel.tryReceive().getOrNull()
-
-                        if (s == null) {
-                            if (flushRequest != null || (samplesChannel.isClosedForReceive && buffer.isEmpty())) {
-                                done =
-                                    true // Stop signal or closed channel, prepare for final processing
-                            } else {
-                                delay(10) // No data, wait briefly
-                                // continue
-                            }
-                        } else {
-                            buffer.addAll(s.toList())
-                        }
-
-                        while (offset + windowSize < buffer.size) {
-                            val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
-                            SimulateStreamingAsr.vad.acceptWaveform(chunk)
-                            offset += windowSize
-                            if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
-                                isSpeechStarted = true
-                                launch(Dispatchers.Main) { isRecognizingSpeech = true }
-                                startTime = System.currentTimeMillis()
-
-                                if (!saveVadSegmentsOnly) {
-                                    startOffset = max(0, offset - windowSize - keep)
-                                }
-                            }
-                        }
-
-                        if (isSpeechStarted) {
-                            val elapsed = System.currentTimeMillis() - startTime
-                            if (elapsed > partialIntervalMs) {
-                                val stream = SimulateStreamingAsr.recognizer.createStream()
-                                try {
-                                    stream.acceptWaveform(
-                                        buffer.subList(0, offset).toFloatArray(),
-                                        sampleRateInHz
-                                    )
-                                    SimulateStreamingAsr.recognizer.decode(stream)
-                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                    lastText = result.text
-
-                                    if (lastText.isNotBlank()) {
-                                        if (!added || resultList.isEmpty()) {
-                                            resultList.add(
-                                                Transcript(
-                                                    recognizedText = lastText,
-                                                    wavFilePath = ""
-                                                )
-                                            )
-                                            added = true
-                                        } else {
-                                            val lastItem = resultList.last()
-                                            resultList[resultList.size - 1] =
-                                                lastItem.copy(
-                                                    recognizedText = lastText,
-                                                    modifiedText = lastText
-                                                )
-                                        }
-                                        coroutineScope.launch {
-                                            lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                                        }
-                                    }
-                                } finally {
-                                    stream.release()
-                                }
-                                startTime = System.currentTimeMillis()
-                            }
-                        }
-
-                        while (!SimulateStreamingAsr.vad.empty()) {
-                            if (!saveVadSegmentsOnly) {
-                                lastSpeechDetectedOffset = offset
-                            }
-                            val seg = SimulateStreamingAsr.vad.front().samples
-                            SimulateStreamingAsr.vad.pop()
-                            utteranceSegments.add(seg)
-                            lastVadPacketAt = System.currentTimeMillis()
-                        }
-
-                        if (utteranceSegments.isNotEmpty()) {
-                            val since = System.currentTimeMillis() - lastVadPacketAt
-                            val progress = (since.toFloat() / lingerMs).coerceIn(0f, 1f)
-                            launch(Dispatchers.Main) { countdownProgress = progress }
-                            // Process if silence duration is met OR if it's the final flush
-                            if (since >= lingerMs || (done && utteranceSegments.isNotEmpty()) || !isStarted) {
-                                val totalSize = utteranceSegments.sumOf { it.size }
-                                val concatenated = FloatArray(totalSize)
-                                var currentPos = 0
-                                for (segment in utteranceSegments) {
-                                    System.arraycopy(
-                                        segment, 0, concatenated, currentPos, segment.size
-                                    )
-                                    currentPos += segment.size
-                                }
-                                val utteranceForRecognition = concatenated
-
-                                val audioToSave = if (saveVadSegmentsOnly) {
-                                    utteranceForRecognition
-                                } else {
-                                    lastSpeechDetectedOffset = min(
-                                        buffer.size - 1,
-                                        lastSpeechDetectedOffset + keep
-                                    )
-                                    fullRecordingBuffer.clear()
-                                    fullRecordingBuffer.addAll(
-                                        buffer.subList(
-                                            startOffset,
-                                            lastSpeechDetectedOffset
-                                        )
-                                    )
-                                    fullRecordingBuffer.toFloatArray()
-                                }
-
-                                val stream = SimulateStreamingAsr.recognizer.createStream()
-                                try {
-                                    stream.acceptWaveform(
-                                        utteranceForRecognition,
-                                        sampleRateInHz
-                                    )
-                                    SimulateStreamingAsr.recognizer.decode(stream)
-                                    val result = SimulateStreamingAsr.recognizer.getResult(stream)
-
-                                    val originalText = result.text
-                                    val modifiedText =
-                                        if (isDataCollectMode) dataCollectText else result.text
-
-                                    val timestamp = SimpleDateFormat(
-                                        "yyyyMMdd-HHmmss",
-                                        Locale.getDefault()
-                                    ).format(
-                                        Date()
-                                    )
-                                    val filename = "${timestamp}.app"
-
-                                    // Save the WAV file
-                                    val wavPath = saveAsWav(
-                                        context = context,
-                                        samples = audioToSave,
-                                        sampleRate = sampleRateInHz,
-                                        numChannels = 1,
-                                        userId = userId,
-                                        filename = filename
-                                    )
-
-                                    if (wavPath != null) {
-                                        // Save the initial JSONL entry
-                                        saveJsonl(
-                                            context = context,
-                                            userId = userId,
-                                            filename = filename,
-                                            originalText = originalText,
-                                            modifiedText = modifiedText,
-                                            checked = isDataCollectMode,
-                                            mutable = !isDataCollectMode
-                                        )
-
-                                        // Enqueue for background recognition
-                                        if (userSettings.recognitionUrl.isNotBlank() && !isDataCollectMode) {
-                                            recognitionQueue.trySend(wavPath)
-                                        }
-                                    }
-
-                                    val newTranscript = Transcript(
-                                        recognizedText = originalText,
-                                        wavFilePath = wavPath ?: "",
-                                        modifiedText = modifiedText,
-                                        checked = isDataCollectMode,
-                                        mutable = !isDataCollectMode
-                                    )
-
-                                    if (modifiedText.isNotBlank()) {
-                                        if (added && resultList.isNotEmpty()) {
-                                            resultList[resultList.size - 1] = newTranscript
-                                        } else {
-                                            resultList.add(newTranscript)
-                                        }
-                                    }
-
-                                    // Add the completed record to our feedback list
-                                    if (modifiedText.isNotBlank() && resultList.isNotEmpty()) {
-                                        feedbackRecords.add(resultList.last())
-                                    }
-
-                                    coroutineScope.launch {
-                                        if (resultList.isNotEmpty()) {
-                                            lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                                        }
-                                    }
-                                } finally {
-                                    stream.release()
-                                }
-                                utteranceSegments.clear()
-                                fullRecordingBuffer.clear()
-                                isSpeechStarted = false
-                                buffer = arrayListOf()
-                                offset = 0
-                                startOffset = 0
-                                lastSpeechDetectedOffset = 0
-                                added = false
-                                launch(Dispatchers.Main) {
-                                    isRecognizingSpeech = false
-                                    countdownProgress = 0f
-                                }
-                            }
-                        } else {
-                            if (isRecognizingSpeech) {
-                                val sinceLastPacket =
-                                    System.currentTimeMillis() - lastVadPacketAt
-                                if (lastVadPacketAt != 0L && sinceLastPacket > lingerMs) {
-                                    launch(Dispatchers.Main) { countdownProgress = 0f }
-                                }
-                            }
-                        }
-                    }
-                    launch(Dispatchers.Main) {
-                        isRecognizingSpeech = false
-                        countdownProgress = 0f
                     }
                 }
             }
-        } else {
-            stopAudio()
         }
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        Column(modifier = Modifier) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
-            ) {
-                Text(stringResource(id = R.string.data_collect_mode))
+    // Main UI
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+                Text(stringResource(R.string.data_collect_mode))
                 Spacer(modifier = Modifier.width(8.dp))
-                Switch(
-                    checked = isDataCollectMode,
-                    onCheckedChange = { isDataCollectMode = it }
-                )
+                Switch(checked = isDataCollectMode, onCheckedChange = { isDataCollectMode = it })
             }
+
             if (isDataCollectMode) {
                 DataCollectWidget(
                     text = dataCollectText,
                     onTextChange = { dataCollectText = it },
-                    onTtsClick = {
-                        if (dataCollectText.isNotBlank()) {
-                            tts?.speak(
-                                dataCollectText,
-                                TextToSpeech.QUEUE_FLUSH,
-                                null,
-                                UUID.randomUUID().toString()
-                            )
-                        }
-                    },
+                    onTtsClick = { if (dataCollectText.isNotBlank()) tts?.speak(dataCollectText, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString()) },
                     isSequenceMode = isSequenceMode,
                     onSequenceModeChange = { newMode ->
                         if (newMode) {
-                            val restoredState = restoreQueueState(context, userId)
-                            if (restoredState != null && (restoredState.currentText.isNotBlank() || restoredState.queue.isNotEmpty())) {
+                            restoreQueueState(context, userSettings.userId)?.let {
                                 textQueue.clear()
-                                textQueue.addAll(restoredState.queue)
-                                dataCollectText = restoredState.currentText
+                                textQueue.addAll(it.queue)
+                                dataCollectText = it.currentText
                                 isSequenceMode = true
-                                showNoQueueMessage = false
-                            } else {
-                                showNoQueueMessage = true
-                            }
+                            } ?: run { showNoQueueMessage = true }
                         } else {
                             isSequenceMode = false
-                            saveQueueState(context, userId, QueueState(dataCollectText, textQueue.toList()))
                         }
                     },
-                    onUploadClick = {
-                        filePickerLauncher.launch("text/plain")
-                    },
+                    onUploadClick = { filePickerLauncher.launch("text/plain") },
                     onNextClick = {
                         if (textQueue.isNotEmpty()) {
                             dataCollectText = textQueue.removeFirst()
-                            saveQueueState(context, userId, QueueState(dataCollectText, textQueue.toList()))
+                            saveQueueState(context, userSettings.userId, QueueState(dataCollectText, textQueue.toList()))
                         } else {
-                            // This was the last item, turn off sequence mode
                             isSequenceMode = false
-                            dataCollectText = ""
-                            deleteQueueState(context, userId)
+                            deleteQueueState(context, userSettings.userId)
                         }
                     },
-                    onDeleteClick = {
-                        dataCollectText = ""
-                    },
+                    onDeleteClick = { dataCollectText = "" },
                     isNextEnabled = isSequenceMode,
-                    isSequenceModeSwitchEnabled = true, // Always allow turning on/off
+                    isSequenceModeSwitchEnabled = true,
                     showNoQueueMessage = showNoQueueMessage
                 )
             }
+
             HomeButtonRow(
-                modifier = Modifier.padding(vertical = 16.dp),
                 isStarted = isStarted,
-                onRecordingButtonClick = onRecordingButtonClick,
+                onRecordingButtonClick = {
+                    if (!isStarted) {
+                        if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                            ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
+                            return@HomeButtonRow
+                        }
+                    }
+                    homeViewModel.toggleRecording(isDataCollectMode, dataCollectText) 
+                },
                 onCopyButtonClick = {
                     if (resultList.isNotEmpty()) {
-                        val s =
-                            resultList.mapIndexed { i, result -> "${i + 1}: ${result.modifiedText}" }
-                                .joinToString(separator = "")
+                        val s = resultList.mapIndexed { i, r -> "${i + 1}: ${r.modifiedText}" }.joinToString("")
                         clipboardManager.setText(AnnotatedString(s))
-                        Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT)
-                            .show()
-                    } else {
-                        Toast.makeText(context, R.string.nothing_to_copy, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                     }
                 },
-                onClearButtonClick = {
-                    resultList.clear()
-                    feedbackRecords.clear() // Also clear the feedback records
-                    Log.i(
-                        TAG,
-                        "Feedback records cleared. Count: ${feedbackRecords.size}"
-                    )
-                },
+                onClearButtonClick = { resultList.clear() },
                 isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
                 isAsrModelLoading = isAsrModelLoading,
                 isEditing = isEditing,
                 isDataCollectMode = isDataCollectMode,
                 dataCollectText = dataCollectText
             )
+
             if (isStarted) {
-                WaveformDisplay(
-                    samples = latestAudioSamples,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                        .padding(vertical = 8.dp)
-                )
+                WaveformDisplay(samples = latestAudioSamples, modifier = Modifier.fillMaxWidth().height(100.dp).padding(vertical = 8.dp))
             }
 
             CandidateList(
@@ -823,71 +315,43 @@ fun HomeScreen(
                 editingIndex = editingIndex,
                 editingText = editingText,
                 onEditingTextChange = { editingText = it },
-                onCancelEdit = {
-                    isEditing = false
-                    editingIndex = -1
-                    editingText = ""
-                },
-                onConfirmEdit = { index, text ->
-                    handleTtsClick(index, text)
-                    isEditing = false
-                    editingIndex = -1
-                    editingText = ""
-                },
-                onItemClick = { index, result ->
-                    if (userSettings.inlineEdit) {
-                        isEditing = true
-                        editingIndex = index
-                        editingText = result.modifiedText
-                        localCandidate = null
-
-                        if (result.wavFilePath.isNotEmpty()) {
-                            coroutineScope.launch {
-                                isFetchingCandidates = true
-                                val localJob = launch(Dispatchers.IO) {
-                                    try {
-                                        val audioData = readWavFileToFloatArray(result.wavFilePath)
-                                        if (audioData != null) {
-                                            val recognizer = SimulateStreamingAsr.recognizer
-                                            val stream = recognizer.createStream()
-                                            stream.acceptWaveform(audioData, sampleRateInHz)
-                                            recognizer.decode(stream)
-                                            val localResultText = recognizer.getResult(stream).text
-                                            stream.release()
-                                            withContext(Dispatchers.Main) {
-                                                localCandidate = localResultText
-                                            }
+                onCancelEdit = { isEditing = false },
+                onConfirmEdit = { idx, txt -> handleTtsClick(idx, txt); isEditing = false },
+                onItemClick = { idx, res -> 
+                    isEditing = true
+                    editingIndex = idx
+                    editingText = res.modifiedText
+                    
+                    // Restore: Trigger local candidate fetch on edit
+                    if (res.wavFilePath.isNotEmpty()) {
+                        coroutineScope.launch {
+                            isFetchingCandidates = true
+                            val localJob = launch(Dispatchers.IO) {
+                                try {
+                                    val audioData = readWavFileToFloatArray(res.wavFilePath)
+                                    if (audioData != null) {
+                                        val recognizer = SimulateStreamingAsr.recognizer
+                                        val stream = recognizer.createStream()
+                                        stream.acceptWaveform(audioData, 16000)
+                                        recognizer.decode(stream)
+                                        val localResultText = recognizer.getResult(stream).text
+                                        stream.release()
+                                        withContext(Dispatchers.Main) {
+                                            localCandidate = localResultText
                                         }
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Local re-recognition failed", e)
                                     }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Local re-recognition failed", e)
                                 }
-                                localJob.join()
-                                isFetchingCandidates = false
                             }
-                        }
-                    } else {
-                        isEditing = true
-                        transcriptToEditInDialog = index to result
-                    }
-                },
-                onTtsClick = { index, text -> handleTtsClick(index, text) },
-                onPlayClick = { wavPath ->
-                    if (currentlyPlaying == wavPath) MediaController.stop()
-                    else MediaController.play(wavPath)
-                },
-                onDeleteClick = { index, wavPath ->
-                    if (wavPath.isNotEmpty()) {
-                        val deleted = deleteTranscriptFiles(wavPath)
-                        if (deleted) {
-                            val removedTranscript = resultList.removeAt(index)
-                            feedbackRecords.remove(removedTranscript)
-                            Toast.makeText(context, R.string.file_deleted_successfully, Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, R.string.file_deletion_failed, Toast.LENGTH_SHORT).show()
+                            localJob.join()
+                            isFetchingCandidates = false
                         }
                     }
                 },
+                onTtsClick = { idx, txt -> handleTtsClick(idx, txt) },
+                onPlayClick = { path -> if (currentlyPlaying == path) MediaController.stop() else MediaController.play(path) },
+                onDeleteClick = { idx, path -> if (path.isNotEmpty() && deleteTranscriptFiles(path)) resultList.removeAt(idx) },
                 isRecognizingSpeech = isRecognizingSpeech,
                 currentlyPlaying = currentlyPlaying,
                 isStarted = isStarted,
@@ -898,57 +362,11 @@ fun HomeScreen(
                 isFetchingCandidates = isFetchingCandidates
             )
         }
-
-        transcriptToEditInDialog?.let { (index, transcript) ->
-            EditRecognitionDialog(
-                originalText = transcript.recognizedText,
-                currentText = transcript.modifiedText,
-                wavFilePath = transcript.wavFilePath,
-                onDismiss = {
-                    transcriptToEditInDialog = null
-                    isEditing = false
-                },
-                onConfirm = { newText ->
-                    val updatedItem = transcript.copy(modifiedText = newText, checked = true)
-                    resultList[index] = updatedItem
-
-                    val file = File(updatedItem.wavFilePath)
-                    val filename = file.nameWithoutExtension
-                    coroutineScope.launch(Dispatchers.IO) {
-                        saveJsonl(
-                            context = context,
-                            userId = userId,
-                            filename = filename,
-                            originalText = updatedItem.recognizedText,
-                            modifiedText = updatedItem.modifiedText,
-                            checked = updatedItem.checked,
-                            mutable = updatedItem.mutable,
-                            removable = updatedItem.removable,
-                            remoteCandidates = updatedItem.remoteCandidates
-                        )
-                    }
-
-                    transcriptToEditInDialog = null
-                    isEditing = false
-                },
-                userId = userSettings.userId,
-                recognitionUrl = userSettings.recognitionUrl,
-            )
-        }
     }
 }
 
-private fun stopAudio() {
-    audioRecord?.stop()
-    audioRecord?.release()
-    audioRecord = null
-    MediaController.stop()
-}
-
-@SuppressLint("UnrememberedMutableState")
 @Composable
 private fun HomeButtonRow(
-    modifier: Modifier = Modifier,
     isStarted: Boolean,
     onRecordingButtonClick: () -> Unit,
     onCopyButtonClick: () -> Unit,
@@ -959,28 +377,16 @@ private fun HomeButtonRow(
     isDataCollectMode: Boolean,
     dataCollectText: String,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Button(
-            onClick = onRecordingButtonClick,
-            enabled = !isPlaybackActive && !isAsrModelLoading && !isEditing && (!isDataCollectMode || dataCollectText.isNotBlank())
-        ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        Button(onClick = onRecordingButtonClick, enabled = !isPlaybackActive && !isAsrModelLoading && !isEditing && (!isDataCollectMode || dataCollectText.isNotBlank())) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
         Spacer(modifier = Modifier.width(24.dp))
-        Button(
-            onClick = onCopyButtonClick,
-            enabled = !isStarted && !isPlaybackActive && !isEditing
-        ) {
+        Button(onClick = onCopyButtonClick, enabled = !isStarted && !isPlaybackActive && !isEditing) {
             Text(text = stringResource(id = R.string.copy))
         }
         Spacer(modifier = Modifier.width(24.dp))
-        Button(
-            onClick = onClearButtonClick,
-            enabled = !isStarted && !isPlaybackActive && !isEditing
-        ) {
+        Button(onClick = onClearButtonClick, enabled = !isStarted && !isPlaybackActive && !isEditing) {
             Text(text = stringResource(id = R.string.clear))
         }
     }

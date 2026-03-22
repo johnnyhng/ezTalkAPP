@@ -1,0 +1,14 @@
+package tw.com.johnnyhng.eztalk.asr.data.classes
+
+data class UserSettings(
+    val userId: String = "default_user",
+    val lingerMs: Float = 1000f,
+    val partialIntervalMs: Float = 500f,
+    val saveVadSegmentsOnly: Boolean = false,
+    val inlineEdit: Boolean = true,
+    val backendUrl: String = "https://120.126.151.159:56432",
+    val recognitionUrl: String = "",
+    val enableTtsFeedback: Boolean = false,
+    val modelUrl: String = "",
+    val selectedModelName: String = ""
+)
