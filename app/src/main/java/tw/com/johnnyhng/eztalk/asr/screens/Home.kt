@@ -14,17 +14,8 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.RecordVoiceOver
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.listSaver
@@ -53,9 +44,7 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.*
-import tw.com.johnnyhng.eztalk.asr.widgets.EditRecognitionDialog
-import tw.com.johnnyhng.eztalk.asr.widgets.EditableDropdown
-import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
+import tw.com.johnnyhng.eztalk.asr.widgets.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -290,6 +279,103 @@ fun HomeScreen(
             tts?.shutdown()
             tts = null
             recognitionQueue.close()
+        }
+    }
+
+    // Function to handle TTS and transcript updates
+    fun handleTtsClick(index: Int, text: String) {
+        MediaController.stop() // Stop any audio playback
+        val utteranceId = UUID.randomUUID().toString()
+        tts?.speak(
+            text,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            utteranceId
+        )
+        
+        val item = resultList[index]
+        val useFeedbackLogic = userSettings.enableTtsFeedback && !isDataCollectMode
+        Log.d(TAG, "handleTtsClick: useFeedbackLogic=$useFeedbackLogic, index=$index")
+
+        if (useFeedbackLogic) {
+            coroutineScope.launch {
+                // Wait for background recognition job to finish if it exists (Scheme 2)
+                fetchingJobs[item.wavFilePath]?.join()
+
+                // If already marked as removable, it's already synced. Skip backend feedback call.
+                if (item.removable) {
+                    Log.d(TAG, "Record already removable (synced), skip feedbackToBackend.")
+                    return@launch
+                }
+
+                Log.d(TAG, "Starting feedbackToBackend for ${item.wavFilePath}")
+                val success = withContext(Dispatchers.IO) {
+                    feedbackToBackend(
+                        userSettings.backendUrl,
+                        item.wavFilePath,
+                        userSettings.userId
+                    )
+                }
+                Log.d(TAG, "feedbackToBackend success=$success")
+                if (success) {
+                    withContext(Dispatchers.Main) {
+                        // Use actual item from list if index changed
+                        val currentItemIndex = resultList.indexOfFirst { it.wavFilePath == item.wavFilePath }
+                        if (currentItemIndex != -1) {
+                            val updatedItem = resultList[currentItemIndex].copy(
+                                modifiedText = text,
+                                checked = true,
+                                mutable = false,
+                                removable = true
+                            )
+                            resultList[currentItemIndex] = updatedItem
+                            Log.d(TAG, "Updated resultList at index $currentItemIndex: mutable=${updatedItem.mutable}")
+
+                            // Save the updated record to JSONL
+                            val file = File(updatedItem.wavFilePath)
+                            val filename = file.nameWithoutExtension
+                            withContext(Dispatchers.IO) {
+                                saveJsonl(
+                                    context = context,
+                                    userId = userId,
+                                    filename = filename,
+                                    originalText = updatedItem.recognizedText,
+                                    modifiedText = updatedItem.modifiedText,
+                                    checked = updatedItem.checked,
+                                    mutable = updatedItem.mutable,
+                                    removable = updatedItem.removable,
+                                    remoteCandidates = updatedItem.remoteCandidates
+                                )
+                            }
+                        } else {
+                            Log.w(TAG, "Could find item in list to update after feedback.")
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, R.string.feedback_failed, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        } else {
+            Log.d(TAG, "Feedback logic skipped (data collect or disabled)")
+            val updatedItem = item.copy(modifiedText = text, checked = true)
+            resultList[index] = updatedItem
+            val file = File(updatedItem.wavFilePath)
+            val filename = file.nameWithoutExtension
+            coroutineScope.launch(Dispatchers.IO) {
+                saveJsonl(
+                    context = context,
+                    userId = userId,
+                    filename = filename,
+                    originalText = updatedItem.recognizedText,
+                    modifiedText = updatedItem.modifiedText,
+                    checked = updatedItem.checked,
+                    mutable = updatedItem.mutable,
+                    removable = updatedItem.removable,
+                    remoteCandidates = updatedItem.remoteCandidates
+                )
+            }
         }
     }
 
@@ -617,103 +703,6 @@ fun HomeScreen(
         }
     }
 
-    // Function to handle TTS and transcript updates
-    fun handleTtsClick(index: Int, text: String) {
-        MediaController.stop() // Stop any audio playback
-        val utteranceId = UUID.randomUUID().toString()
-        tts?.speak(
-            text,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            utteranceId
-        )
-        
-        val item = resultList[index]
-        val useFeedbackLogic = userSettings.enableTtsFeedback && !isDataCollectMode
-        Log.d(TAG, "handleTtsClick: useFeedbackLogic=$useFeedbackLogic, index=$index")
-
-        if (useFeedbackLogic) {
-            coroutineScope.launch {
-                // Wait for background recognition job to finish if it exists (Scheme 2)
-                fetchingJobs[item.wavFilePath]?.join()
-
-                // If already marked as removable, it's already synced. Skip backend feedback call.
-                if (item.removable) {
-                    Log.d(TAG, "Record already removable (synced), skip feedbackToBackend.")
-                    return@launch
-                }
-
-                Log.d(TAG, "Starting feedbackToBackend for ${item.wavFilePath}")
-                val success = withContext(Dispatchers.IO) {
-                    feedbackToBackend(
-                        userSettings.backendUrl,
-                        item.wavFilePath,
-                        userSettings.userId
-                    )
-                }
-                Log.d(TAG, "feedbackToBackend success=$success")
-                if (success) {
-                    withContext(Dispatchers.Main) {
-                        // Use actual item from list if index changed
-                        val currentItemIndex = resultList.indexOfFirst { it.wavFilePath == item.wavFilePath }
-                        if (currentItemIndex != -1) {
-                            val updatedItem = resultList[currentItemIndex].copy(
-                                modifiedText = text,
-                                checked = true,
-                                mutable = false,
-                                removable = true
-                            )
-                            resultList[currentItemIndex] = updatedItem
-                            Log.d(TAG, "Updated resultList at index $currentItemIndex: mutable=${updatedItem.mutable}")
-
-                            // Save the updated record to JSONL
-                            val file = File(updatedItem.wavFilePath)
-                            val filename = file.nameWithoutExtension
-                            withContext(Dispatchers.IO) {
-                                saveJsonl(
-                                    context = context,
-                                    userId = userId,
-                                    filename = filename,
-                                    originalText = updatedItem.recognizedText,
-                                    modifiedText = updatedItem.modifiedText,
-                                    checked = updatedItem.checked,
-                                    mutable = updatedItem.mutable,
-                                    removable = updatedItem.removable,
-                                    remoteCandidates = updatedItem.remoteCandidates
-                                )
-                            }
-                        } else {
-                            Log.w(TAG, "Could find item in list to update after feedback.")
-                        }
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, R.string.feedback_failed, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        } else {
-            Log.d(TAG, "Feedback logic skipped (data collect or disabled)")
-            val updatedItem = item.copy(modifiedText = text, checked = true)
-            resultList[index] = updatedItem
-            val file = File(updatedItem.wavFilePath)
-            val filename = file.nameWithoutExtension
-            coroutineScope.launch(Dispatchers.IO) {
-                saveJsonl(
-                    context = context,
-                    userId = userId,
-                    filename = filename,
-                    originalText = updatedItem.recognizedText,
-                    modifiedText = updatedItem.modifiedText,
-                    checked = updatedItem.checked,
-                    mutable = updatedItem.mutable,
-                    removable = updatedItem.removable,
-                    remoteCandidates = updatedItem.remoteCandidates
-                )
-            }
-        }
-    }
-
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter,
@@ -827,195 +816,87 @@ fun HomeScreen(
                 )
             }
 
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
-                contentPadding = PaddingValues(16.dp),
-                state = lazyColumnListState
-            ) {
-                itemsIndexed(resultList, key = { _, item -> item.wavFilePath.ifEmpty { item.hashCode() } }) { index, result ->
-                    if (editingIndex == index) {
-                        // Inline editing UI
-                        val menuItems = remember(result, localCandidate) {
-                            (listOfNotNull(
-                                result.recognizedText,
-                                result.modifiedText,
-                                localCandidate
-                            ) + result.remoteCandidates).distinct()
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            EditableDropdown(
-                                value = editingText,
-                                onValueChange = { editingText = it },
-                                label = { Text(stringResource(id = R.string.edit)) },
-                                menuItems = menuItems,
-                                isRecognizing = isFetchingCandidates,
-                                modifier = Modifier.weight(1f),
-                                startExpanded = true
-                            )
-                            IconButton(onClick = {
-                                // Reset editing state
-                                isEditing = false
-                                editingIndex = -1
-                                editingText = ""
-                            }) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = stringResource(id = R.string.cancel_edit)
-                                )
-                            }
-                            IconButton(onClick = {
-                                handleTtsClick(index, editingText)
+            CandidateList(
+                resultList = resultList,
+                lazyListState = lazyColumnListState,
+                isEditing = isEditing,
+                editingIndex = editingIndex,
+                editingText = editingText,
+                onEditingTextChange = { editingText = it },
+                onCancelEdit = {
+                    isEditing = false
+                    editingIndex = -1
+                    editingText = ""
+                },
+                onConfirmEdit = { index, text ->
+                    handleTtsClick(index, text)
+                    isEditing = false
+                    editingIndex = -1
+                    editingText = ""
+                },
+                onItemClick = { index, result ->
+                    if (userSettings.inlineEdit) {
+                        isEditing = true
+                        editingIndex = index
+                        editingText = result.modifiedText
+                        localCandidate = null
 
-                                // Reset editing state
-                                isEditing = false
-                                editingIndex = -1
-                                editingText = ""
-                            }) {
-                                Icon(
-                                    Icons.Default.RecordVoiceOver,
-                                    contentDescription = stringResource(id = R.string.confirm_edit)
-                                )
+                        if (result.wavFilePath.isNotEmpty()) {
+                            coroutineScope.launch {
+                                isFetchingCandidates = true
+                                val localJob = launch(Dispatchers.IO) {
+                                    try {
+                                        val audioData = readWavFileToFloatArray(result.wavFilePath)
+                                        if (audioData != null) {
+                                            val recognizer = SimulateStreamingAsr.recognizer
+                                            val stream = recognizer.createStream()
+                                            stream.acceptWaveform(audioData, sampleRateInHz)
+                                            recognizer.decode(stream)
+                                            val localResultText = recognizer.getResult(stream).text
+                                            stream.release()
+                                            withContext(Dispatchers.Main) {
+                                                localCandidate = localResultText
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Local re-recognition failed", e)
+                                    }
+                                }
+                                localJob.join()
+                                isFetchingCandidates = false
                             }
                         }
                     } else {
-                        // Normal display Row
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = !isRecognizingSpeech && !isEditing && !isStarted && result.mutable) {
-                                    if (userSettings.inlineEdit) {
-                                        isEditing = true
-                                        editingIndex = index
-                                        editingText = result.modifiedText
-                                        localCandidate = null // Clear old local candidate
-
-                                        if (result.wavFilePath.isNotEmpty()) {
-                                            coroutineScope.launch {
-                                                isFetchingCandidates = true
-                                                val localJob = launch(Dispatchers.IO) {
-                                                    try {
-                                                        val audioData =
-                                                            readWavFileToFloatArray(result.wavFilePath)
-                                                        if (audioData != null) {
-                                                            val recognizer =
-                                                                SimulateStreamingAsr.recognizer
-                                                            val stream =
-                                                                recognizer.createStream()
-                                                            stream.acceptWaveform(
-                                                                audioData,
-                                                                sampleRateInHz
-                                                            )
-                                                            recognizer.decode(stream)
-                                                            val localResultText =
-                                                                recognizer
-                                                                    .getResult(stream).text
-                                                            stream.release()
-                                                            withContext(Dispatchers.Main) {
-                                                                localCandidate = localResultText
-                                                            }
-                                                        }
-                                                    } catch (e: Exception) {
-                                                        Log.e(
-                                                            TAG,
-                                                            "Local re-recognition failed",
-                                                            e
-                                                        )
-                                                    }
-                                                }
-
-                                                localJob.join()
-                                                isFetchingCandidates = false
-                                            }
-                                        }
-                                    } else {
-                                        isEditing = true
-                                        transcriptToEditInDialog = index to result
-                                    }
-                                }
-                        ) {
-                            Text(
-                                text = "${index + 1}: ${result.modifiedText}",
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (index == resultList.size - 1 && isRecognizingSpeech && countdownProgress > 0) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                CircularProgressIndicator(
-                                    progress = countdownProgress,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            if (result.wavFilePath.isNotEmpty()) {
-                                // Talk Button -> IconButton
-                                // Hidden ONLY in data collect mode.
-                                // If already synced (removable), it stays visible and enabled but won't feedback.
-                                if (!isDataCollectMode) {
-                                    IconButton(
-                                        onClick = {
-                                            handleTtsClick(index, result.modifiedText)
-                                        },
-                                        enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.RecordVoiceOver,
-                                            contentDescription = stringResource(id = R.string.talk)
-                                        )
-                                    }
-                                }
-
-                                // Play Button -> IconButton
-                                IconButton(
-                                    onClick = {
-                                        if (currentlyPlaying == result.wavFilePath) {
-                                            MediaController.stop()
-                                        } else {
-                                            MediaController.play(result.wavFilePath)
-                                        }
-                                    },
-                                    enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == result.wavFilePath) && !isEditing
-                                ) {
-                                    Icon(
-                                        imageVector = if (currentlyPlaying == result.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                        contentDescription = if (currentlyPlaying == result.wavFilePath) stringResource(id = R.string.stop) else stringResource(id = R.string.play)
-                                    )
-                                }
-
-                                // Delete Button
-                                IconButton(
-                                    onClick = {
-                                        if (result.wavFilePath.isNotEmpty()) {
-                                            val deleted = deleteTranscriptFiles(result.wavFilePath)
-                                            if (deleted) {
-                                                // Remove from resultList
-                                                val removedTranscript = resultList.removeAt(index)
-                                                // Also remove from feedbackRecords
-                                                feedbackRecords.remove(removedTranscript)
-                                                Toast.makeText(context, R.string.file_deleted_successfully, Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                Toast.makeText(context, R.string.file_deletion_failed, Toast.LENGTH_SHORT).show()
-                                            }
-                                        } else {
-                                            Toast.makeText(context, R.string.no_file_to_delete, Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    enabled = !isStarted && !isTtsSpeaking && currentlyPlaying == null && !isEditing
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = stringResource(id = R.string.delete)
-                                    )
-                                }
-                            }
+                        isEditing = true
+                        transcriptToEditInDialog = index to result
+                    }
+                },
+                onTtsClick = { index, text -> handleTtsClick(index, text) },
+                onPlayClick = { wavPath ->
+                    if (currentlyPlaying == wavPath) MediaController.stop()
+                    else MediaController.play(wavPath)
+                },
+                onDeleteClick = { index, wavPath ->
+                    if (wavPath.isNotEmpty()) {
+                        val deleted = deleteTranscriptFiles(wavPath)
+                        if (deleted) {
+                            val removedTranscript = resultList.removeAt(index)
+                            feedbackRecords.remove(removedTranscript)
+                            Toast.makeText(context, R.string.file_deleted_successfully, Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, R.string.file_deletion_failed, Toast.LENGTH_SHORT).show()
                         }
                     }
-                }
-            }
+                },
+                isRecognizingSpeech = isRecognizingSpeech,
+                currentlyPlaying = currentlyPlaying,
+                isStarted = isStarted,
+                isTtsSpeaking = isTtsSpeaking,
+                countdownProgress = countdownProgress,
+                isDataCollectMode = isDataCollectMode,
+                localCandidate = localCandidate,
+                isFetchingCandidates = isFetchingCandidates
+            )
         }
 
         transcriptToEditInDialog?.let { (index, transcript) ->
