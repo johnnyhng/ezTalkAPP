@@ -74,6 +74,8 @@
     <string name="previous">Previous</string>
     <string name="clear_text">Clear text</string>
     <string name="recognized_text">Recognized Text</string>
+    <string name="recognized_text_item">Recognized: %1$s</string>
+    <string name="recording_in_progress">Recording in progress...</string>
     <string name="speak_text">Speak Text</string>
     <string name="feedback_failed">Feedback failed.</string>
     <string name="data_collect_page_title">Data Collection</string>

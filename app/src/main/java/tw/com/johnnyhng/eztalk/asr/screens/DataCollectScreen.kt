@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +23,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -37,9 +40,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
+import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.DataCollectViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
+import java.io.File
 import java.util.Locale
 import tw.com.johnnyhng.eztalk.asr.R
 
@@ -54,6 +59,7 @@ fun DataCollectScreen(
     val isStarted by homeViewModel.isRecording.collectAsState()
     val latestAudioSamples by homeViewModel.latestSamples.collectAsState()
     val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
+    val resultList = remember { mutableStateListOf<Transcript>() }
     var isAsrModelLoading by remember { mutableStateOf(true) }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
 
@@ -79,6 +85,28 @@ fun DataCollectScreen(
         onDispose {
             tts?.stop()
             tts?.shutdown()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        homeViewModel.partialText.collect { text ->
+            if (resultList.isEmpty() || resultList.last().wavFilePath.isNotEmpty()) {
+                resultList.add(Transcript(recognizedText = text, modifiedText = text, wavFilePath = ""))
+            } else {
+                resultList[resultList.lastIndex] = resultList.last().copy(recognizedText = text, modifiedText = text)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        homeViewModel.finalTranscript.collect { transcript ->
+            if (transcript.modifiedText.isNotBlank()) {
+                if (resultList.isNotEmpty() && resultList.last().wavFilePath.isEmpty()) {
+                    resultList[resultList.lastIndex] = transcript
+                } else {
+                    resultList.add(transcript)
+                }
+            }
         }
     }
 
@@ -171,5 +199,34 @@ fun DataCollectScreen(
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center
         )
+
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            itemsIndexed(resultList) { index, item ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        val fileLabel = if (item.wavFilePath.isNotBlank()) {
+                            File(item.wavFilePath).name
+                        } else {
+                            stringResource(R.string.recording_in_progress)
+                        }
+                        Text(
+                            text = "${index + 1}. $fileLabel",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Text(
+                            text = stringResource(R.string.recognized_text_item, item.recognizedText),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
