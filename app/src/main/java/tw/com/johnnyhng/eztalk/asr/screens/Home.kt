@@ -234,6 +234,7 @@ fun HomeScreen(
                         textQueue.clear()
                         if (lines.isNotEmpty()) {
                             dataCollectText = lines.first()
+                            homeViewModel.updateDataCollectText(dataCollectText)
                             textQueue.addAll(lines.drop(1))
                             isSequenceMode = true
                             saveQueueState(context, userSettings.userId, QueueState(dataCollectText, textQueue.toList()))
@@ -256,7 +257,10 @@ fun HomeScreen(
             if (isDataCollectMode) {
                 DataCollectWidget(
                     text = dataCollectText,
-                    onTextChange = { dataCollectText = it },
+                    onTextChange = {
+                        dataCollectText = it
+                        homeViewModel.updateDataCollectText(it)
+                    },
                     onTtsClick = { if (dataCollectText.isNotBlank()) tts?.speak(dataCollectText, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString()) },
                     isSequenceMode = isSequenceMode,
                     onSequenceModeChange = { newMode ->
@@ -265,6 +269,7 @@ fun HomeScreen(
                                 textQueue.clear()
                                 textQueue.addAll(it.queue)
                                 dataCollectText = it.currentText
+                                homeViewModel.updateDataCollectText(it.currentText)
                                 isSequenceMode = true
                             } ?: run { showNoQueueMessage = true }
                         } else {
@@ -276,13 +281,17 @@ fun HomeScreen(
                     onNextClick = {
                         if (textQueue.isNotEmpty()) {
                             dataCollectText = textQueue.removeFirst()
+                            homeViewModel.updateDataCollectText(dataCollectText)
                             saveQueueState(context, userSettings.userId, QueueState(dataCollectText, textQueue.toList()))
                         } else {
                             isSequenceMode = false
                             deleteQueueState(context, userSettings.userId)
                         }
                     },
-                    onDeleteClick = { dataCollectText = "" },
+                    onDeleteClick = {
+                        dataCollectText = ""
+                        homeViewModel.updateDataCollectText("")
+                    },
                     isPreviousEnabled = false,
                     isNextEnabled = isSequenceMode,
                     isSequenceModeSwitchEnabled = true,

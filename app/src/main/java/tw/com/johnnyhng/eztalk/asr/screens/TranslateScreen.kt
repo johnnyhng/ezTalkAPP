@@ -251,7 +251,7 @@ fun TranslateScreen(
                     AudioFormat.ENCODING_PCM_16BIT,
                     numBytes * 2
                 )
-                SimulateStreamingAsr.vad.reset()
+                SimulateStreamingAsr.resetVadSafely()
 
                 // --- Coroutine to record audio ---
                 CoroutineScope(IO).launch {
@@ -307,9 +307,9 @@ fun TranslateScreen(
                         if (s != null) {
                             val currentBufferPosition = fullRecordingBuffer.size
                             fullRecordingBuffer.addAll(s.toList())
-                            SimulateStreamingAsr.vad.acceptWaveform(s)
+                            SimulateStreamingAsr.acceptVadWaveformSafely(s)
 
-                            if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
+                            if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
                                 isSpeechStarted = true
                                 speechStartOffset = max(0, currentBufferPosition - keep)
                             }
@@ -340,9 +340,10 @@ fun TranslateScreen(
                             }
                         }
 
-                        while (!SimulateStreamingAsr.vad.empty()) {
+                        while (true) {
+                            if (SimulateStreamingAsr.popVadSegmentSafely() == null) break
                             lastSpeechDetectedOffset = fullRecordingBuffer.size
-                            SimulateStreamingAsr.vad.pop()
+                            // Segment content is not used in this screen; draining queue updates VAD state.
                         }
 
                         if (flushRequest != null || (samplesChannel.isClosedForReceive && s == null)) {

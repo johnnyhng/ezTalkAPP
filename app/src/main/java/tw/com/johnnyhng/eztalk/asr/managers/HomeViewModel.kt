@@ -118,6 +118,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateDataCollectText(text: String) {
+        recognitionManager.updateDataCollectText(text)
+    }
+
     // Settings & Model Methods
     fun updateUserId(userId: String) {
         viewModelScope.launch {

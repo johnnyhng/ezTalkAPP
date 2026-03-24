@@ -64,7 +64,7 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
                     text = state.currentText,
                     isSequenceMode = true,
                     showNoQueueMessage = false,
-                    remainingCount = queue.size,
+                    remainingCount = queue.count { item -> item.isNotBlank() },
                     previousCount = history.size
                 )
             }
@@ -89,29 +89,40 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     fun moveToNext() {
         if (queue.isNotEmpty()) {
             val current = _uiState.value.text
-            history.addLast(current)
-            val next = queue.removeFirst()
-            _uiState.update {
-                it.copy(
-                    text = next,
-                    isSequenceMode = true,
-                    showNoQueueMessage = false,
-                    remainingCount = queue.size,
-                    previousCount = history.size
-                )
+            if (current.isNotBlank()) {
+                history.addLast(current)
             }
-            persistQueueState()
-        } else {
-            _uiState.update {
-                it.copy(
-                    isSequenceMode = false,
-                    remainingCount = 0,
-                    previousCount = history.size
-                )
+
+            while (queue.isNotEmpty() && queue.first().isBlank()) {
+                queue.removeFirst()
             }
-            viewModelScope.launch {
-                deleteQueueState(appContext, currentUserId())
+
+            if (queue.isNotEmpty()) {
+                val next = queue.removeFirst()
+                _uiState.update {
+                    it.copy(
+                        text = next,
+                        isSequenceMode = true,
+                        showNoQueueMessage = false,
+                        remainingCount = queue.count { item -> item.isNotBlank() },
+                        previousCount = history.size
+                    )
+                }
+                persistQueueState()
+                return
             }
+        }
+
+        _uiState.update {
+            it.copy(
+                text = "",
+                isSequenceMode = false,
+                remainingCount = 0,
+                previousCount = history.size
+            )
+        }
+        viewModelScope.launch {
+            deleteQueueState(appContext, currentUserId())
         }
     }
 
@@ -140,15 +151,15 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
         queue.addAll(lines.drop(1))
         history.clear()
 
-        _uiState.update {
-            it.copy(
-                text = lines.first(),
-                isSequenceMode = true,
-                showNoQueueMessage = false,
-                remainingCount = queue.size,
-                previousCount = history.size
-            )
-        }
+            _uiState.update {
+                it.copy(
+                    text = lines.first(),
+                    isSequenceMode = true,
+                    showNoQueueMessage = false,
+                    remainingCount = queue.count { item -> item.isNotBlank() },
+                    previousCount = history.size
+                )
+            }
         persistQueueState()
     }
 

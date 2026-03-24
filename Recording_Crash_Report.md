@@ -1,7 +1,7 @@
 # ezTalk 錄音閃退現象記錄
 
-最後更新日期：2026-03-24 11:46
-狀態：Open（待定位 root cause）
+最後更新日期：2026-03-25
+狀態：Mitigated（已實作修補，待實機觀察）
 
 ## 1) 問題摘要
 - 現象：使用者在 Home/翻譯流程啟動錄音時，App 出現閃退。
@@ -56,3 +56,8 @@
 ## 8) 追蹤紀錄
 - 2026-03-24：建立本文件，先記錄現象與排查欄位。
 - 2026-03-24 11:46：補充實際崩潰堆疊，確認崩潰位於 `Vad.pop()` 原生層呼叫。
+- 2026-03-25：完成修補：
+  - 將 VAD 操作改為原子化安全包裝（`reset/accept/isSpeechDetected/pop` 皆經同一鎖）。
+  - `RecognitionManager` 與 `TranslateScreen` 改用安全 API，移除 `empty/front/pop` 分離競態。
+  - `RecognitionManager.start()` 增加 active job 防護，避免 stop/start 重疊啟動。
+  - `RecognitionManager.stop()` 增加 `AudioRecord.stop()` 非法狀態保護。

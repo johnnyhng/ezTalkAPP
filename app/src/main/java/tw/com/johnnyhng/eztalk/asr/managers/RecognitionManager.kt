@@ -37,6 +37,7 @@ class RecognitionManager(private val context: Context) {
 
     private val _countdownProgress = MutableStateFlow(0f)
     val countdownProgress = _countdownProgress.asStateFlow()
+    private val _currentDataCollectText = MutableStateFlow("")
 
     // Internal channels
     private val flushChannel = Channel<Unit>(Channel.CONFLATED)
@@ -49,7 +50,8 @@ class RecognitionManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun start(userSettings: UserSettings, isDataCollectMode: Boolean, dataCollectText: String) {
-        if (_isStarted.value) return
+        if (_isStarted.value || recognitionJob?.isActive == true) return
+        _currentDataCollectText.value = dataCollectText
         _isStarted.value = true
 
         recognitionJob = scope.launch {
@@ -69,7 +71,7 @@ class RecognitionManager(private val context: Context) {
                 bufferSize * 2
             )
             
-            SimulateStreamingAsr.vad.reset()
+            SimulateStreamingAsr.resetVadSafely()
 
             // Recording loop
             launch(Dispatchers.IO) {
@@ -90,7 +92,14 @@ class RecognitionManager(private val context: Context) {
             }
 
             // Processing loop
-            processAudio(samplesChannel, userSettings, isDataCollectMode, dataCollectText)
+            try {
+                processAudio(samplesChannel, userSettings, isDataCollectMode)
+            } finally {
+                _isStarted.value = false
+                _isRecognizingSpeech.value = false
+                _countdownProgress.value = 0f
+                recognitionJob = null
+            }
         }
     }
 
@@ -98,7 +107,11 @@ class RecognitionManager(private val context: Context) {
         _isStarted.value = false
         scope.launch {
             flushChannel.send(Unit)
-            audioRecord?.stop()
+            try {
+                audioRecord?.stop()
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "AudioRecord.stop() called in invalid state", e)
+            }
             audioRecord?.release()
             audioRecord = null
         }
@@ -107,8 +120,7 @@ class RecognitionManager(private val context: Context) {
     private suspend fun processAudio(
         samplesChannel: Channel<FloatArray>,
         userSettings: UserSettings,
-        isDataCollectMode: Boolean,
-        dataCollectText: String
+        isDataCollectMode: Boolean
     ) {
         val lingerMs = userSettings.lingerMs
         val partialIntervalMs = userSettings.partialIntervalMs
@@ -123,11 +135,8 @@ class RecognitionManager(private val context: Context) {
         var lastSpeechDetectedOffset = 0
         var isSpeechStarted = false
         var startTime = System.currentTimeMillis()
-        var added = false
-
         val utteranceSegments = mutableListOf<FloatArray>()
         var lastVadPacketAt = 0L
-        val fullRecordingBuffer = arrayListOf<Float>()
 
         var done = false
         while (!done) {
@@ -135,7 +144,7 @@ class RecognitionManager(private val context: Context) {
             val flushRequest = flushChannel.tryReceive().getOrNull()
 
             if (s == null) {
-                if (flushRequest != null || (samplesChannel.isClosedForReceive && buffer.isEmpty())) {
+                if (flushRequest != null || samplesChannel.isClosedForReceive) {
                     done = true
                 } else {
                     delay(10)
@@ -147,9 +156,9 @@ class RecognitionManager(private val context: Context) {
             // VAD Processing
             while (offset + windowSize < buffer.size) {
                 val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
-                SimulateStreamingAsr.vad.acceptWaveform(chunk)
+                SimulateStreamingAsr.acceptVadWaveformSafely(chunk)
                 offset += windowSize
-                if (!isSpeechStarted && SimulateStreamingAsr.vad.isSpeechDetected()) {
+                if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
                     isSpeechStarted = true
                     _isRecognizingSpeech.value = true
                     startTime = System.currentTimeMillis()
@@ -168,7 +177,6 @@ class RecognitionManager(private val context: Context) {
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
                         if (result.text.isNotBlank()) {
                             onPartialResult(result.text)
-                            added = true
                         }
                     } finally {
                         stream.release()
@@ -177,10 +185,9 @@ class RecognitionManager(private val context: Context) {
                 }
             }
 
-            while (!SimulateStreamingAsr.vad.empty()) {
+            while (true) {
+                val seg = SimulateStreamingAsr.popVadSegmentSafely() ?: break
                 if (!saveVadSegmentsOnly) lastSpeechDetectedOffset = offset
-                val seg = SimulateStreamingAsr.vad.front().samples
-                SimulateStreamingAsr.vad.pop()
                 utteranceSegments.add(seg)
                 lastVadPacketAt = System.currentTimeMillis()
             }
@@ -206,7 +213,7 @@ class RecognitionManager(private val context: Context) {
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
                         
                         val originalText = result.text
-                        val modifiedText = if (isDataCollectMode) dataCollectText else originalText
+                        val modifiedText = if (isDataCollectMode) _currentDataCollectText.value else originalText
                         val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                         val filename = "${timestamp}.app"
 
@@ -238,5 +245,9 @@ class RecognitionManager(private val context: Context) {
                 }
             }
         }
+    }
+
+    fun updateDataCollectText(text: String) {
+        _currentDataCollectText.value = text
     }
 }

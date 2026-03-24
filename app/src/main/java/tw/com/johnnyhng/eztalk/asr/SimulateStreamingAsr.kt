@@ -26,6 +26,7 @@ object SimulateStreamingAsr {
         get() {
             return _vad!!
         }
+    private val vadLock = Any()
 
     fun initOfflineRecognizer(assetManager: AssetManager? = null, model: Model? = null) {
         synchronized(this) {
@@ -71,6 +72,34 @@ object SimulateStreamingAsr {
             config = config!!,
         )
         Log.i(TAG, "sherpa-onnx vad initialized")
+    }
+
+    fun resetVadSafely() {
+        synchronized(vadLock) {
+            _vad?.reset()
+        }
+    }
+
+    fun acceptVadWaveformSafely(samples: FloatArray) {
+        synchronized(vadLock) {
+            _vad?.acceptWaveform(samples)
+        }
+    }
+
+    fun isVadSpeechDetectedSafely(): Boolean {
+        synchronized(vadLock) {
+            return _vad?.isSpeechDetected() == true
+        }
+    }
+
+    fun popVadSegmentSafely(): FloatArray? {
+        synchronized(vadLock) {
+            val instance = _vad ?: return null
+            if (instance.empty()) return null
+            val segment = instance.front().samples
+            instance.pop()
+            return segment
+        }
     }
 
     private fun copyAssets(path: String, application: Application) {

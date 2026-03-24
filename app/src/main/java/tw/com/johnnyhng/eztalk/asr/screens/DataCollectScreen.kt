@@ -121,6 +121,10 @@ fun DataCollectScreen(
         dataCollectViewModel.importFromUri(uri)
     }
 
+    LaunchedEffect(uiState.text) {
+        homeViewModel.updateDataCollectText(uiState.text)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -184,7 +188,7 @@ fun DataCollectScreen(
                     onNextClick = dataCollectViewModel::moveToNext,
                     onDeleteClick = dataCollectViewModel::clearText,
                     isPreviousEnabled = uiState.previousCount > 0,
-                    isNextEnabled = uiState.remainingCount > 0,
+                    isNextEnabled = uiState.isSequenceMode,
                     isSequenceModeSwitchEnabled = true,
                     showNoQueueMessage = uiState.showNoQueueMessage
                 )
