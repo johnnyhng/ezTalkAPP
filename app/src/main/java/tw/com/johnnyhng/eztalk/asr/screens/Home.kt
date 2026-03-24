@@ -272,6 +272,7 @@ fun HomeScreen(
                         }
                     },
                     onUploadClick = { filePickerLauncher.launch("text/plain") },
+                    onPreviousClick = {},
                     onNextClick = {
                         if (textQueue.isNotEmpty()) {
                             dataCollectText = textQueue.removeFirst()
@@ -282,6 +283,7 @@ fun HomeScreen(
                         }
                     },
                     onDeleteClick = { dataCollectText = "" },
+                    isPreviousEnabled = false,
                     isNextEnabled = isSequenceMode,
                     isSequenceModeSwitchEnabled = true,
                     showNoQueueMessage = showNoQueueMessage

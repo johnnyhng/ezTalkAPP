@@ -71,6 +71,7 @@
     <string name="text_for_recording">用於錄音的文字</string>
     <string name="tts_for_data_collection">資料收集文字的 TTS</string>
     <string name="next">下一個</string>
+    <string name="previous">上一個</string>
     <string name="clear_text">清除文字</string>
     <string name="recognized_text">辨識結果</string>
     <string name="speak_text">朗讀文字</string>
@@ -78,4 +79,5 @@
     <string name="data_collect_page_title">資料採集</string>
     <string name="data_collect_target_placeholder">目標句會在 Phase 3（隊列與檔案匯入）顯示於此。</string>
     <string name="data_collect_page_hint">Phase 2 骨架已完成：導覽與頁面已連接。</string>
+    <string name="data_collect_queue_status">上一句：%1$d，剩餘：%2$d</string>
 </resources>

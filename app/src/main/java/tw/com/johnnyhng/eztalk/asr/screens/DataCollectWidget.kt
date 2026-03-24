@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,8 +34,10 @@ fun DataCollectWidget(
     isSequenceMode: Boolean,
     onSequenceModeChange: (Boolean) -> Unit,
     onUploadClick: () -> Unit,
+    onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    isPreviousEnabled: Boolean,
     isNextEnabled: Boolean,
     isSequenceModeSwitchEnabled: Boolean,
     showNoQueueMessage: Boolean
@@ -95,6 +98,12 @@ fun DataCollectWidget(
                 )
             }
             if (isSequenceMode) {
+                IconButton(onClick = onPreviousClick, enabled = isPreviousEnabled) {
+                    Icon(
+                        Icons.Filled.SkipPrevious,
+                        contentDescription = stringResource(id = R.string.previous)
+                    )
+                }
                 IconButton(onClick = onNextClick, enabled = isNextEnabled) {
                     Icon(
                         Icons.Filled.SkipNext,
