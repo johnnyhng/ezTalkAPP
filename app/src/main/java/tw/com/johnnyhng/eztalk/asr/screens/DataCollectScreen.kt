@@ -12,8 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -43,8 +42,10 @@ import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.DataCollectViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
+import tw.com.johnnyhng.eztalk.asr.utils.MediaController
+import tw.com.johnnyhng.eztalk.asr.utils.deleteTranscriptFiles
+import tw.com.johnnyhng.eztalk.asr.widgets.CandidateList
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
-import java.io.File
 import java.util.Locale
 import tw.com.johnnyhng.eztalk.asr.R
 
@@ -58,8 +59,12 @@ fun DataCollectScreen(
     val uiState by dataCollectViewModel.uiState.collectAsState()
     val isStarted by homeViewModel.isRecording.collectAsState()
     val latestAudioSamples by homeViewModel.latestSamples.collectAsState()
+    val isRecognizingSpeech by homeViewModel.isRecognizingSpeech.collectAsState()
+    val countdownProgress by homeViewModel.countdownProgress.collectAsState()
     val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
+    val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
     val resultList = remember { mutableStateListOf<Transcript>() }
+    val lazyColumnListState = rememberLazyListState()
     var isAsrModelLoading by remember { mutableStateOf(true) }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
 
@@ -95,6 +100,7 @@ fun DataCollectScreen(
             } else {
                 resultList[resultList.lastIndex] = resultList.last().copy(recognizedText = text, modifiedText = text)
             }
+            lazyColumnListState.animateScrollToItem(resultList.lastIndex)
         }
     }
 
@@ -106,6 +112,7 @@ fun DataCollectScreen(
                 } else {
                     resultList.add(transcript)
                 }
+                lazyColumnListState.animateScrollToItem(resultList.lastIndex)
             }
         }
     }
@@ -200,33 +207,40 @@ fun DataCollectScreen(
             textAlign = TextAlign.Center
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            itemsIndexed(resultList) { index, item ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        val fileLabel = if (item.wavFilePath.isNotBlank()) {
-                            File(item.wavFilePath).name
-                        } else {
-                            stringResource(R.string.recording_in_progress)
-                        }
-                        Text(
-                            text = "${index + 1}. $fileLabel",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Text(
-                            text = stringResource(R.string.recognized_text_item, item.recognizedText),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
+        CandidateList(
+            modifier = Modifier.fillMaxWidth(),
+            resultList = resultList,
+            lazyListState = lazyColumnListState,
+            isInteractionLocked = false,
+            isInlineEditing = false,
+            editingIndex = -1,
+            editingText = "",
+            onEditingTextChange = {},
+            onCancelEdit = {},
+            onConfirmEdit = { _, _ -> },
+            onItemClick = { _, _ -> },
+            onTtsClick = { _, _ -> },
+            onPlayClick = { path ->
+                if (currentlyPlaying == path) {
+                    MediaController.stop()
+                } else {
+                    MediaController.play(path)
                 }
-            }
-        }
+            },
+            onDeleteClick = { idx, path ->
+                if (path.isNotEmpty() && deleteTranscriptFiles(path)) {
+                    resultList.removeAt(idx)
+                }
+            },
+            isRecognizingSpeech = isRecognizingSpeech,
+            currentlyPlaying = currentlyPlaying,
+            isStarted = isStarted,
+            isTtsSpeaking = false,
+            countdownProgress = countdownProgress,
+            isDataCollectMode = true,
+            inlineEditEnabled = false,
+            localCandidate = null,
+            isFetchingCandidates = false
+        )
     }
 }
