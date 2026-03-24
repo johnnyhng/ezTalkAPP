@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">ezTalk</string>
+    <string name="app_top_title">ezTalk：即時語音辨識</string>
+    <string name="microphone_permission_required">此 App 需要麥克風權限</string>
     <string name="start">開始</string>
     <string name="stop">停止</string>
     <string name="copy">複製</string>
@@ -21,8 +23,10 @@
     <string name="save_vad_segments">儲存 VAD 片段</string>
     <string name="save_full_audio">儲存完整音訊</string>
     <string name="inline_edit">行內編輯</string>
+    <string name="enable_tts_feedback">啟用 TTS 回饋</string>
     <string name="home">首頁</string>
     <string name="translate">翻譯</string>
+    <string name="data_collect">資料採集</string>
     <string name="file_manager">檔案管理</string>
     <string name="settings">設定</string>
     <string name="help">說明</string>
@@ -70,4 +74,8 @@
     <string name="clear_text">清除文字</string>
     <string name="recognized_text">辨識結果</string>
     <string name="speak_text">朗讀文字</string>
+    <string name="feedback_failed">回饋失敗。</string>
+    <string name="data_collect_page_title">資料採集</string>
+    <string name="data_collect_target_placeholder">目標句會在 Phase 3（隊列與檔案匯入）顯示於此。</string>
+    <string name="data_collect_page_hint">Phase 2 骨架已完成：導覽與頁面已連接。</string>
 </resources>
