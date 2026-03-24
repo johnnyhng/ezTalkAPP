@@ -25,6 +25,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
@@ -39,6 +40,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
+import tw.com.johnnyhng.eztalk.asr.screens.DataCollectScreen
 import tw.com.johnnyhng.eztalk.asr.screens.FileManagerScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HelpScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HomeScreen
@@ -100,7 +102,7 @@ class MainActivity : ComponentActivity() {
             Log.e(TAG, "Audio record is disallowed")
             Toast.makeText(
                 this,
-                "This App needs to access the microphone",
+                getString(R.string.microphone_permission_required),
                 Toast.LENGTH_SHORT
             )
                 .show()
@@ -125,7 +127,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 ),
                 title = {
                     Text(
-                        "ezTalk: real-time speech recognition",
+                        stringResource(R.string.app_top_title),
                         fontWeight = FontWeight.Bold,
                     )
                 },
@@ -152,6 +154,10 @@ fun NavigationHost(navController: NavHostController) {
 
         composable(NavRoutes.Translate.route) {
             TranslateScreen()
+        }
+
+        composable(NavRoutes.DataCollect.route) {
+            DataCollectScreen()
         }
 
         composable(NavRoutes.FileManager.route) {
