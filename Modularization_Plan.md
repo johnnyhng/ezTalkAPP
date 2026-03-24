@@ -67,6 +67,7 @@
 | **Initial** | 2024-05-22 | 建立模組化計劃書 | 確定五階段流程 |
 | **Phase 1** | | | *Pending* |
 | **Phase 2** | 2026-03-24 | 完成 `DATA_COLLECT` 路由、底欄切換與 `DataCollectScreen` UI Shell | *Completed* |
+| **Phase 2 (Cleanup)** | 2026-03-25 | 移除 App 內 Phase 2 骨架提示文案（完成「Phase 2 shell ready」過渡字樣下線） | 與 Phase 3 UI 整合 |
 | **Phase 3** | 2026-03-24 | 啟動 `DataCollectViewModel`，遷移 queue 狀態與 txt/csv 匯入流程 | *In Progress* |
 | **Phase 4** | | | *Pending* |
 | **Phase 5** | | | *Pending* |

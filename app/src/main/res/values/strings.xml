@@ -79,7 +79,5 @@
     <string name="speak_text">Speak Text</string>
     <string name="feedback_failed">Feedback failed.</string>
     <string name="data_collect_page_title">Data Collection</string>
-    <string name="data_collect_target_placeholder">Target text will be shown here in Phase 3 (queue + file import).</string>
-    <string name="data_collect_page_hint">Phase 2 shell ready: navigation and page scaffold are connected.</string>
     <string name="data_collect_queue_status">Previous: %1$d, Remaining: %2$d</string>
 </resources>

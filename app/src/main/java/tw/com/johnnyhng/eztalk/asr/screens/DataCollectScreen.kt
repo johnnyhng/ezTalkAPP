@@ -201,12 +201,6 @@ fun DataCollectScreen(
             textAlign = TextAlign.Center
         )
 
-        Text(
-            text = stringResource(R.string.data_collect_page_hint),
-            style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Center
-        )
-
         CandidateList(
             modifier = Modifier.fillMaxWidth(),
             resultList = resultList,
