@@ -62,12 +62,13 @@ fun HomeScreen(
     val lazyColumnListState = rememberLazyListState()
 
     // Local UI states
-    var isEditing by remember { mutableStateOf(false) }
+    var isInlineEditing by remember { mutableStateOf(false) }
     var editingIndex by remember { mutableIntStateOf(-1) }
     var editingText by remember { mutableStateOf("") }
     var localCandidate by remember { mutableStateOf<String?>(null) }
     var isFetchingCandidates by remember { mutableStateOf(false) }
     var transcriptToEditInDialog by remember { mutableStateOf<Pair<Int, Transcript>?>(null) }
+    val isEditing = isInlineEditing || transcriptToEditInDialog != null
     val fetchingJobs = remember { mutableStateMapOf<String, Job>() }
 
     // Data collect states
@@ -214,6 +215,15 @@ fun HomeScreen(
         }
     }
 
+    LaunchedEffect(userSettings.inlineEdit) {
+        if (!userSettings.inlineEdit && isInlineEditing) {
+            isInlineEditing = false
+            editingIndex = -1
+            isFetchingCandidates = false
+            localCandidate = null
+        }
+    }
+
     // File Picker
     val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
@@ -311,15 +321,16 @@ fun HomeScreen(
             CandidateList(
                 resultList = resultList,
                 lazyListState = lazyColumnListState,
-                isEditing = isEditing,
+                isInteractionLocked = isEditing,
+                isInlineEditing = isInlineEditing,
                 editingIndex = editingIndex,
                 editingText = editingText,
                 onEditingTextChange = { editingText = it },
-                onCancelEdit = { isEditing = false },
-                onConfirmEdit = { idx, txt -> handleTtsClick(idx, txt); isEditing = false },
+                onCancelEdit = { isInlineEditing = false; editingIndex = -1 },
+                onConfirmEdit = { idx, txt -> handleTtsClick(idx, txt); isInlineEditing = false; editingIndex = -1 },
                 onItemClick = { idx, res -> 
                     if (userSettings.inlineEdit) {
-                        isEditing = true
+                        isInlineEditing = true
                         editingIndex = idx
                         editingText = res.modifiedText
                         
@@ -347,7 +358,10 @@ fun HomeScreen(
                             }
                         }
                     } else {
-                        isEditing = true
+                        isInlineEditing = false
+                        editingIndex = -1
+                        isFetchingCandidates = false
+                        localCandidate = null
                         transcriptToEditInDialog = idx to res
                     }
                 },
@@ -360,6 +374,7 @@ fun HomeScreen(
                 isTtsSpeaking = isTtsSpeaking,
                 countdownProgress = countdownProgress,
                 isDataCollectMode = isDataCollectMode,
+                inlineEditEnabled = userSettings.inlineEdit,
                 localCandidate = localCandidate,
                 isFetchingCandidates = isFetchingCandidates
             )
@@ -372,7 +387,6 @@ fun HomeScreen(
                 wavFilePath = transcript.wavFilePath,
                 onDismiss = {
                     transcriptToEditInDialog = null
-                    isEditing = false
                 },
                 onConfirm = { newText ->
                     val updatedItem = transcript.copy(modifiedText = newText, checked = true)
@@ -381,7 +395,6 @@ fun HomeScreen(
                         saveJsonl(context, userSettings.userId, File(updatedItem.wavFilePath).nameWithoutExtension, updatedItem.recognizedText, newText, true, updatedItem.mutable)
                     }
                     transcriptToEditInDialog = null
-                    isEditing = false
                 },
                 userId = userSettings.userId,
                 recognitionUrl = userSettings.effectiveRecognitionUrl,

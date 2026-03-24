@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -21,7 +22,8 @@ fun CandidateList(
     modifier: Modifier = Modifier,
     resultList: List<Transcript>,
     lazyListState: LazyListState,
-    isEditing: Boolean,
+    isInteractionLocked: Boolean,
+    isInlineEditing: Boolean,
     editingIndex: Int,
     editingText: String,
     onEditingTextChange: (String) -> Unit,
@@ -39,6 +41,7 @@ fun CandidateList(
     isTtsSpeaking: Boolean,
     countdownProgress: Float,
     isDataCollectMode: Boolean,
+    inlineEditEnabled: Boolean, // New parameter
     // Editing candidates
     localCandidate: String?,
     isFetchingCandidates: Boolean,
@@ -52,15 +55,18 @@ fun CandidateList(
             resultList,
             key = { _, item -> item.wavFilePath.ifEmpty { item.hashCode() } }
         ) { index, result ->
-            if (isEditing && editingIndex == index) {
-                CandidateEditRow(
-                    text = editingText,
-                    onTextChange = onEditingTextChange,
-                    menuItems = (listOfNotNull(
+            if (isInlineEditing && editingIndex == index && inlineEditEnabled) {
+                val menuItems = remember(result, localCandidate) {
+                    (listOfNotNull(
                         result.recognizedText,
                         result.modifiedText,
                         localCandidate
-                    ) + result.remoteCandidates).distinct(),
+                    ) + result.remoteCandidates).distinct()
+                }
+                CandidateEditRow(
+                    text = editingText,
+                    onTextChange = onEditingTextChange,
+                    menuItems = menuItems,
                     isFetching = isFetchingCandidates,
                     onCancel = onCancelEdit,
                     onConfirm = { onConfirmEdit(index, editingText) }
@@ -75,7 +81,7 @@ fun CandidateList(
                     isStarted = isStarted,
                     currentlyPlaying = currentlyPlaying,
                     isTtsSpeaking = isTtsSpeaking,
-                    isEditing = isEditing,
+                    isEditing = isInteractionLocked,
                     isDataCollectMode = isDataCollectMode,
                     onClick = { if (result.mutable) onItemClick(index, result) },
                     onTtsClick = { onTtsClick(index, result.modifiedText) },
@@ -115,7 +121,7 @@ fun CandidateEditRow(
                 contentDescription = stringResource(id = R.string.cancel_edit)
             )
         }
-        IconButton(onClick = onConfirm) {
+        IconButton(onClick = { onConfirm() }) {
             Icon(
                 Icons.Default.RecordVoiceOver,
                 contentDescription = stringResource(id = R.string.confirm_edit)
