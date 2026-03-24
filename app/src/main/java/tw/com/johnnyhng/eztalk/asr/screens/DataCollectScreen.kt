@@ -1,11 +1,18 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
 import android.speech.tts.TextToSpeech
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,18 +32,40 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.managers.DataCollectViewModel
+import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
+import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import java.util.Locale
 import tw.com.johnnyhng.eztalk.asr.R
 
 @Composable
 fun DataCollectScreen(
     dataCollectViewModel: DataCollectViewModel = viewModel(),
+    homeViewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val activity = context as Activity
     val uiState by dataCollectViewModel.uiState.collectAsState()
+    val isStarted by homeViewModel.isRecording.collectAsState()
+    val latestAudioSamples by homeViewModel.latestSamples.collectAsState()
+    val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
+    var isAsrModelLoading by remember { mutableStateOf(true) }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+
+    LaunchedEffect(selectedModel) {
+        selectedModel?.let { model ->
+            isAsrModelLoading = true
+            withContext(Dispatchers.IO) {
+                SimulateStreamingAsr.initOfflineRecognizer(context.assets, model)
+            }
+            isAsrModelLoading = false
+        }
+    }
 
     LaunchedEffect(Unit) {
         tts = TextToSpeech(context) { status ->
@@ -69,6 +98,39 @@ fun DataCollectScreen(
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center
         )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Button(
+                onClick = {
+                    if (!isStarted) {
+                        if (uiState.text.isBlank()) {
+                            Toast.makeText(context, R.string.text_empty_stopping_recording, Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                            ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
+                            return@Button
+                        }
+                    }
+                    homeViewModel.toggleRecording(isDataCollectMode = true, dataCollectText = uiState.text)
+                },
+                enabled = !isAsrModelLoading
+            ) {
+                Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
+            }
+        }
+
+        if (isStarted) {
+            WaveformDisplay(
+                samples = latestAudioSamples,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+            )
+        }
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
