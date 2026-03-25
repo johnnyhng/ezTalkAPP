@@ -56,8 +56,6 @@
     <string name="file_deleted_successfully">File deleted successfully</string>
     <string name="file_deletion_failed">Failed to delete file</string>
     <string name="no_file_to_delete">No file associated with this transcript</string>
-    <string name="data_collect_mode">Data Collect Mode</string>
-    <string name="text_empty_stopping_recording">Text is empty, stopping recording.</string>
     <string name="error_reading_file">Error reading file</string>
     <string name="copied_to_clipboard">Copied to clipboard</string>
     <string name="nothing_to_copy">Nothing to copy</string>
@@ -80,7 +78,6 @@
     <string name="recording_in_progress">Recording in progress...</string>
     <string name="speak_text">Speak Text</string>
     <string name="feedback_failed">Feedback failed.</string>
-    <string name="data_collect_page_title">Data Collection</string>
     <string name="data_collect_queue_status">Previous: %1$d, Remaining: %2$d</string>
     <string name="data_collect_auto_flow">Auto-Flow</string>
 </resources>

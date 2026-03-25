@@ -74,4 +74,6 @@
 | **Phase 3** | 2026-03-25 | 修正 sequence mode：空白尾項按 `Next` 會清空文字並關閉模式 | `remainingCount` 改為只計非空白 |
 | **Phase 3** | 2026-03-25 | UX 微調：DataCollect 頁面 `text empty` 時禁用 `Start`；移除頁面標題字樣 | 降低誤觸與視覺簡化 |
 | **Phase 4** | 2026-03-25 | 啟動 Auto-Flow：DataCollect 錄音完成後自動存檔並跳到下一句；新增 `Skip/Retry` 操作 | *In Progress* |
-| **Phase 5** | | | *Pending* |
+| **Phase 5** | 2026-03-25 | 移除 `Home.kt` 內 data collect mode、sequence queue、TXT 匯入與相關分支 | `Home` 回到單一翻譯流程 |
+| **Phase 5** | 2026-03-25 | 收斂錄音啟動 API：`HomeViewModel` / `RecognitionManager` 改為 translate 與 data collect 明確入口 | 降低 bool flag 擴散 |
+| **Phase 5** | 2026-03-25 | 集中 ASR model 初始化到 `HomeViewModel`，移除多畫面重複初始化；清理未使用舊字串 | 改善 shared lifecycle |

@@ -39,9 +39,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.DataCollectViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
@@ -65,22 +62,18 @@ fun DataCollectScreen(
     val isRecognizingSpeech by homeViewModel.isRecognizingSpeech.collectAsState()
     val countdownProgress by homeViewModel.countdownProgress.collectAsState()
     val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
+    val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
     val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
-    var isAsrModelLoading by remember { mutableStateOf(true) }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isAutoFlowEnabled by rememberSaveable { mutableStateOf(false) }
     val latestIsSequenceMode by rememberUpdatedState(uiState.isSequenceMode)
     val latestIsAutoFlowEnabled by rememberUpdatedState(isAutoFlowEnabled)
 
     LaunchedEffect(selectedModel) {
-        selectedModel?.let { model ->
-            isAsrModelLoading = true
-            withContext(Dispatchers.IO) {
-                SimulateStreamingAsr.initOfflineRecognizer(context.assets, model)
-            }
-            isAsrModelLoading = false
+        if (selectedModel != null) {
+            homeViewModel.ensureSelectedModelInitialized()
         }
     }
 
@@ -212,10 +205,10 @@ fun DataCollectScreen(
                     if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                         ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
                     } else {
-                        homeViewModel.toggleRecording(isDataCollectMode = true, dataCollectText = uiState.text)
+                        homeViewModel.startDataCollectRecording(uiState.text)
                     }
                 } else {
-                    homeViewModel.toggleRecording(isDataCollectMode = true, dataCollectText = uiState.text)
+                    homeViewModel.toggleRecording()
                 }
             },
             onSkipClick = dataCollectViewModel::skipCurrent,

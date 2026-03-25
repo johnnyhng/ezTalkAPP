@@ -56,8 +56,6 @@
     <string name="file_deleted_successfully">檔案刪除成功</string>
     <string name="file_deletion_failed">檔案刪除失敗</string>
     <string name="no_file_to_delete">沒有與此轉錄稿關聯的檔案</string>
-    <string name="data_collect_mode">資料收集模式</string>
-    <string name="text_empty_stopping_recording">文字為空，停止錄音。</string>
     <string name="error_reading_file">讀取檔案時發生錯誤</string>
     <string name="copied_to_clipboard">已複製到剪貼簿</string>
     <string name="nothing_to_copy">沒有可複製的內容</string>
@@ -80,7 +78,6 @@
     <string name="recording_in_progress">錄音中...</string>
     <string name="speak_text">朗讀文字</string>
     <string name="feedback_failed">回饋失敗。</string>
-    <string name="data_collect_page_title">資料採集</string>
     <string name="data_collect_queue_status">上一句：%1$d，剩餘：%2$d</string>
     <string name="data_collect_auto_flow">自動流程</string>
 </resources>

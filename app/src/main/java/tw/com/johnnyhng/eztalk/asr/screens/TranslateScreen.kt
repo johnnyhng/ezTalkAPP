@@ -94,6 +94,8 @@ fun TranslateScreen(
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
+    val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
+    val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     val userId = userSettings.userId
 
     // Playback state
@@ -103,24 +105,16 @@ fun TranslateScreen(
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsSpeaking by remember { mutableStateOf(false) }
 
-    // ASR model loading state
-    var isAsrModelLoading by remember { mutableStateOf(true) }
-
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
 
     // Initialize recognizer in the background
-    LaunchedEffect(key1 = homeViewModel.selectedModel) {
-        isAsrModelLoading = true
-        Log.i(TAG, "ASR model initialization started.")
-        withContext(IO) {
-            SimulateStreamingAsr.initOfflineRecognizer(
-                context.assets,
-                homeViewModel.selectedModel
-            )
+    LaunchedEffect(selectedModel) {
+        if (selectedModel != null) {
+            Log.i(TAG, "ASR model initialization started.")
+            homeViewModel.ensureSelectedModelInitialized()
+            Log.i(TAG, "ASR model initialization finished.")
         }
-        isAsrModelLoading = false
-        Log.i(TAG, "ASR model initialization finished.")
     }
 
     // Initialize TTS

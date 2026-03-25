@@ -22,6 +22,11 @@ import kotlin.math.max
 import kotlin.math.min
 
 class RecognitionManager(private val context: Context) {
+    private enum class RecordingMode {
+        TRANSLATE,
+        DATA_COLLECT,
+    }
+
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var audioRecord: AudioRecord? = null
     private val sampleRateInHz = 16000
@@ -49,7 +54,17 @@ class RecognitionManager(private val context: Context) {
     var onError: (String) -> Unit = {}
 
     @SuppressLint("MissingPermission")
-    fun start(userSettings: UserSettings, isDataCollectMode: Boolean, dataCollectText: String) {
+    fun startTranslate(userSettings: UserSettings) {
+        start(userSettings, RecordingMode.TRANSLATE, "")
+    }
+
+    @SuppressLint("MissingPermission")
+    fun startDataCollect(userSettings: UserSettings, dataCollectText: String) {
+        start(userSettings, RecordingMode.DATA_COLLECT, dataCollectText)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun start(userSettings: UserSettings, mode: RecordingMode, dataCollectText: String) {
         if (_isStarted.value || recognitionJob?.isActive == true) return
         _currentDataCollectText.value = dataCollectText
         _isStarted.value = true
@@ -93,7 +108,7 @@ class RecognitionManager(private val context: Context) {
 
             // Processing loop
             try {
-                processAudio(samplesChannel, userSettings, isDataCollectMode)
+                processAudio(samplesChannel, userSettings, mode)
             } finally {
                 _isStarted.value = false
                 _isRecognizingSpeech.value = false
@@ -120,7 +135,7 @@ class RecognitionManager(private val context: Context) {
     private suspend fun processAudio(
         samplesChannel: Channel<FloatArray>,
         userSettings: UserSettings,
-        isDataCollectMode: Boolean
+        mode: RecordingMode
     ) {
         val lingerMs = userSettings.lingerMs
         val partialIntervalMs = userSettings.partialIntervalMs
@@ -213,6 +228,7 @@ class RecognitionManager(private val context: Context) {
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
                         
                         val originalText = result.text
+                        val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
                         val modifiedText = if (isDataCollectMode) _currentDataCollectText.value else originalText
                         val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                         val filename = "${timestamp}.app"

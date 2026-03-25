@@ -10,6 +10,9 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.data.classes.Model
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
@@ -58,11 +61,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // Recognition Manager integration
     private val recognitionManager = RecognitionManager(application)
+    private val recognizerInitMutex = Mutex()
+    private var initializedModelName: String? = null
     
     val isRecording = recognitionManager.isStarted
     val latestSamples = recognitionManager.latestSamples
     val isRecognizingSpeech = recognitionManager.isRecognizingSpeech
     val countdownProgress = recognitionManager.countdownProgress
+    private val _isAsrModelLoading = MutableStateFlow(false)
+    val isAsrModelLoading = _isAsrModelLoading.asStateFlow()
 
     private val _partialText = MutableSharedFlow<String>()
     val partialText = _partialText.asSharedFlow()
@@ -110,16 +117,40 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleRecording(isDataCollectMode: Boolean, dataCollectText: String) {
+    fun startTranslateRecording() {
+        recognitionManager.startTranslate(userSettings.value)
+    }
+
+    fun startDataCollectRecording(dataCollectText: String) {
+        recognitionManager.startDataCollect(userSettings.value, dataCollectText)
+    }
+
+    fun toggleRecording() {
         if (isRecording.value) {
             recognitionManager.stop()
-        } else {
-            recognitionManager.start(userSettings.value, isDataCollectMode, dataCollectText)
         }
     }
 
     fun updateDataCollectText(text: String) {
         recognitionManager.updateDataCollectText(text)
+    }
+
+    suspend fun ensureSelectedModelInitialized() {
+        val model = selectedModel ?: return
+        if (initializedModelName == model.name) return
+
+        recognizerInitMutex.withLock {
+            val latestModel = selectedModel ?: return
+            if (initializedModelName == latestModel.name) return
+
+            _isAsrModelLoading.value = true
+            try {
+                SimulateStreamingAsr.initOfflineRecognizer(getApplication<Application>().assets, latestModel)
+                initializedModelName = latestModel.name
+            } finally {
+                _isAsrModelLoading.value = false
+            }
+        }
     }
 
     // Settings & Model Methods
@@ -133,6 +164,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val model = _models.find { it.name == name }
         if (model != null) {
             _selectedModel.value = model
+            initializedModelName = null
             viewModelScope.launch {
                 settingsManager.updateSettings(userSettings.value.copy(selectedModelName = name))
             }

@@ -3,19 +3,14 @@ package tw.com.johnnyhng.eztalk.asr.screens
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.listSaver
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -30,10 +25,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
-import tw.com.johnnyhng.eztalk.asr.TAG
-import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.*
@@ -57,6 +51,7 @@ fun HomeScreen(
     val countdownProgress by homeViewModel.countdownProgress.collectAsState()
     val userSettings by homeViewModel.userSettings.collectAsState()
     val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
+    val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     
     val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
@@ -71,31 +66,15 @@ fun HomeScreen(
     val isEditing = isInlineEditing || transcriptToEditInDialog != null
     val fetchingJobs = remember { mutableStateMapOf<String, Job>() }
 
-    // Data collect states
-    var isDataCollectMode by remember { mutableStateOf(false) }
-    var dataCollectText by remember { mutableStateOf("") }
-    var isSequenceMode by rememberSaveable { mutableStateOf(false) }
-    val textQueue = rememberSaveable(saver = listSaver(
-        save = { it.toList() },
-        restore = { it.toMutableStateList() }
-    )) { mutableStateListOf<String>() }
-    var showNoQueueMessage by remember { mutableStateOf(false) }
-
     // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsSpeaking by remember { mutableStateOf(false) }
     val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
 
-    // Model Loading
-    var isAsrModelLoading by remember { mutableStateOf(true) }
     LaunchedEffect(selectedModel) {
-        selectedModel?.let { model ->
-            isAsrModelLoading = true
-            withContext(Dispatchers.IO) {
-                SimulateStreamingAsr.initOfflineRecognizer(context.assets, model)
-            }
-            isAsrModelLoading = false
+        if (selectedModel != null) {
+            homeViewModel.ensureSelectedModelInitialized()
         }
     }
 
@@ -103,7 +82,7 @@ fun HomeScreen(
     LaunchedEffect(userSettings.effectiveRecognitionUrl, userSettings.userId) {
         for (wavPath in recognitionQueue) {
             val url = userSettings.effectiveRecognitionUrl
-            if (url.isBlank() || isDataCollectMode) continue
+            if (url.isBlank()) continue
 
             coroutineScope.launch(Dispatchers.IO) {
                 val transcript = resultList.find { it.wavFilePath == wavPath }
@@ -137,7 +116,7 @@ fun HomeScreen(
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         
         val item = resultList[index]
-        if (userSettings.enableTtsFeedback && !isDataCollectMode) {
+        if (userSettings.enableTtsFeedback) {
             coroutineScope.launch {
                 fetchingJobs[item.wavFilePath]?.join()
                 if (item.removable) return@launch
@@ -177,7 +156,7 @@ fun HomeScreen(
                 }
                 lazyColumnListState.animateScrollToItem(resultList.size - 1)
                 
-                if (userSettings.effectiveRecognitionUrl.isNotBlank() && !isDataCollectMode) {
+                if (userSettings.effectiveRecognitionUrl.isNotBlank()) {
                     recognitionQueue.trySend(transcript.wavFilePath)
                 }
             }
@@ -224,81 +203,9 @@ fun HomeScreen(
         }
     }
 
-    // File Picker
-    val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let {
-            coroutineScope.launch(Dispatchers.IO) {
-                context.contentResolver.openInputStream(it)?.use { stream ->
-                    val lines = stream.bufferedReader().readLines().filter { it.isNotBlank() }
-                    withContext(Dispatchers.Main) {
-                        textQueue.clear()
-                        if (lines.isNotEmpty()) {
-                            dataCollectText = lines.first()
-                            homeViewModel.updateDataCollectText(dataCollectText)
-                            textQueue.addAll(lines.drop(1))
-                            isSequenceMode = true
-                            saveQueueState(context, userSettings.userId, QueueState(dataCollectText, textQueue.toList()))
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     // Main UI
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-                Text(stringResource(R.string.data_collect_mode))
-                Spacer(modifier = Modifier.width(8.dp))
-                Switch(checked = isDataCollectMode, onCheckedChange = { isDataCollectMode = it })
-            }
-
-            if (isDataCollectMode) {
-                DataCollectWidget(
-                    text = dataCollectText,
-                    onTextChange = {
-                        dataCollectText = it
-                        homeViewModel.updateDataCollectText(it)
-                    },
-                    onTtsClick = { if (dataCollectText.isNotBlank()) tts?.speak(dataCollectText, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString()) },
-                    isSequenceMode = isSequenceMode,
-                    onSequenceModeChange = { newMode ->
-                        if (newMode) {
-                            restoreQueueState(context, userSettings.userId)?.let {
-                                textQueue.clear()
-                                textQueue.addAll(it.queue)
-                                dataCollectText = it.currentText
-                                homeViewModel.updateDataCollectText(it.currentText)
-                                isSequenceMode = true
-                            } ?: run { showNoQueueMessage = true }
-                        } else {
-                            isSequenceMode = false
-                        }
-                    },
-                    onUploadClick = { filePickerLauncher.launch("text/plain") },
-                    onPreviousClick = {},
-                    onNextClick = {
-                        if (textQueue.isNotEmpty()) {
-                            dataCollectText = textQueue.removeFirst()
-                            homeViewModel.updateDataCollectText(dataCollectText)
-                            saveQueueState(context, userSettings.userId, QueueState(dataCollectText, textQueue.toList()))
-                        } else {
-                            isSequenceMode = false
-                            deleteQueueState(context, userSettings.userId)
-                        }
-                    },
-                    onDeleteClick = {
-                        dataCollectText = ""
-                        homeViewModel.updateDataCollectText("")
-                    },
-                    isPreviousEnabled = false,
-                    isNextEnabled = isSequenceMode,
-                    isSequenceModeSwitchEnabled = true,
-                    showNoQueueMessage = showNoQueueMessage
-                )
-            }
-
             HomeButtonRow(
                 isStarted = isStarted,
                 onRecordingButtonClick = {
@@ -307,8 +214,10 @@ fun HomeScreen(
                             ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
                             return@HomeButtonRow
                         }
+                        homeViewModel.startTranslateRecording()
+                    } else {
+                        homeViewModel.toggleRecording()
                     }
-                    homeViewModel.toggleRecording(isDataCollectMode, dataCollectText) 
                 },
                 onCopyButtonClick = {
                     if (resultList.isNotEmpty()) {
@@ -320,9 +229,7 @@ fun HomeScreen(
                 onClearButtonClick = { resultList.clear() },
                 isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
                 isAsrModelLoading = isAsrModelLoading,
-                isEditing = isEditing,
-                isDataCollectMode = isDataCollectMode,
-                dataCollectText = dataCollectText
+                isEditing = isEditing
             )
 
             if (isStarted) {
@@ -384,7 +291,7 @@ fun HomeScreen(
                 isStarted = isStarted,
                 isTtsSpeaking = isTtsSpeaking,
                 countdownProgress = countdownProgress,
-                isDataCollectMode = isDataCollectMode,
+                isDataCollectMode = false,
                 inlineEditEnabled = userSettings.inlineEdit,
                 localCandidate = localCandidate,
                 isFetchingCandidates = isFetchingCandidates
@@ -423,11 +330,9 @@ private fun HomeButtonRow(
     isPlaybackActive: Boolean,
     isAsrModelLoading: Boolean,
     isEditing: Boolean,
-    isDataCollectMode: Boolean,
-    dataCollectText: String,
 ) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-        Button(onClick = onRecordingButtonClick, enabled = !isPlaybackActive && !isAsrModelLoading && !isEditing && (!isDataCollectMode || dataCollectText.isNotBlank())) {
+        Button(onClick = onRecordingButtonClick, enabled = !isPlaybackActive && !isAsrModelLoading && !isEditing) {
             Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
         }
         Spacer(modifier = Modifier.width(24.dp))
