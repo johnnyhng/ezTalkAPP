@@ -62,7 +62,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // Recognition Manager integration
     private val recognitionManager = RecognitionManager(application)
     private val recognizerInitMutex = Mutex()
-    private var initializedModelName: String? = null
+    private var initializedModelKey: String? = null
+    private var lastUserId: String? = null
     
     val isRecording = recognitionManager.isStarted
     val latestSamples = recognitionManager.latestSamples
@@ -90,6 +91,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         // Sync selected model from settings
         viewModelScope.launch {
             userSettings.collectLatest { settings ->
+                if (lastUserId != null && lastUserId != settings.userId) {
+                    initializedModelKey = null
+                }
+                lastUserId = settings.userId
+
                 if (settings.selectedModelName.isNotBlank()) {
                     val model = _models.find { it.name == settings.selectedModelName }
                     if (model != null) {
@@ -137,16 +143,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun ensureSelectedModelInitialized() {
         val model = selectedModel ?: return
-        if (initializedModelName == model.name) return
+        val targetKey = buildModelKey(userSettings.value.userId, model.name)
+        if (initializedModelKey == targetKey) return
 
         recognizerInitMutex.withLock {
             val latestModel = selectedModel ?: return
-            if (initializedModelName == latestModel.name) return
+            val latestKey = buildModelKey(userSettings.value.userId, latestModel.name)
+            if (initializedModelKey == latestKey) return
 
             _isAsrModelLoading.value = true
             try {
                 SimulateStreamingAsr.initOfflineRecognizer(getApplication<Application>().assets, latestModel)
-                initializedModelName = latestModel.name
+                initializedModelKey = latestKey
             } finally {
                 _isAsrModelLoading.value = false
             }
@@ -164,11 +172,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val model = _models.find { it.name == name }
         if (model != null) {
             _selectedModel.value = model
-            initializedModelName = null
+            initializedModelKey = null
             viewModelScope.launch {
                 settingsManager.updateSettings(userSettings.value.copy(selectedModelName = name))
             }
         }
+    }
+
+    private fun buildModelKey(userId: String, modelName: String): String {
+        return "$userId::$modelName"
     }
 
     fun updateModelUrl(url: String) {
