@@ -4,18 +4,19 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.speech.tts.TextToSpeech
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -25,6 +26,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +70,9 @@ fun DataCollectScreen(
     val lazyColumnListState = rememberLazyListState()
     var isAsrModelLoading by remember { mutableStateOf(true) }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var isAutoFlowEnabled by rememberSaveable { mutableStateOf(false) }
+    val latestIsSequenceMode by rememberUpdatedState(uiState.isSequenceMode)
+    val latestIsAutoFlowEnabled by rememberUpdatedState(isAutoFlowEnabled)
 
     LaunchedEffect(selectedModel) {
         selectedModel?.let { model ->
@@ -113,6 +119,10 @@ fun DataCollectScreen(
                     resultList.add(transcript)
                 }
                 lazyColumnListState.animateScrollToItem(resultList.lastIndex)
+
+                if (latestIsSequenceMode && latestIsAutoFlowEnabled && transcript.wavFilePath.isNotEmpty()) {
+                    dataCollectViewModel.moveToNext()
+                }
             }
         }
     }
@@ -132,36 +142,6 @@ fun DataCollectScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = stringResource(R.string.data_collect_page_title),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Button(
-                onClick = {
-                    if (!isStarted) {
-                        if (uiState.text.isBlank()) {
-                            Toast.makeText(context, R.string.text_empty_stopping_recording, Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                            ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
-                            return@Button
-                        }
-                    }
-                    homeViewModel.toggleRecording(isDataCollectMode = true, dataCollectText = uiState.text)
-                },
-                enabled = !isAsrModelLoading
-            ) {
-                Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
-            }
-        }
-
         if (isStarted) {
             WaveformDisplay(
                 samples = latestAudioSamples,
@@ -205,6 +185,59 @@ fun DataCollectScreen(
             textAlign = TextAlign.Center
         )
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.data_collect_auto_flow),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = isAutoFlowEnabled,
+                onCheckedChange = { isAutoFlowEnabled = it }
+            )
+        }
+
+        DataCollectButtonRow(
+            isStarted = isStarted,
+            isAsrModelLoading = isAsrModelLoading,
+            canStart = uiState.text.isNotBlank(),
+            canSkip = uiState.isSequenceMode,
+            canRetry = uiState.previousCount > 0 && resultList.any { it.wavFilePath.isNotEmpty() },
+            onRecordingButtonClick = {
+                if (!isStarted) {
+                    if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                        ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
+                    } else {
+                        homeViewModel.toggleRecording(isDataCollectMode = true, dataCollectText = uiState.text)
+                    }
+                } else {
+                    homeViewModel.toggleRecording(isDataCollectMode = true, dataCollectText = uiState.text)
+                }
+            },
+            onSkipClick = dataCollectViewModel::skipCurrent,
+            onRetryClick = {
+                val lastCompletedIndex = resultList.indexOfLast { it.wavFilePath.isNotEmpty() }
+                val canRollback = if (lastCompletedIndex != -1) {
+                    val lastCompleted = resultList[lastCompletedIndex]
+                    if (deleteTranscriptFiles(lastCompleted.wavFilePath)) {
+                        resultList.removeAt(lastCompletedIndex)
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    true
+                }
+                if (canRollback) {
+                    dataCollectViewModel.retryLastCompleted()
+                }
+            }
+        )
+
         CandidateList(
             modifier = Modifier.fillMaxWidth(),
             resultList = resultList,
@@ -240,5 +273,43 @@ fun DataCollectScreen(
             localCandidate = null,
             isFetchingCandidates = false
         )
+    }
+}
+
+@Composable
+private fun DataCollectButtonRow(
+    isStarted: Boolean,
+    isAsrModelLoading: Boolean,
+    canStart: Boolean,
+    canSkip: Boolean,
+    canRetry: Boolean,
+    onRecordingButtonClick: () -> Unit,
+    onSkipClick: () -> Unit,
+    onRetryClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Button(
+            onClick = onRecordingButtonClick,
+            enabled = !isAsrModelLoading && (isStarted || canStart)
+        ) {
+            Text(text = stringResource(if (isStarted) R.string.stop else R.string.start))
+        }
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(24.dp))
+        Button(
+            onClick = onRetryClick,
+            enabled = !isStarted && canRetry
+        ) {
+            Text(text = stringResource(R.string.retry))
+        }
+        androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(24.dp))
+        Button(
+            onClick = onSkipClick,
+            enabled = !isStarted && canSkip
+        ) {
+            Text(text = stringResource(R.string.skip))
+        }
     }
 }

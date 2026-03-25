@@ -37,7 +37,7 @@
 ### Phase 3: 數據隊列管理與 ViewModel (State Management)
 *   **目標**: 遷移數據採集的核心狀態。
 *   **工作項目**:
-    *   建立 `DataCollectViewModel`。
+    *   建立 `DataCollectViewModel`。[SESSION_RESTORE.md](SESSION_RESTORE.md)
     *   遷移 `textQueue`、`QueueState` 的讀取、解析（txt/csv）與持久化保存邏輯。
     *   實作「匯入檔案」功能，並與 `ActivityResultLauncher` 整合。
 *   **測試點**: 進入採集頁面，點擊匯入後能正確顯示第一句，並能手動切換「上一句/下一句」。
@@ -69,5 +69,9 @@
 | **Phase 2** | 2026-03-24 | 完成 `DATA_COLLECT` 路由、底欄切換與 `DataCollectScreen` UI Shell | *Completed* |
 | **Phase 2 (Cleanup)** | 2026-03-25 | 移除 App 內 Phase 2 骨架提示文案（完成「Phase 2 shell ready」過渡字樣下線） | 與 Phase 3 UI 整合 |
 | **Phase 3** | 2026-03-24 | 啟動 `DataCollectViewModel`，遷移 queue 狀態與 txt/csv 匯入流程 | *In Progress* |
-| **Phase 4** | | | *Pending* |
+| **Phase 3** | 2026-03-25 | `DataCollectScreen` 補齊錄音流程、即時辨識列表、播放/刪除按鈕、countdown 顯示 | UI 已可對齊 Home 主要操作 |
+| **Phase 3** | 2026-03-25 | 修復錄音穩定性：VAD 安全操作、stop→start 無反應、data collect 文字同步 | `Recording_Crash_Report.md` 已更新為 Mitigated |
+| **Phase 3** | 2026-03-25 | 修正 sequence mode：空白尾項按 `Next` 會清空文字並關閉模式 | `remainingCount` 改為只計非空白 |
+| **Phase 3** | 2026-03-25 | UX 微調：DataCollect 頁面 `text empty` 時禁用 `Start`；移除頁面標題字樣 | 降低誤觸與視覺簡化 |
+| **Phase 4** | 2026-03-25 | 啟動 Auto-Flow：DataCollect 錄音完成後自動存檔並跳到下一句；新增 `Skip/Retry` 操作 | *In Progress* |
 | **Phase 5** | | | *Pending* |

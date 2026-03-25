@@ -72,6 +72,8 @@
     <string name="tts_for_data_collection">TTS for data collection text</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
+    <string name="retry">Retry</string>
+    <string name="skip">Skip</string>
     <string name="clear_text">Clear text</string>
     <string name="recognized_text">Recognized Text</string>
     <string name="recognized_text_item">Recognized: %1$s</string>
@@ -80,4 +82,5 @@
     <string name="feedback_failed">Feedback failed.</string>
     <string name="data_collect_page_title">Data Collection</string>
     <string name="data_collect_queue_status">Previous: %1$d, Remaining: %2$d</string>
+    <string name="data_collect_auto_flow">Auto-Flow</string>
 </resources>

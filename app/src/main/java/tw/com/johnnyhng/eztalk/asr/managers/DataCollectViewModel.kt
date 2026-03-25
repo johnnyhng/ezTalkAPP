@@ -126,6 +126,10 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun skipCurrent() {
+        moveToNext()
+    }
+
     fun moveToPrevious() {
         if (history.isEmpty()) return
 
@@ -146,20 +150,24 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
         persistQueueState()
     }
 
+    fun retryLastCompleted() {
+        moveToPrevious()
+    }
+
     private fun applyImportedLines(lines: List<String>) {
         queue.clear()
         queue.addAll(lines.drop(1))
         history.clear()
 
-            _uiState.update {
-                it.copy(
-                    text = lines.first(),
-                    isSequenceMode = true,
-                    showNoQueueMessage = false,
-                    remainingCount = queue.count { item -> item.isNotBlank() },
-                    previousCount = history.size
-                )
-            }
+        _uiState.update {
+            it.copy(
+                text = lines.first(),
+                isSequenceMode = true,
+                showNoQueueMessage = false,
+                remainingCount = queue.count { item -> item.isNotBlank() },
+                previousCount = history.size
+            )
+        }
         persistQueueState()
     }
 
