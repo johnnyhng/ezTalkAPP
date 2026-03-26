@@ -48,6 +48,7 @@ internal fun EditRecognitionDialog(
     wavFilePath: String, // We need the path to the audio file
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    onSpeakConfirm: ((String) -> Unit)? = null,
     userId: String,
     recognitionUrl: String,
 ) {
@@ -81,12 +82,12 @@ internal fun EditRecognitionDialog(
                     coroutineScope.launch { isTtsSpeaking = true }
                 }
 
-                override fun onDone(utteranceId: String?) {
-                    coroutineScope.launch {
-                        isTtsSpeaking = false
-                        onConfirm(text) // Perform confirm action when done
+                    override fun onDone(utteranceId: String?) {
+                        coroutineScope.launch {
+                            isTtsSpeaking = false
+                            (onSpeakConfirm ?: onConfirm)(text)
+                        }
                     }
-                }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {

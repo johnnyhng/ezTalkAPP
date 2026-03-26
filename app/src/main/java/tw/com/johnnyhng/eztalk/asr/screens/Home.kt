@@ -187,6 +187,84 @@ fun HomeScreen(
         }
     }
 
+    fun handleDialogTtsConfirm(index: Int, text: String) {
+        val item = resultList.getOrNull(index) ?: return
+
+        if (userSettings.enableTtsFeedback) {
+            coroutineScope.launch {
+                fetchingJobs[item.wavFilePath]?.join()
+                if (item.removable) {
+                    val updatedItem = item.copy(modifiedText = text, checked = true, mutable = false, removable = true)
+                    resultList[index] = updatedItem
+                    withContext(Dispatchers.IO) {
+                        saveJsonl(
+                            context = context,
+                            userId = userSettings.userId,
+                            filename = File(updatedItem.wavFilePath).nameWithoutExtension,
+                            originalText = updatedItem.recognizedText,
+                            modifiedText = updatedItem.modifiedText,
+                            checked = updatedItem.checked,
+                            mutable = updatedItem.mutable,
+                            removable = updatedItem.removable,
+                            remoteCandidates = updatedItem.remoteCandidates
+                        )
+                    }
+                    transcriptToEditInDialog = null
+                    return@launch
+                }
+
+                val success = withContext(Dispatchers.IO) {
+                    feedbackToBackend(userSettings.backendUrl, item.wavFilePath, userSettings.userId)
+                }
+
+                if (success) {
+                    val updatedItem = item.copy(
+                        modifiedText = text,
+                        checked = true,
+                        mutable = false,
+                        removable = true
+                    )
+                    resultList[index] = updatedItem
+                    withContext(Dispatchers.IO) {
+                        saveJsonl(
+                            context = context,
+                            userId = userSettings.userId,
+                            filename = File(updatedItem.wavFilePath).nameWithoutExtension,
+                            originalText = updatedItem.recognizedText,
+                            modifiedText = updatedItem.modifiedText,
+                            checked = updatedItem.checked,
+                            mutable = updatedItem.mutable,
+                            removable = updatedItem.removable,
+                            remoteCandidates = updatedItem.remoteCandidates
+                        )
+                    }
+                    transcriptToEditInDialog = null
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, R.string.feedback_failed, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        } else {
+            val updatedItem = item.copy(modifiedText = text, checked = true)
+            resultList[index] = updatedItem
+            coroutineScope.launch(Dispatchers.IO) {
+                saveJsonl(
+                    context = context,
+                    userId = userSettings.userId,
+                    filename = File(updatedItem.wavFilePath).nameWithoutExtension,
+                    originalText = updatedItem.recognizedText,
+                    modifiedText = updatedItem.modifiedText,
+                    checked = updatedItem.checked,
+                    mutable = updatedItem.mutable,
+                    removable = updatedItem.removable,
+                    remoteCandidates = updatedItem.remoteCandidates
+                )
+            }
+            transcriptToEditInDialog = null
+        }
+    }
+
     // Connect ViewModel events to resultList
     LaunchedEffect(Unit) {
         homeViewModel.finalTranscript.collect { transcript ->
@@ -371,6 +449,9 @@ fun HomeScreen(
                         )
                     }
                     transcriptToEditInDialog = null
+                },
+                onSpeakConfirm = { newText ->
+                    handleDialogTtsConfirm(index, newText)
                 },
                 userId = userSettings.userId,
                 recognitionUrl = userSettings.effectiveRecognitionUrl,
