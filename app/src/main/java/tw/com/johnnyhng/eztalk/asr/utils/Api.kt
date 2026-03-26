@@ -106,10 +106,16 @@ fun feedbackToBackend(
     val metadata = readJsonl(jsonlPath)
     val hasRemoteCandidates = metadata?.optJSONArray("remote_candidates") != null
 
+    Log.d(
+        TAG,
+        "feedbackToBackend: filePath=$filePath, jsonlPath=$jsonlPath, hasRemoteCandidates=$hasRemoteCandidates"
+    )
 
     return if (hasRemoteCandidates) {
+        Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
         putForUpdates("$backendUrl/api/updates", filePath, userId, metadata)
     } else {
+        Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
         postTransfer("$backendUrl/api/transfer", filePath, userId)
     }
 }
@@ -121,6 +127,10 @@ fun putForUpdates(
     metadata: JSONObject? = null
 ): Boolean {
     return try {
+        Log.d(
+            TAG,
+            "putForUpdates: url=$updateUrl, filePath=$filePath, sentence=${metadata?.optString("modified") ?: ""}"
+        )
         val url = URL(updateUrl)
         val connection = url.openConnection() as HttpURLConnection
         val hostnameVerifier = HostnameVerifier { _, _ -> true }
@@ -160,6 +170,7 @@ fun putForUpdates(
 
         val responseCode = connection.responseCode
         if (responseCode == HttpURLConnection.HTTP_OK) {
+            Log.d(TAG, "putForUpdates: success, responseCode=$responseCode")
             true
         } else {
             Log.e(TAG, "Update failed. Response code: $responseCode, message: ${connection.responseMessage}")
@@ -180,6 +191,10 @@ fun postTransfer(
     sendFileByJson: Boolean = true
 ): Boolean {
     return try {
+        Log.d(
+            TAG,
+            "postTransfer: url=$transferUrl, filePath=$filePath, sendFileByJson=$sendFileByJson"
+        )
         val url = URL(transferUrl)
         val connection = url.openConnection() as HttpURLConnection
         val hostnameVerifier = HostnameVerifier { _, _ -> true }
@@ -252,6 +267,7 @@ fun postTransfer(
 
         val responseCode = connection.responseCode
         if (responseCode == HttpURLConnection.HTTP_OK) {
+            Log.d(TAG, "postTransfer: success, responseCode=$responseCode")
             true
         } else {
             Log.e(TAG, "Transfer post failed. Response code: $responseCode, message: ${connection.responseMessage}")

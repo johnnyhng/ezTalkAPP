@@ -84,8 +84,11 @@ fun HomeScreen(
             val url = userSettings.effectiveRecognitionUrl
             if (url.isBlank()) continue
 
-            coroutineScope.launch(Dispatchers.IO) {
-                val transcript = resultList.find { it.wavFilePath == wavPath }
+            val job = coroutineScope.launch(Dispatchers.IO) {
+                val transcript = withContext(Dispatchers.Main) {
+                    resultList.find { it.wavFilePath == wavPath }
+                }
+
                 transcript?.let {
                     val sentences = getRemoteCandidates(
                         context = context,
@@ -104,7 +107,12 @@ fun HomeScreen(
                             }
                         }
                     }
-                }
+                } ?: Log.w(TAG, "Could not find transcript for wavPath: $wavPath to update remote candidates.")
+            }
+
+            fetchingJobs[wavPath] = job
+            job.invokeOnCompletion {
+                fetchingJobs.remove(wavPath)
             }
         }
     }
@@ -116,7 +124,8 @@ fun HomeScreen(
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         
         val item = resultList[index]
-        if (userSettings.enableTtsFeedback) {
+        val useFeedbackLogic = userSettings.enableTtsFeedback
+        if (useFeedbackLogic) {
             coroutineScope.launch {
                 fetchingJobs[item.wavFilePath]?.join()
                 if (item.removable) return@launch
@@ -124,15 +133,38 @@ fun HomeScreen(
                     feedbackToBackend(userSettings.backendUrl, item.wavFilePath, userSettings.userId)
                 }
                 if (success) {
-                    withContext(Dispatchers.Main) {
+                    val updated = withContext(Dispatchers.Main) {
                         val cIndex = resultList.indexOfFirst { it.wavFilePath == item.wavFilePath }
-                        if (cIndex != -1) {
-                            val updated = resultList[cIndex].copy(modifiedText = text, checked = true, mutable = false, removable = true)
-                            resultList[cIndex] = updated
-                            withContext(Dispatchers.IO) {
-                                saveJsonl(context, userSettings.userId, File(updated.wavFilePath).nameWithoutExtension, updated.recognizedText, text, true, false, true)
-                            }
+                        if (cIndex == -1) {
+                            null
+                        } else {
+                            resultList[cIndex].copy(
+                                modifiedText = text,
+                                checked = true,
+                                mutable = false,
+                                removable = true
+                            ).also { resultList[cIndex] = it }
                         }
+                    }
+
+                    updated?.let {
+                        withContext(Dispatchers.IO) {
+                            saveJsonl(
+                                context = context,
+                                userId = userSettings.userId,
+                                filename = File(it.wavFilePath).nameWithoutExtension,
+                                originalText = it.recognizedText,
+                                modifiedText = it.modifiedText,
+                                checked = it.checked,
+                                mutable = it.mutable,
+                                removable = it.removable,
+                                remoteCandidates = it.remoteCandidates
+                            )
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, R.string.feedback_failed, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -140,7 +172,17 @@ fun HomeScreen(
             val updated = item.copy(modifiedText = text, checked = true)
             resultList[index] = updated
             coroutineScope.launch(Dispatchers.IO) {
-                saveJsonl(context, userSettings.userId, File(updated.wavFilePath).nameWithoutExtension, updated.recognizedText, text, true, updated.mutable)
+                saveJsonl(
+                    context = context,
+                    userId = userSettings.userId,
+                    filename = File(updated.wavFilePath).nameWithoutExtension,
+                    originalText = updated.recognizedText,
+                    modifiedText = updated.modifiedText,
+                    checked = updated.checked,
+                    mutable = updated.mutable,
+                    removable = updated.removable,
+                    remoteCandidates = updated.remoteCandidates
+                )
             }
         }
     }
@@ -177,7 +219,13 @@ fun HomeScreen(
     // TTS Init
     LaunchedEffect(Unit) {
         tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) tts?.language = Locale.TRADITIONAL_CHINESE
+            if (status == TextToSpeech.SUCCESS) {
+                if (tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE) {
+                    tts?.language = Locale.TRADITIONAL_CHINESE
+                } else {
+                    tts?.language = Locale.getDefault()
+                }
+            }
         }
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) { isTtsSpeaking = true }
@@ -310,7 +358,17 @@ fun HomeScreen(
                     val updatedItem = transcript.copy(modifiedText = newText, checked = true)
                     resultList[index] = updatedItem
                     coroutineScope.launch(Dispatchers.IO) {
-                        saveJsonl(context, userSettings.userId, File(updatedItem.wavFilePath).nameWithoutExtension, updatedItem.recognizedText, newText, true, updatedItem.mutable)
+                        saveJsonl(
+                            context = context,
+                            userId = userSettings.userId,
+                            filename = File(updatedItem.wavFilePath).nameWithoutExtension,
+                            originalText = updatedItem.recognizedText,
+                            modifiedText = updatedItem.modifiedText,
+                            checked = updatedItem.checked,
+                            mutable = updatedItem.mutable,
+                            removable = updatedItem.removable,
+                            remoteCandidates = updatedItem.remoteCandidates
+                        )
                     }
                     transcriptToEditInDialog = null
                 },

@@ -170,7 +170,7 @@ fun CandidateItemRow(
         }
 
         if (transcript.wavFilePath.isNotEmpty()) {
-            if (!isDataCollectMode) {
+            if (!isDataCollectMode && transcript.mutable) {
                 IconButton(
                     onClick = onTtsClick,
                     enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
