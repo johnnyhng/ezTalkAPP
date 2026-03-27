@@ -61,7 +61,7 @@ fun CandidateList(
                         result.recognizedText,
                         result.modifiedText,
                         localCandidate
-                    ) + result.remoteCandidates).distinct()
+                    ) + result.localCandidates + result.remoteCandidates).distinct()
                 }
                 CandidateEditRow(
                     text = editingText,

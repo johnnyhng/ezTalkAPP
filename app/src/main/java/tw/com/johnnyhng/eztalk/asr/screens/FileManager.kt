@@ -53,6 +53,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
 import tw.com.johnnyhng.eztalk.asr.utils.feedbackToBackend
+import tw.com.johnnyhng.eztalk.asr.utils.optStringList
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
 import tw.com.johnnyhng.eztalk.asr.widgets.EditRecognitionDialog
 import java.io.File
@@ -67,6 +68,8 @@ data class WavFileEntry(
     val checked: Boolean,
     val mutable: Boolean,
     val removable: Boolean,
+    val localCandidates: List<String>,
+    val remoteCandidates: List<String>,
 )
 
 @SuppressLint("StringFormatInvalid")
@@ -104,6 +107,8 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             val checked = json.getBoolean("checked")
                             val mutable = json.optBoolean("mutable", true)
                             val removable = json.optBoolean("removable", false)
+                            val localCandidates = json.optStringList("local_candidates")
+                            val remoteCandidates = json.optStringList("remote_candidates")
 
                             WavFileEntry(
                                 wavFile = wavFile,
@@ -111,7 +116,9 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                 modifiedText = modified,
                                 checked = checked,
                                 mutable = mutable,
-                                removable = removable
+                                removable = removable,
+                                localCandidates = localCandidates,
+                                remoteCandidates = remoteCandidates
                             )
                         } catch (e: Exception) {
                             null // Ignore malformed lines
@@ -197,7 +204,9 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         modifiedText = newText,
                         checked = editingEntry!!.checked,
                         mutable = editingEntry!!.mutable,
-                        removable = editingEntry!!.removable
+                        removable = editingEntry!!.removable,
+                        localCandidates = editingEntry!!.localCandidates,
+                        remoteCandidates = editingEntry!!.remoteCandidates
                     )
                     listWavFiles() // Refresh the list
                 }
@@ -280,7 +289,9 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                     modifiedText = entry.modifiedText,
                                     checked = newState,
                                     mutable = entry.mutable,
-                                    removable = entry.removable
+                                    removable = entry.removable,
+                                    localCandidates = entry.localCandidates,
+                                    remoteCandidates = entry.remoteCandidates
                                 )
                             }
                         }
@@ -319,7 +330,9 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                             modifiedText = entry.modifiedText,
                                             checked = it,
                                             mutable = entry.mutable,
-                                            removable = entry.removable
+                                            removable = entry.removable,
+                                            localCandidates = entry.localCandidates,
+                                            remoteCandidates = entry.remoteCandidates
                                         )
                                         listWavFiles()
                                     }

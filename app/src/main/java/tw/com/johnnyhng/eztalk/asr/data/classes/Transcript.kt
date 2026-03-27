@@ -7,5 +7,6 @@ data class Transcript(
     var checked: Boolean = false,
     var mutable: Boolean = true,
     var removable: Boolean = false,
+    var localCandidates: List<String> = emptyList(),
     var remoteCandidates: List<String> = emptyList()
 )

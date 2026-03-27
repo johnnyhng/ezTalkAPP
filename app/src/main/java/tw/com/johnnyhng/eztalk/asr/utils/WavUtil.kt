@@ -91,6 +91,7 @@ fun saveJsonl(
     checked: Boolean,
     mutable: Boolean = true,
     removable: Boolean = false,
+    localCandidates: List<String>? = null,
     remoteCandidates: List<String>? = null
 ): String? {
     val dir = File(context.filesDir, "wavs/$userId")
@@ -108,6 +109,9 @@ fun saveJsonl(
             put("checked", checked)
             put("mutable", mutable)
             put("removable", removable)
+            localCandidates?.let {
+                put("local_candidates", JSONArray(it))
+            }
             remoteCandidates?.let {
                 put("remote_candidates", JSONArray(it))
             }
@@ -143,6 +147,11 @@ fun readJsonl(path: String): JSONObject? {
         Log.e(TAG, "Error reading or parsing JSONL file: $path", e)
         return null
     }
+}
+
+fun JSONObject.optStringList(key: String): List<String> {
+    val array = optJSONArray(key) ?: return emptyList()
+    return List(array.length()) { index -> array.optString(index) }.filter { it.isNotBlank() }
 }
 
 

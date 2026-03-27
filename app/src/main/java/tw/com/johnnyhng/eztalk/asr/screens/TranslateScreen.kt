@@ -55,8 +55,10 @@ import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
 import tw.com.johnnyhng.eztalk.asr.utils.feedbackToBackend
 import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
+import tw.com.johnnyhng.eztalk.asr.utils.optStringList
 import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
+import tw.com.johnnyhng.eztalk.asr.utils.readJsonl
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import java.io.File
@@ -155,27 +157,45 @@ fun TranslateScreen(
         if (transcript != null && transcript.wavFilePath.isNotEmpty()) {
             try {
                 isFetchingCandidates = true
-                localCandidate = null
+                localCandidate = transcript.localCandidates.firstOrNull()
                 remoteCandidates = emptyList()
 
                 coroutineScope {
                     // Local re-recognition
-                    launch(IO) {
-                        try {
-                            val audioData = readWavFileToFloatArray(transcript.wavFilePath)
-                            if (audioData != null) {
-                                val recognizer = SimulateStreamingAsr.recognizer
-                                val stream = recognizer.createStream()
-                                stream.acceptWaveform(audioData, sampleRateInHz)
-                                recognizer.decode(stream)
-                                val localResultText = recognizer.getResult(stream).text
-                                stream.release()
-                                withContext(Main) {
-                                    localCandidate = localResultText
+                    if (transcript.localCandidates.isEmpty()) {
+                        launch(IO) {
+                            try {
+                                val audioData = readWavFileToFloatArray(transcript.wavFilePath)
+                                if (audioData != null) {
+                                    val recognizer = SimulateStreamingAsr.recognizer
+                                    val stream = recognizer.createStream()
+                                    stream.acceptWaveform(audioData, sampleRateInHz)
+                                    recognizer.decode(stream)
+                                    val localResultText = recognizer.getResult(stream).text
+                                    stream.release()
+                                    if (localResultText.isNotBlank()) {
+                                        val updatedTranscript = transcript.copy(localCandidates = listOf(localResultText))
+                                        saveJsonl(
+                                            context = context,
+                                            userId = userSettings.userId,
+                                            filename = File(transcript.wavFilePath).nameWithoutExtension,
+                                            originalText = updatedTranscript.recognizedText,
+                                            modifiedText = updatedTranscript.modifiedText,
+                                            checked = updatedTranscript.checked,
+                                            mutable = updatedTranscript.mutable,
+                                            removable = updatedTranscript.removable,
+                                            localCandidates = updatedTranscript.localCandidates,
+                                            remoteCandidates = updatedTranscript.remoteCandidates
+                                        )
+                                        withContext(Main) {
+                                            currentTranscript = updatedTranscript
+                                            localCandidate = localResultText
+                                        }
+                                    }
                                 }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Local re-recognition failed", e)
                             }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Local re-recognition failed", e)
                         }
                     }
 
@@ -386,7 +406,8 @@ fun TranslateScreen(
                                     val newTranscript = Transcript(
                                         recognizedText = result.text,
                                         wavFilePath = wavPath ?: "",
-                                        modifiedText = result.text
+                                        modifiedText = result.text,
+                                        localCandidates = listOf(result.text)
                                     )
 
                                     withContext(Main) {
@@ -400,7 +421,8 @@ fun TranslateScreen(
                                                 filename = filename,
                                                 originalText = newTranscript.recognizedText,
                                                 modifiedText = newTranscript.modifiedText,
-                                                checked = false
+                                                checked = false,
+                                                localCandidates = newTranscript.localCandidates
                                             )
                                         }
                                     }
@@ -504,6 +526,7 @@ fun TranslateScreen(
                                     checked = true,
                                     mutable = false,
                                     removable = true,
+                                    localCandidates = transcript.localCandidates,
                                     remoteCandidates = remoteCandidates // Ensure candidates are included
                                 )
                                 currentTranscript = updatedTranscript
@@ -520,6 +543,7 @@ fun TranslateScreen(
                                         checked = updatedTranscript.checked,
                                         mutable = updatedTranscript.mutable,
                                         removable = updatedTranscript.removable,
+                                        localCandidates = updatedTranscript.localCandidates,
                                         remoteCandidates = updatedTranscript.remoteCandidates
                                     )
                                 }
@@ -544,6 +568,7 @@ fun TranslateScreen(
                                 checked = updatedTranscript.checked,
                                 mutable = updatedTranscript.mutable,
                                 removable = updatedTranscript.removable,
+                                localCandidates = updatedTranscript.localCandidates,
                                 remoteCandidates = updatedTranscript.remoteCandidates
                             )
                         }
@@ -576,11 +601,31 @@ fun TranslateScreen(
             )
         }
 
+        LaunchedEffect(currentTranscript?.wavFilePath) {
+            val transcript = currentTranscript ?: return@LaunchedEffect
+            if (transcript.wavFilePath.isEmpty()) return@LaunchedEffect
+            val json = readJsonl(File(transcript.wavFilePath).resolveSibling("${File(transcript.wavFilePath).nameWithoutExtension}.jsonl").absolutePath)
+            if (json != null) {
+                val localCandidatesFromJson = json.optStringList("local_candidates")
+                val remoteCandidatesFromJson = json.optStringList("remote_candidates")
+                if (localCandidatesFromJson.isNotEmpty() || remoteCandidatesFromJson.isNotEmpty()) {
+                    currentTranscript = transcript.copy(
+                        localCandidates = if (localCandidatesFromJson.isNotEmpty()) localCandidatesFromJson else transcript.localCandidates,
+                        remoteCandidates = if (remoteCandidatesFromJson.isNotEmpty()) remoteCandidatesFromJson else transcript.remoteCandidates
+                    )
+                    localCandidate = localCandidatesFromJson.firstOrNull() ?: localCandidate
+                    if (remoteCandidatesFromJson.isNotEmpty()) {
+                        remoteCandidates = remoteCandidatesFromJson
+                    }
+                }
+            }
+        }
+
         val candidates = remember(currentTranscript, localCandidate, remoteCandidates) {
             (listOfNotNull(
                 currentTranscript?.recognizedText,
                 localCandidate
-            ) + remoteCandidates).distinct().filter { it.isNotBlank() }
+            ) + currentTranscript.orEmptyLocalCandidates() + remoteCandidates).distinct().filter { it.isNotBlank() }
         }
 
         LazyColumn(
@@ -608,6 +653,8 @@ fun TranslateScreen(
         }
     }
 }
+
+private fun Transcript?.orEmptyLocalCandidates(): List<String> = this?.localCandidates ?: emptyList()
 
 private fun stopAudio() {
     audioRecord?.stop()

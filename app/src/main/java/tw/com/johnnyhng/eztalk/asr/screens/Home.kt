@@ -158,6 +158,7 @@ fun HomeScreen(
                                 checked = it.checked,
                                 mutable = it.mutable,
                                 removable = it.removable,
+                                localCandidates = it.localCandidates,
                                 remoteCandidates = it.remoteCandidates
                             )
                         }
@@ -181,6 +182,7 @@ fun HomeScreen(
                     checked = updated.checked,
                     mutable = updated.mutable,
                     removable = updated.removable,
+                    localCandidates = updated.localCandidates,
                     remoteCandidates = updated.remoteCandidates
                 )
             }
@@ -206,6 +208,7 @@ fun HomeScreen(
                             checked = updatedItem.checked,
                             mutable = updatedItem.mutable,
                             removable = updatedItem.removable,
+                            localCandidates = updatedItem.localCandidates,
                             remoteCandidates = updatedItem.remoteCandidates
                         )
                     }
@@ -235,6 +238,7 @@ fun HomeScreen(
                             checked = updatedItem.checked,
                             mutable = updatedItem.mutable,
                             removable = updatedItem.removable,
+                            localCandidates = updatedItem.localCandidates,
                             remoteCandidates = updatedItem.remoteCandidates
                         )
                     }
@@ -258,6 +262,7 @@ fun HomeScreen(
                     checked = updatedItem.checked,
                     mutable = updatedItem.mutable,
                     removable = updatedItem.removable,
+                    localCandidates = updatedItem.localCandidates,
                     remoteCandidates = updatedItem.remoteCandidates
                 )
             }
@@ -381,23 +386,47 @@ fun HomeScreen(
                         if (res.wavFilePath.isNotEmpty()) {
                             coroutineScope.launch {
                                 isFetchingCandidates = true
-                                val localJob = launch(Dispatchers.IO) {
-                                    try {
-                                        val audioData = readWavFileToFloatArray(res.wavFilePath)
-                                        if (audioData != null) {
-                                            val recognizer = SimulateStreamingAsr.recognizer
-                                            val stream = recognizer.createStream()
-                                            stream.acceptWaveform(audioData, 16000)
-                                            recognizer.decode(stream)
-                                            val localResultText = recognizer.getResult(stream).text
-                                            stream.release()
-                                            withContext(Dispatchers.Main) { localCandidate = localResultText }
+                                if (res.localCandidates.isNotEmpty()) {
+                                    localCandidate = res.localCandidates.firstOrNull()
+                                } else {
+                                    val localJob = launch(Dispatchers.IO) {
+                                        try {
+                                            val audioData = readWavFileToFloatArray(res.wavFilePath)
+                                            if (audioData != null) {
+                                                val recognizer = SimulateStreamingAsr.recognizer
+                                                val stream = recognizer.createStream()
+                                                stream.acceptWaveform(audioData, 16000)
+                                                recognizer.decode(stream)
+                                                val localResultText = recognizer.getResult(stream).text
+                                                stream.release()
+                                                if (localResultText.isNotBlank()) {
+                                                    val updatedItem = res.copy(localCandidates = listOf(localResultText))
+                                                    withContext(Dispatchers.Main) {
+                                                        localCandidate = localResultText
+                                                        if (idx in resultList.indices && resultList[idx].wavFilePath == res.wavFilePath) {
+                                                            resultList[idx] = updatedItem
+                                                        }
+                                                    }
+                                                    saveJsonl(
+                                                        context = context,
+                                                        userId = userSettings.userId,
+                                                        filename = File(res.wavFilePath).nameWithoutExtension,
+                                                        originalText = updatedItem.recognizedText,
+                                                        modifiedText = updatedItem.modifiedText,
+                                                        checked = updatedItem.checked,
+                                                        mutable = updatedItem.mutable,
+                                                        removable = updatedItem.removable,
+                                                        localCandidates = updatedItem.localCandidates,
+                                                        remoteCandidates = updatedItem.remoteCandidates
+                                                    )
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Local re-recognition failed", e)
                                         }
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Local re-recognition failed", e)
                                     }
+                                    localJob.join()
                                 }
-                                localJob.join()
                                 isFetchingCandidates = false
                             }
                         }
@@ -445,6 +474,7 @@ fun HomeScreen(
                             checked = updatedItem.checked,
                             mutable = updatedItem.mutable,
                             removable = updatedItem.removable,
+                            localCandidates = updatedItem.localCandidates,
                             remoteCandidates = updatedItem.remoteCandidates
                         )
                     }

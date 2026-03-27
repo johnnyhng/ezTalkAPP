@@ -135,6 +135,7 @@ Important fields:
 - `checked`: whether the item has been reviewed / confirmed
 - `mutable`: whether it is still editable
 - `removable`: whether it has already gone through feedback flow
+- `localCandidates`: optional locally re-recognized alternatives cached from saved audio
 - `remoteCandidates`: optional remote alternatives
 
 The central persisted settings model is [UserSettings.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/data/classes/UserSettings.kt).
@@ -214,6 +215,13 @@ When a final transcript arrives:
 - a background worker calls `getRemoteCandidates(...)`
 - remote candidates are written into the item and also stored into the `.jsonl`
 
+When the user opens inline edit for a saved item:
+
+- the app may re-run local recognition on the saved WAV
+- the local result is written into `localCandidates`
+- `local_candidates` is cached into the same `.jsonl`
+- later saves preserve both `local_candidates` and `remote_candidates`
+
 ### Home TTS / feedback flow
 
 Home has a dedicated TTS confirmation flow:
@@ -244,6 +252,12 @@ It:
 - lets the user edit the text field directly
 - supports TTS confirmation and backend feedback
 
+For saved utterances in this screen:
+
+- the initial local ASR text is also stored into `localCandidates`
+- later whole-file local re-recognition reuses or refreshes `local_candidates`
+- both local and remote candidates are preserved when the transcript is saved back to JSONL
+
 This screen is useful when the user wants to focus on one utterance rather than a running transcript list.
 
 ## Data collect flow
@@ -256,6 +270,7 @@ Important differences from Home:
 - final `modifiedText` is the prompt text, not the recognizer output
 - items are created as already checked and not mutable
 - TTS feedback / backend candidate logic is not part of this screen
+- although recognition still runs to segment/finalize the utterance, `local_candidates` are not stored for data collect items
 
 [DataCollectViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/DataCollectViewModel.kt) handles:
 
@@ -318,6 +333,7 @@ Typical fields in the JSONL metadata:
 - `checked`
 - `mutable`
 - `removable`
+- `local_candidates` if available
 - `remote_candidates` if available
 
 ### Data collect queue state
@@ -335,9 +351,9 @@ The behavior is:
 3. otherwise call remote recognition
 4. parse `sentence_candidates`
 5. re-read JSONL to avoid overwriting newer edits
-6. overwrite the JSONL with the same metadata plus `remote_candidates`
+6. overwrite the JSONL with the same metadata plus `remote_candidates`, while preserving any existing `local_candidates`
 
-This means remote candidates are cached locally and reused across later edits or screen reloads.
+This means remote candidates are cached locally and reused across later edits or screen reloads, and they coexist with cached local candidates.
 
 ## Backend feedback flow
 
@@ -389,6 +405,7 @@ These are worth knowing before changing behavior:
 
 - `RecognitionManager` centralizes the Home/DataCollect recording engine, but `TranslateScreen` still has its own recording implementation.
 - JSONL files are overwritten as full snapshots, not appended.
+- `local_candidates` and `remote_candidates` are both treated as cached metadata on the same transcript artifact.
 - `remote_candidates` are cached in JSONL and reused.
 - `mutable` and `removable` are workflow-state flags, not just UI flags.
 - Home’s TTS button can both speak and trigger backend feedback depending on settings.

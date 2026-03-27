@@ -54,6 +54,8 @@ suspend fun getRemoteCandidates(
                         latestJsonlData?.optString("modified", currentText) ?: currentText
                     val checked = latestJsonlData?.optBoolean("checked", false) ?: false
                     val mutable = latestJsonlData?.optBoolean("mutable", latestJsonlData.optBoolean("canCheck", true)) ?: true
+                    val removable = latestJsonlData?.optBoolean("removable", false) ?: false
+                    val localCandidates = latestJsonlData?.optStringList("local_candidates").orEmpty()
 
 
                     saveJsonl(
@@ -64,6 +66,8 @@ suspend fun getRemoteCandidates(
                         modifiedText = modified,
                         checked = checked,
                         mutable = mutable,
+                        removable = removable,
+                        localCandidates = localCandidates,
                         remoteCandidates = sentences
                     )
                     return@withContext sentences
