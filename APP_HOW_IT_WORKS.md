@@ -366,6 +366,14 @@ The key decision point is `feedbackToBackend(...)`:
 - otherwise:
   - use `POST /api/transfer`
 
+For `PUT /api/updates`:
+
+- the payload still uses the current `modified` text as the sentence being confirmed
+- the label payload also includes `candidates`
+- `candidates` is built by merging `local_candidates` and `remote_candidates`
+- merge order is local first, then remote
+- duplicates are removed while keeping first-seen order
+
 `Api.kt` also contains:
 
 - packaging of WAV content into JSON or multipart uploads

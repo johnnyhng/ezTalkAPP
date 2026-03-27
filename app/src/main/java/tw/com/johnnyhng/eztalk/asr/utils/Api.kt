@@ -83,6 +83,16 @@ private fun packageUploadJsonMetadata(path: String, userId: String): JSONObject?
     }
 }
 
+private fun buildMergedCandidates(metadata: JSONObject?): JSONArray {
+    if (metadata == null) return JSONArray()
+
+    val merged = linkedSetOf<String>()
+    metadata.optStringList("local_candidates").forEach { merged.add(it) }
+    metadata.optStringList("remote_candidates").forEach { merged.add(it) }
+
+    return JSONArray(merged.toList())
+}
+
 /**
  * Packages a WAV file and its metadata into a JSON object for uploading.
  *
@@ -153,6 +163,7 @@ fun putForUpdates(
         val label = JSONObject()
         label.put("original", "tmp")
         label.put("modified", metadata?.optString("modified") ?: "")
+        label.put("candidates", buildMergedCandidates(metadata))
         element.put(filePath.substringAfterLast("/"), label)
         jsonArray.put(element)
         jsonPayload.put("streamFilesMove", jsonArray)
