@@ -86,11 +86,11 @@ private fun packageUploadJsonMetadata(path: String, userId: String): JSONObject?
 private fun buildMergedCandidates(metadata: JSONObject?): JSONArray {
     if (metadata == null) return JSONArray()
 
-    val merged = linkedSetOf<String>()
-    metadata.optStringList("local_candidates").forEach { merged.add(it) }
-    metadata.optStringList("remote_candidates").forEach { merged.add(it) }
-
-    return JSONArray(merged.toList())
+    val merged = (
+        metadata.optStringList("local_candidates") +
+            metadata.optStringList("remote_candidates")
+        ).distinct()
+    return JSONArray(merged)
 }
 
 /**
