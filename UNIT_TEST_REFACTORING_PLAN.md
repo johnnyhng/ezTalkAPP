@@ -1094,3 +1094,13 @@ That order will protect the app’s most fragile behavior with the least amount 
   - key settings labels remain visible on screen
 - verification:
   - `./gradlew :app:compileDebugAndroidTestKotlin`
+
+### Batch W: FileManager screen behavior tests
+
+- added [FileManagerBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/FileManagerBehaviorTest.kt)
+- focus:
+  - seeded `.wav` and `.jsonl` entries are rendered with original and modified text
+  - `Select All` updates only mutable entries and persists the checked state
+  - `Delete Selected` removes checked local files without touching unchecked entries
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
