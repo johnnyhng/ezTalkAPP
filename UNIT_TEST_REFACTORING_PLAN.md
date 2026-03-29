@@ -336,6 +336,17 @@ Status:
   - `remote_candidates`
 - verify omitted fields are not written accidentally
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - Robolectric-backed JVM tests for candidate persistence in `saveJsonl(...)`
+  - coverage for writing both `local_candidates` and `remote_candidates`
+  - coverage for omitted candidate fields when parameters are not provided
+  - coverage for explicit empty candidate lists producing empty arrays
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 6: JSONL read failure safety
 
 - test `readJsonl(...)` for:
