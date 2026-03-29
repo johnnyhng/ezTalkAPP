@@ -533,6 +533,18 @@ Status:
   - retry
   - skip
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - extracted pure queue reducers into `DataCollectQueue.kt`
+  - JVM tests covering import, next, previous, and queue exhaustion behavior
+  - `DataCollectViewModel` now delegates queue transitions to the extracted reducers
+  - `skipCurrent()` and `retryLastCompleted()` remain aliases of next/previous behavior through the shared reducers
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+  - `./gradlew :app:compileDebugKotlin`
+
 ### Batch 18: minimal integration coverage
 
 - keep instrumented coverage very small

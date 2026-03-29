@@ -16,6 +16,9 @@ import tw.com.johnnyhng.eztalk.asr.utils.deleteQueueState
 import tw.com.johnnyhng.eztalk.asr.utils.restoreQueueState
 import tw.com.johnnyhng.eztalk.asr.utils.saveQueueState
 import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
+import tw.com.johnnyhng.eztalk.asr.datacollect.applyImportedLines as reduceApplyImportedLines
+import tw.com.johnnyhng.eztalk.asr.datacollect.moveToNext as reduceMoveToNext
+import tw.com.johnnyhng.eztalk.asr.datacollect.moveToPrevious as reduceMoveToPrevious
 
 data class DataCollectUiState(
     val text: String = "",
@@ -87,42 +90,24 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun moveToNext() {
-        if (queue.isNotEmpty()) {
-            val current = _uiState.value.text
-            if (current.isNotBlank()) {
-                history.addLast(current)
-            }
+        val snapshot = reduceMoveToNext(
+            currentText = _uiState.value.text,
+            queue = queue.toList(),
+            history = history.toList()
+        )
 
-            while (queue.isNotEmpty() && queue.first().isBlank()) {
-                queue.removeFirst()
-            }
+        queue.clear()
+        queue.addAll(snapshot.queue)
+        history.clear()
+        history.addAll(snapshot.history)
+        _uiState.value = snapshot.uiState
 
-            if (queue.isNotEmpty()) {
-                val next = queue.removeFirst()
-                _uiState.update {
-                    it.copy(
-                        text = next,
-                        isSequenceMode = true,
-                        showNoQueueMessage = false,
-                        remainingCount = queue.count { item -> item.isNotBlank() },
-                        previousCount = history.size
-                    )
-                }
-                persistQueueState()
-                return
+        if (snapshot.uiState.isSequenceMode) {
+            persistQueueState()
+        } else {
+            viewModelScope.launch {
+                deleteQueueState(appContext, currentUserId())
             }
-        }
-
-        _uiState.update {
-            it.copy(
-                text = "",
-                isSequenceMode = false,
-                remainingCount = 0,
-                previousCount = history.size
-            )
-        }
-        viewModelScope.launch {
-            deleteQueueState(appContext, currentUserId())
         }
     }
 
@@ -131,22 +116,20 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun moveToPrevious() {
-        if (history.isEmpty()) return
+        val snapshot = reduceMoveToPrevious(
+            currentText = _uiState.value.text,
+            queue = queue.toList(),
+            history = history.toList()
+        )
+        if (snapshot.currentText == _uiState.value.text && snapshot.history == history.toList() && snapshot.queue == queue.toList()) {
+            return
+        }
 
-        val current = _uiState.value.text
-        if (current.isNotBlank()) {
-            queue.addFirst(current)
-        }
-        val previous = history.removeLast()
-        _uiState.update {
-            it.copy(
-                text = previous,
-                isSequenceMode = true,
-                showNoQueueMessage = false,
-                remainingCount = queue.size,
-                previousCount = history.size
-            )
-        }
+        queue.clear()
+        queue.addAll(snapshot.queue)
+        history.clear()
+        history.addAll(snapshot.history)
+        _uiState.value = snapshot.uiState
         persistQueueState()
     }
 
@@ -155,19 +138,12 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun applyImportedLines(lines: List<String>) {
+        val snapshot = reduceApplyImportedLines(lines)
         queue.clear()
-        queue.addAll(lines.drop(1))
+        queue.addAll(snapshot.queue)
         history.clear()
-
-        _uiState.update {
-            it.copy(
-                text = lines.first(),
-                isSequenceMode = true,
-                showNoQueueMessage = false,
-                remainingCount = queue.count { item -> item.isNotBlank() },
-                previousCount = history.size
-            )
-        }
+        history.addAll(snapshot.history)
+        _uiState.value = snapshot.uiState
         persistQueueState()
     }
 
