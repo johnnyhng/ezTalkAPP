@@ -319,6 +319,16 @@ Status:
   - `mutable`
   - `removable`
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - Robolectric-backed JVM tests for `saveJsonl(...)`
+  - coverage for core persisted fields
+  - coverage for creating the per-user JSONL directory when missing
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 5: JSONL candidate persistence
 
 - test `saveJsonl(...)` with and without:
