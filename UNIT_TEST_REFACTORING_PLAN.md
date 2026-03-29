@@ -354,6 +354,16 @@ Status:
   - empty file
   - malformed JSON
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - JVM tests for `readJsonl(...)`
+  - coverage for missing, empty, and malformed JSONL files returning `null`
+  - one valid-file control test to confirm successful parsing still works
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 7: metadata merge preservation
 
 - extract or wrap a small metadata merge seam
