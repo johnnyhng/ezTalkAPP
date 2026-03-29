@@ -1116,3 +1116,14 @@ That order will protect the app’s most fragile behavior with the least amount 
 - verification:
   - `./gradlew :app:compileDebugAndroidTestKotlin`
   - `./gradlew :app:connectedDebugAndroidTest`
+
+### Batch Y: Translate screen behavior tests
+
+- added [TranslateScreenBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/TranslateScreenBehaviorTest.kt)
+- focus:
+  - recognized text input and core controls render on initial load
+  - clear action resets typed text
+  - copy action does not disrupt the current typed text state
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+  - `./gradlew :app:connectedDebugAndroidTest`
