@@ -23,6 +23,11 @@ internal sealed class UploadRequestPlan {
     data class Multipart(val file: File, val payload: JSONObject) : UploadRequestPlan()
 }
 
+internal data class FeedbackDispatchPlan(
+    val route: FeedbackRoute,
+    val endpoint: String
+)
+
 
 /**
  * Reads a WAV file and returns its content as a JSONArray of bytes.
@@ -36,21 +41,28 @@ internal fun readWavFileToJsonArray(path: String): JSONArray? {
         val fileInputStream = FileInputStream(wavFile)
         val byteBuffer = fileInputStream.readBytes()
         fileInputStream.close()
-
-        val headerSize = 44
-        if (byteBuffer.size < headerSize) {
+        val rawArray = wavBytesToJsonArray(byteBuffer)
+        if (rawArray == null) {
             Log.e(TAG, "WAV file is too small to contain a valid header: ${wavFile.name}")
             return null
-        }
-
-        val rawArray = JSONArray()
-        byteBuffer.forEach {
-            rawArray.put(it.toInt() and 0xff)
         }
         return rawArray
     } catch (e: Exception) {
         Log.e(TAG, "Error reading WAV file to JSONArray: $path", e)
         return null
+    }
+}
+
+internal fun wavBytesToJsonArray(byteBuffer: ByteArray): JSONArray? {
+    val headerSize = 44
+    if (byteBuffer.size < headerSize) {
+        return null
+    }
+
+    return JSONArray().apply {
+        byteBuffer.forEach {
+            put(it.toInt() and 0xff)
+        }
     }
 }
 
@@ -76,21 +88,35 @@ internal fun packageUploadJsonMetadata(path: String, userId: String): JSONObject
             Log.w(TAG, "jsonl file not found for wav: $path")
         }
 
-        val account = JSONObject()
-        account.put("user_id", userId.split("@")[0])
-
-        val json = JSONObject()
-        json.put("account", account)
-        json.put("label", label) // key in output json is "label"
-        json.put("sentence", label)
-        json.put("filename", wavFile.name)
-        json.put("charMode", false)
-        json.put("remote_candidates", remoteCandidates)
-
-        return json
+        return buildUploadJsonMetadata(
+            filename = wavFile.name,
+            userId = userId,
+            label = label,
+            remoteCandidates = remoteCandidates
+        )
     } catch (e: Exception) {
         Log.e(TAG, "Error packaging upload JSON metadata for $path", e)
         return null
+    }
+}
+
+internal fun buildUploadJsonMetadata(
+    filename: String,
+    userId: String,
+    label: String,
+    remoteCandidates: JSONArray = JSONArray()
+): JSONObject {
+    val account = JSONObject().apply {
+        put("user_id", userId.split("@")[0])
+    }
+
+    return JSONObject().apply {
+        put("account", account)
+        put("label", label)
+        put("sentence", label)
+        put("filename", filename)
+        put("charMode", false)
+        put("remote_candidates", remoteCandidates)
     }
 }
 
@@ -179,6 +205,20 @@ internal fun buildUpdatePayload(
 
 internal fun isSuccessfulResponse(responseCode: Int): Boolean {
     return responseCode == HttpURLConnection.HTTP_OK
+}
+
+internal fun buildFeedbackDispatchPlan(
+    backendUrl: String,
+    recognitionUrl: String,
+    metadata: JSONObject?
+): FeedbackDispatchPlan {
+    val route = decideFeedbackRoute(metadata, recognitionUrl)
+    val endpoint = when (route) {
+        FeedbackRoute.PUT_UPDATES -> "$backendUrl/api/updates"
+        FeedbackRoute.POST_PROCESS_AUDIO -> recognitionUrl
+        FeedbackRoute.POST_TRANSFER -> "$backendUrl/api/transfer"
+    }
+    return FeedbackDispatchPlan(route = route, endpoint = endpoint)
 }
 
 internal fun buildProcessAudioRequestPlan(
@@ -277,7 +317,12 @@ fun feedbackToBackend(
 ): Boolean {
     val jsonlPath = filePath.substringBeforeLast(".") + ".jsonl"
     val metadata = readJsonl(jsonlPath)
-    val route = decideFeedbackRoute(metadata, recognitionUrl)
+    val dispatchPlan = buildFeedbackDispatchPlan(
+        backendUrl = backendUrl,
+        recognitionUrl = recognitionUrl,
+        metadata = metadata
+    )
+    val route = dispatchPlan.route
 
     Log.d(
         TAG,
@@ -287,15 +332,15 @@ fun feedbackToBackend(
     return when (route) {
         FeedbackRoute.PUT_UPDATES -> {
             Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
-            putForUpdates("$backendUrl/api/updates", filePath, userId, metadata)
+            putForUpdates(dispatchPlan.endpoint, filePath, userId, metadata)
         }
         FeedbackRoute.POST_PROCESS_AUDIO -> {
             Log.d(TAG, "feedbackToBackend: using POST process_audio")
-            postProcessAudio(recognitionUrl, filePath, userId, metadata)
+            postProcessAudio(dispatchPlan.endpoint, filePath, userId, metadata)
         }
         FeedbackRoute.POST_TRANSFER -> {
             Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
-            postTransfer("$backendUrl/api/transfer", filePath, userId)
+            postTransfer(dispatchPlan.endpoint, filePath, userId)
         }
     }
 }

@@ -383,6 +383,19 @@ Status:
 - `WavUtilKt` line coverage increased from `86` covered lines to `94`
 - filtered `core logic` line coverage increased from about `41.21%` (`305 / 740`) to about `41.68%` (`313 / 751`)
 
+### Batch I: Raise `Api.kt` packaging and dispatch coverage
+
+Status:
+
+- completed
+- extracted pure helpers for:
+  - WAV byte validation and upload-array conversion
+  - upload metadata packaging
+  - feedback dispatch endpoint selection
+- added JVM tests for those helpers instead of relying on wrapper execution side effects
+- `ApiKt` line coverage increased from `94` covered lines to `119`
+- filtered `core logic` line coverage increased from about `41.68%` (`313 / 751`) to about `43.72%` (`338 / 773`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
