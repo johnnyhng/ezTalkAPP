@@ -419,6 +419,17 @@ Status:
 - test re-read-before-save behavior in `RecognitionUtils`
 - verify latest metadata wins if edits happen between fetch start and save
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - extracted `buildRemoteCandidateWriteback(...)` to combine latest metadata with parsed response candidates
+  - JVM tests covering latest-metadata-wins behavior for `modified`, workflow flags, and `local_candidates`
+  - JVM tests covering fallback behavior when latest metadata is absent
+  - JVM test covering null write-back when response cannot produce candidates
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 11: merged candidate ordering
 
 - test merged candidate behavior in [Api.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/Api.kt)

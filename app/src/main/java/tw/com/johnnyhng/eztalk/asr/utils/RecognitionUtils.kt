@@ -56,6 +56,23 @@ internal fun buildRemoteCandidateMetadata(
     )
 }
 
+internal fun buildRemoteCandidateWriteback(
+    latestJsonlData: JSONObject?,
+    fallbackOriginalText: String,
+    fallbackCurrentText: String,
+    response: JSONObject?
+): RemoteCandidateMetadata? {
+    val remoteCandidates = parseRemoteCandidates(response)
+    if (remoteCandidates.isEmpty()) return null
+
+    return buildRemoteCandidateMetadata(
+        latestJsonlData = latestJsonlData,
+        fallbackOriginalText = fallbackOriginalText,
+        fallbackCurrentText = fallbackCurrentText,
+        remoteCandidates = remoteCandidates
+    )
+}
+
 suspend fun getRemoteCandidates(
     context: Context,
     wavFilePath: String,
@@ -81,19 +98,19 @@ suspend fun getRemoteCandidates(
             val response = postForRecognition(recognitionUrl, wavFilePath, userId)
             if (response != null) {
                 try {
-                    val sentences = parseRemoteCandidates(response)
-                    if (sentences.isEmpty()) {
-                        return@withContext emptyList()
-                    }
-
                     // Re-read the jsonl file to get the most up-to-date user edits before writing.
                     val latestJsonlData = readJsonl(jsonlFile.absolutePath)
-                    val metadata = buildRemoteCandidateMetadata(
+                    val metadata = buildRemoteCandidateWriteback(
                         latestJsonlData = latestJsonlData,
                         fallbackOriginalText = originalText,
                         fallbackCurrentText = currentText,
-                        remoteCandidates = sentences
-                    )
+                        response = response
+                    ) ?: return@withContext emptyList()
+
+                    val sentences = metadata.remoteCandidates
+                    if (sentences.isEmpty()) {
+                        return@withContext emptyList()
+                    }
 
                     // Save to jsonl
                     val file = File(wavFilePath)
