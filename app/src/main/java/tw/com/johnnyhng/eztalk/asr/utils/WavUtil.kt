@@ -45,15 +45,7 @@ fun saveAsWav(
     val file = File(dir, "$filename.wav")
     try {
         FileOutputStream(file).use { out ->
-            // Convert float samples to 16-bit PCM byte array
-            val byteBuffer = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-            for (sample in samples) {
-                val shortSample = (sample * 32767.0f)
-                    .coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat())
-                    .toInt().toShort()
-                byteBuffer.putShort(shortSample)
-            }
-            val pcmData = byteBuffer.array()
+            val pcmData = floatSamplesToPcm16(samples)
 
             // Write WAV header
             writeWavHeader(out, pcmData.size, sampleRate, numChannels)
@@ -103,20 +95,15 @@ fun saveJsonl(
     }
     val file = File(dir, "$filename.jsonl")
     try {
-        val jsonObject = JSONObject().apply {
-            put("original", originalText)
-            put("modified", modifiedText)
-            put("checked", checked)
-            put("mutable", mutable)
-            put("removable", removable)
-            localCandidates?.let {
-                put("local_candidates", JSONArray(it))
-            }
-            remoteCandidates?.let {
-                put("remote_candidates", JSONArray(it))
-            }
-        }
-        val jsonLine = jsonObject.toString() + "\n"
+        val jsonLine = buildTranscriptJsonLine(
+            originalText = originalText,
+            modifiedText = modifiedText,
+            checked = checked,
+            mutable = mutable,
+            removable = removable,
+            localCandidates = localCandidates,
+            remoteCandidates = remoteCandidates
+        )
 
         // Overwrite the file with the new JSON line
         file.writeText(jsonLine)
@@ -154,13 +141,47 @@ fun JSONObject.optStringList(key: String): List<String> {
     return List(array.length()) { index -> array.optString(index) }.filter { it.isNotBlank() }
 }
 
+internal fun floatSamplesToPcm16(samples: FloatArray): ByteArray {
+    val byteBuffer = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+    for (sample in samples) {
+        val shortSample = (sample * 32767.0f)
+            .coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat())
+            .toInt().toShort()
+        byteBuffer.putShort(shortSample)
+    }
+    return byteBuffer.array()
+}
 
-private fun writeWavHeader(
-    out: FileOutputStream,
+internal fun buildTranscriptJsonLine(
+    originalText: String,
+    modifiedText: String,
+    checked: Boolean,
+    mutable: Boolean = true,
+    removable: Boolean = false,
+    localCandidates: List<String>? = null,
+    remoteCandidates: List<String>? = null
+): String {
+    val jsonObject = JSONObject().apply {
+        put("original", originalText)
+        put("modified", modifiedText)
+        put("checked", checked)
+        put("mutable", mutable)
+        put("removable", removable)
+        localCandidates?.let {
+            put("local_candidates", JSONArray(it))
+        }
+        remoteCandidates?.let {
+            put("remote_candidates", JSONArray(it))
+        }
+    }
+    return jsonObject.toString() + "\n"
+}
+
+internal fun buildWavHeaderBytes(
     pcmDataSize: Int,
     sampleRate: Int,
     numChannels: Int,
-) {
+): ByteArray {
     val header = ByteArray(44)
     val totalDataLen = pcmDataSize + 36
     val byteRate = sampleRate * numChannels * 2 // 16-bit PCM
@@ -209,8 +230,35 @@ private fun writeWavHeader(
     header[41] = (pcmDataSize shr 8 and 0xff).toByte()
     header[42] = (pcmDataSize shr 16 and 0xff).toByte()
     header[43] = (pcmDataSize shr 24 and 0xff).toByte()
+    return header
+}
 
-    out.write(header, 0, 44)
+internal fun parseWavAudioBytes(byteBuffer: ByteArray): FloatArray? {
+    val headerSize = 44
+    if (byteBuffer.size <= headerSize) {
+        return null
+    }
+
+    val shortBuffer = ByteBuffer.wrap(byteBuffer, headerSize, byteBuffer.size - headerSize)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .asShortBuffer()
+
+    val numSamples = shortBuffer.remaining()
+    val floatArray = FloatArray(numSamples)
+
+    for (i in 0 until numSamples) {
+        floatArray[i] = shortBuffer.get(i) / 32768.0f
+    }
+    return floatArray
+}
+
+private fun writeWavHeader(
+    out: FileOutputStream,
+    pcmDataSize: Int,
+    sampleRate: Int,
+    numChannels: Int,
+) {
+    out.write(buildWavHeaderBytes(pcmDataSize, sampleRate, numChannels), 0, 44)
 }
 
 /**
@@ -228,24 +276,10 @@ internal fun readWavFileToFloatArray(path: String): FloatArray? {
         val byteBuffer = fileInputStream.readBytes()
         fileInputStream.close()
 
-        // The first 44 bytes of a standard WAV file are the header. We skip it.
-        val headerSize = 44
-        if (byteBuffer.size <= headerSize) {
+        val floatArray = parseWavAudioBytes(byteBuffer)
+        if (floatArray == null) {
             Log.e(TAG, "WAV file is too small to contain audio data: ${file.name}")
             return null
-        }
-
-        // We assume the audio data is 16-bit PCM, little-endian.
-        val shortBuffer = ByteBuffer.wrap(byteBuffer, headerSize, byteBuffer.size - headerSize)
-            .order(ByteOrder.LITTLE_ENDIAN)
-            .asShortBuffer()
-
-        val numSamples = shortBuffer.remaining()
-        val floatArray = FloatArray(numSamples)
-
-        for (i in 0 until numSamples) {
-            // Convert 16-bit short to float in the range [-1.0, 1.0]
-            floatArray[i] = shortBuffer.get(i) / 32768.0f
         }
         return floatArray
     } catch (e: Exception) {

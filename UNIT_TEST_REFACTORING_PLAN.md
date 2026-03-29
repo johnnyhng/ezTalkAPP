@@ -313,6 +313,14 @@ Status:
 - expand JSONL round-trip cases
 - add overwrite, empty-field, malformed-content, and missing-file scenarios
 
+Status:
+
+- completed
+- `WavUtil.kt` now exposes pure helpers for PCM conversion, WAV header construction, JSONL line building, and WAV byte parsing
+- round-trip and helper tests were added for WAV save/read, JSONL overwrite behavior, delete behavior, PCM encoding, and header parsing
+- `WavUtilKt` line coverage increased from `2` covered lines to `86`
+- filtered `core logic` line coverage increased from about `27.06%` (`178 / 658`) to about `38.69%` (`262 / 677`)
+
 ### Batch E: Complete reducer coverage
 
 - finish transition matrix tests for `TranscriptWorkflow.kt`
