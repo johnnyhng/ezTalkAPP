@@ -285,6 +285,16 @@ Status:
 - add baseline tests for [Transcript.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/data/classes/Transcript.kt)
 - lock down default values and copy behavior
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - baseline JVM tests for `Transcript`
+  - coverage for default `modifiedText`, workflow flags, and candidate list defaults
+  - coverage for `copy(...)` updates without mutating the original instance
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 3: JSON helper behavior
 
 - test `optStringList(...)` in [WavUtil.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/WavUtil.kt)
