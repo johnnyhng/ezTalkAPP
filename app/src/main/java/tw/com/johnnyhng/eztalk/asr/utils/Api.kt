@@ -113,6 +113,21 @@ internal fun decideFeedbackRoute(
     }
 }
 
+internal fun buildProcessAudioPayload(
+    filePath: String,
+    userId: String,
+    metadata: JSONObject? = null,
+    raw: JSONArray? = null
+): JSONObject {
+    return JSONObject().apply {
+        put("login_user", userId.split("@")[0])
+        put("filename", filePath.substringAfterLast("/"))
+        put("label", metadata?.optString("modified") ?: "tmp")
+        put("num_of_stn", 8)
+        raw?.let { put("raw", it) }
+    }
+}
+
 /**
  * Packages a WAV file and its metadata into a JSON object for uploading.
  *
@@ -180,14 +195,13 @@ fun postProcessAudio(
         connection.connectTimeout = 15000
         connection.readTimeout = 15000
 
-        val jsonPayload = JSONObject()
-        jsonPayload.put("login_user", userId.split("@")[0])
-        jsonPayload.put("filename", filePath.substringAfterLast("/"))
-        jsonPayload.put("label", metadata?.optString("modified") ?: "tmp")
-        jsonPayload.put("num_of_stn", 8)
-
         if (sendFileByJson) {
-            jsonPayload.put("raw", readWavFileToJsonArray(filePath))
+            val jsonPayload = buildProcessAudioPayload(
+                filePath = filePath,
+                userId = userId,
+                metadata = metadata,
+                raw = readWavFileToJsonArray(filePath)
+            )
 
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
@@ -204,6 +218,11 @@ fun postProcessAudio(
 
             val boundary = "Boundary-${System.currentTimeMillis()}"
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            val jsonPayload = buildProcessAudioPayload(
+                filePath = filePath,
+                userId = userId,
+                metadata = metadata
+            )
 
             DataOutputStream(connection.outputStream).use { dos ->
                 val lineEnd = "\r\n"

@@ -494,6 +494,16 @@ Status:
 - test `postProcessAudio(...)` request JSON shape
 - for now, keep it aligned with `postForRecognition(...)`
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - extracted `buildProcessAudioPayload(...)` from `postProcessAudio(...)`
+  - JVM tests covering the expected payload shape with metadata and raw audio bytes
+  - JVM tests covering fallback label behavior and omission of `raw` when it is not provided
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 16: transcript workflow state rules
 
 - extract a small reducer or policy from Home/Translate behavior
