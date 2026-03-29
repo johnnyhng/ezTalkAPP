@@ -1104,3 +1104,15 @@ That order will protect the app’s most fragile behavior with the least amount 
   - `Delete Selected` removes checked local files without touching unchecked entries
 - verification:
   - `./gradlew :app:compileDebugAndroidTestKotlin`
+
+### Batch X: Home candidate list behavior tests
+
+- added [HomeCandidateListBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/HomeCandidateListBehaviorTest.kt)
+- focus:
+  - row text and action icons render for playable transcripts
+  - row click, play, and delete callbacks are wired correctly
+  - inline edit mode replaces row actions with edit controls
+  - locked interaction state disables talk, play, and delete actions
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+  - `./gradlew :app:connectedDebugAndroidTest`
