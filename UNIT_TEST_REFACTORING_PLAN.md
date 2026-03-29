@@ -403,6 +403,17 @@ Status:
 - test successful parsing of `sentence_candidates`
 - test malformed response fallback to empty result
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - extracted response parsing into `parseRemoteCandidates(...)`
+  - JVM tests covering ordered parsing of `sentence_candidates`
+  - JVM tests covering blank filtering and malformed/missing response fallback to empty list
+  - `getRemoteCandidates(...)` now treats empty parsed candidates as a safe no-result path
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 10: remote write-back race protection
 
 - test re-read-before-save behavior in `RecognitionUtils`

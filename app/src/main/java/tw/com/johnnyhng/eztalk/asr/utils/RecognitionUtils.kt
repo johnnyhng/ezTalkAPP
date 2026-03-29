@@ -22,6 +22,11 @@ internal fun readCachedRemoteCandidates(jsonlData: JSONObject?): List<String> {
     return jsonlData?.optStringList("remote_candidates").orEmpty()
 }
 
+internal fun parseRemoteCandidates(response: JSONObject?): List<String> {
+    val candidates = response?.optJSONArray("sentence_candidates") ?: return emptyList()
+    return List(candidates.length()) { index -> candidates.optString(index) }.filter { it.isNotBlank() }
+}
+
 internal fun buildRemoteCandidateMetadata(
     latestJsonlData: JSONObject?,
     fallbackOriginalText: String,
@@ -76,10 +81,9 @@ suspend fun getRemoteCandidates(
             val response = postForRecognition(recognitionUrl, wavFilePath, userId)
             if (response != null) {
                 try {
-                    val candidates = response.getJSONArray("sentence_candidates")
-                    val sentences = mutableListOf<String>()
-                    for (i in 0 until candidates.length()) {
-                        sentences.add(candidates.getString(i))
+                    val sentences = parseRemoteCandidates(response)
+                    if (sentences.isEmpty()) {
+                        return@withContext emptyList()
                     }
 
                     // Re-read the jsonl file to get the most up-to-date user edits before writing.
