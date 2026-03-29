@@ -553,6 +553,17 @@ Status:
   - one storage round-trip
   - one major screen interaction path
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - instrumented settings round-trip test for `SettingsManager`
+  - instrumented storage round-trip test for `saveJsonl(...)` and `readJsonl(...)`
+  - retained the existing app-context smoke test as the baseline instrumentation sanity check
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+  - `./gradlew :app:connectedDebugAndroidTest` when a device/emulator is available
+
 ## Recommended implementation order
 
 Do the work in this order:
