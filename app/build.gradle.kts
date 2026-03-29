@@ -141,7 +141,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
-    testImplementation("androidx.test:core:1.6.1")
+    testImplementation(libs.androidx.test.core)
     testImplementation("org.robolectric:robolectric:4.11.1")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

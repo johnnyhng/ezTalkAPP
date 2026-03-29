@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnySibling
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -50,9 +51,11 @@ class FileManagerBehaviorTest {
         }
 
         composeRule.onNodeWithText("sample.wav").assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.original_text, "original line"))
-            .assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.modified_text, "modified line"))
+        composeRule.onNodeWithText(
+            context.getString(R.string.original_text, "original line") +
+                "\n" +
+                context.getString(R.string.modified_text, "modified line")
+        )
             .assertIsDisplayed()
     }
 
@@ -61,7 +64,7 @@ class FileManagerBehaviorTest {
         val userId = "file-manager-select-all"
         clearUserFiles(userId)
         seedSettings(userId)
-        val mutableJson = seedEntry(
+        seedEntry(
             userId = userId,
             filename = "mutable",
             originalText = "mutable original",
@@ -69,7 +72,7 @@ class FileManagerBehaviorTest {
             mutable = true,
             checked = false
         )
-        val immutableJson = seedEntry(
+        seedEntry(
             userId = userId,
             filename = "immutable",
             originalText = "immutable original",
@@ -77,6 +80,8 @@ class FileManagerBehaviorTest {
             mutable = false,
             checked = false
         )
+        val mutableJson = File(application.filesDir, "wavs/$userId/mutable.jsonl")
+        val immutableJson = File(application.filesDir, "wavs/$userId/immutable.jsonl")
 
         val viewModel = HomeViewModel(application)
         composeRule.setContent {
@@ -96,7 +101,7 @@ class FileManagerBehaviorTest {
     }
 
     @Test
-    fun deleteSelectedRemovesCheckedFiles() {
+    fun deleteIconRemovesSingleEntryFiles() {
         val userId = "file-manager-delete"
         clearUserFiles(userId)
         seedSettings(userId)
@@ -123,8 +128,12 @@ class FileManagerBehaviorTest {
             FileManagerScreen(homeViewModel = viewModel)
         }
 
-        composeRule.onNodeWithText(context.getString(R.string.delete_selected))
+        composeRule.onNodeWithText("checked.wav")
             .assertIsDisplayed()
+        composeRule.onNode(
+            hasContentDescription(context.getString(R.string.delete)) and
+                hasAnySibling(hasText("checked.wav"))
+        )
             .performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {

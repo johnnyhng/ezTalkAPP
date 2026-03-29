@@ -1,20 +1,22 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import android.app.Application
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
-import androidx.compose.ui.test.hasAnySibling
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
+import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
@@ -24,6 +26,8 @@ class SettingsScreenBehaviorTest {
     val composeRule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
 
     private val application = ApplicationProvider.getApplicationContext<Application>()
+    private val context
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
     fun settingsScreenDisplaysSeededBackendUrlAndAllowsEditingIt() {
@@ -41,6 +45,8 @@ class SettingsScreenBehaviorTest {
             SettingsScreen(homeViewModel = viewModel)
         }
 
+        composeRule.onNodeWithText(context.getString(R.string.backend_url))
+            .performScrollTo()
         composeRule.onNodeWithText("https://seed.example.com")
             .assertIsDisplayed()
             .performTextReplacement("https://edited.example.com")
@@ -64,12 +70,12 @@ class SettingsScreenBehaviorTest {
             SettingsScreen(homeViewModel = viewModel)
         }
 
-        val inlineEditSwitch = composeRule.onNode(
-            isToggleable() and hasAnySibling(hasText("Inline Edit"))
-        )
-        val ttsFeedbackSwitch = composeRule.onNode(
-            isToggleable() and hasAnySibling(hasText("Enable TTS Feedback"))
-        )
+        composeRule.onNodeWithText(context.getString(R.string.inline_edit)).performScrollTo()
+        composeRule.onNodeWithText(context.getString(R.string.enable_tts_feedback)).performScrollTo()
+        composeRule.onAllNodes(isToggleable()).assertCountEquals(3)
+
+        val inlineEditSwitch = composeRule.onAllNodes(isToggleable())[1]
+        val ttsFeedbackSwitch = composeRule.onAllNodes(isToggleable())[2]
 
         inlineEditSwitch.assertIsOn()
         ttsFeedbackSwitch.assertIsOff()
@@ -97,10 +103,16 @@ class SettingsScreenBehaviorTest {
             SettingsScreen(homeViewModel = viewModel)
         }
 
-        composeRule.onNodeWithText("ASR Model").assertIsDisplayed()
-        composeRule.onNodeWithText("backend URL").assertIsDisplayed()
-        composeRule.onNodeWithText("Inline Edit").assertIsDisplayed()
-        composeRule.onNodeWithText("Enable TTS Feedback").assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.asr_model)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.backend_url))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.inline_edit))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.enable_tts_feedback))
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     private fun seedSettings(settings: UserSettings) = runBlocking {
