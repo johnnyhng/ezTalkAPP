@@ -396,6 +396,18 @@ Status:
 - `ApiKt` line coverage increased from `94` covered lines to `119`
 - filtered `core logic` line coverage increased from about `41.68%` (`313 / 751`) to about `43.72%` (`338 / 773`)
 
+### Batch J: Raise `Api.kt` combine and dispatch execution coverage
+
+Status:
+
+- completed
+- extracted pure helpers for:
+  - combining upload metadata with raw audio arrays
+  - executing dispatch plans against injected transport functions
+- this batch covered additional `Api.kt` lines without introducing network mocks
+- `ApiKt` line coverage increased from `119` covered lines to `127`
+- filtered `core logic` line coverage increased from about `43.72%` (`338 / 773`) to about `44.48%` (`346 / 778`)
+
 Target cases:
 
 - importing lines creates the right current text + queue

@@ -5,6 +5,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ApiWrapperHelpersTest {
@@ -94,5 +95,92 @@ class ApiWrapperHelpersTest {
 
         assertEquals(FeedbackRoute.POST_TRANSFER, plan.route)
         assertEquals("https://backend.example.com/api/transfer", plan.endpoint)
+    }
+
+    @Test
+    fun combineUploadJsonReturnsNullWhenEitherInputIsMissing() {
+        assertNull(combineUploadJson(null, JSONArray()))
+        assertNull(combineUploadJson(JSONObject(), null))
+    }
+
+    @Test
+    fun combineUploadJsonCopiesMetadataAndAddsRawArray() {
+        val metadata = JSONObject().apply {
+            put("label", "confirmed")
+        }
+        val raw = JSONArray().apply {
+            put(1)
+            put(2)
+        }
+
+        val combined = combineUploadJson(metadata, raw)
+
+        assertNotNull(combined)
+        assertEquals("confirmed", combined?.getString("label"))
+        assertEquals(2, combined?.getJSONArray("raw")?.length())
+        assertTrue(!metadata.has("raw"))
+    }
+
+    @Test
+    fun executeFeedbackDispatchInvokesPutUpdatesForRemoteRoute() {
+        var called = ""
+
+        val result = executeFeedbackDispatch(
+            dispatchPlan = FeedbackDispatchPlan(FeedbackRoute.PUT_UPDATES, "https://backend/api/updates"),
+            filePath = "/tmp/sample.wav",
+            userId = "tester@example.com",
+            metadata = JSONObject(),
+            putUpdates = { endpoint, _, _, _ ->
+                called = endpoint
+                true
+            },
+            postProcessAudio = { _, _, _, _ -> false },
+            postTransfer = { _, _, _ -> false }
+        )
+
+        assertTrue(result)
+        assertEquals("https://backend/api/updates", called)
+    }
+
+    @Test
+    fun executeFeedbackDispatchInvokesProcessAudioForLocalRoute() {
+        var called = ""
+
+        val result = executeFeedbackDispatch(
+            dispatchPlan = FeedbackDispatchPlan(FeedbackRoute.POST_PROCESS_AUDIO, "https://recognition/process_audio"),
+            filePath = "/tmp/sample.wav",
+            userId = "tester@example.com",
+            metadata = JSONObject(),
+            putUpdates = { _, _, _, _ -> false },
+            postProcessAudio = { endpoint, _, _, _ ->
+                called = endpoint
+                true
+            },
+            postTransfer = { _, _, _ -> false }
+        )
+
+        assertTrue(result)
+        assertEquals("https://recognition/process_audio", called)
+    }
+
+    @Test
+    fun executeFeedbackDispatchInvokesTransferForFallbackRoute() {
+        var called = ""
+
+        val result = executeFeedbackDispatch(
+            dispatchPlan = FeedbackDispatchPlan(FeedbackRoute.POST_TRANSFER, "https://backend/api/transfer"),
+            filePath = "/tmp/sample.wav",
+            userId = "tester@example.com",
+            metadata = null,
+            putUpdates = { _, _, _, _ -> false },
+            postProcessAudio = { _, _, _, _ -> false },
+            postTransfer = { endpoint, _, _ ->
+                called = endpoint
+                true
+            }
+        )
+
+        assertTrue(result)
+        assertEquals("https://backend/api/transfer", called)
     }
 }

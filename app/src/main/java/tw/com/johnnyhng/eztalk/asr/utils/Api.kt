@@ -28,6 +28,11 @@ internal data class FeedbackDispatchPlan(
     val endpoint: String
 )
 
+internal data class PackagedUploadJson(
+    val metadata: JSONObject,
+    val raw: JSONArray
+)
+
 
 /**
  * Reads a WAV file and returns its content as a JSONArray of bytes.
@@ -221,6 +226,16 @@ internal fun buildFeedbackDispatchPlan(
     return FeedbackDispatchPlan(route = route, endpoint = endpoint)
 }
 
+internal fun combineUploadJson(
+    metadata: JSONObject?,
+    rawArray: JSONArray?
+): JSONObject? {
+    if (metadata == null || rawArray == null) return null
+    return JSONObject(metadata.toString()).apply {
+        put("raw", rawArray)
+    }
+}
+
 internal fun buildProcessAudioRequestPlan(
     filePath: String,
     userId: String,
@@ -305,8 +320,23 @@ internal fun buildRecognitionRequestPlan(
 fun packageUploadJson(path: String, userId: String): JSONObject? {
     val metadata = packageUploadJsonMetadata(path, userId) ?: return null
     val rawArray = readWavFileToJsonArray(path) ?: return null
-    metadata.put("raw", rawArray)
-    return metadata
+    return combineUploadJson(metadata, rawArray)
+}
+
+internal fun executeFeedbackDispatch(
+    dispatchPlan: FeedbackDispatchPlan,
+    filePath: String,
+    userId: String,
+    metadata: JSONObject?,
+    putUpdates: (String, String, String, JSONObject?) -> Boolean,
+    postProcessAudio: (String, String, String, JSONObject?) -> Boolean,
+    postTransfer: (String, String, String) -> Boolean
+): Boolean {
+    return when (dispatchPlan.route) {
+        FeedbackRoute.PUT_UPDATES -> putUpdates(dispatchPlan.endpoint, filePath, userId, metadata)
+        FeedbackRoute.POST_PROCESS_AUDIO -> postProcessAudio(dispatchPlan.endpoint, filePath, userId, metadata)
+        FeedbackRoute.POST_TRANSFER -> postTransfer(dispatchPlan.endpoint, filePath, userId)
+    }
 }
 
 fun feedbackToBackend(
@@ -329,20 +359,24 @@ fun feedbackToBackend(
         "feedbackToBackend: filePath=$filePath, jsonlPath=$jsonlPath, route=$route"
     )
 
-    return when (route) {
-        FeedbackRoute.PUT_UPDATES -> {
+    return executeFeedbackDispatch(
+        dispatchPlan = dispatchPlan,
+        filePath = filePath,
+        userId = userId,
+        metadata = metadata,
+        putUpdates = { endpoint, path, id, data ->
             Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
-            putForUpdates(dispatchPlan.endpoint, filePath, userId, metadata)
-        }
-        FeedbackRoute.POST_PROCESS_AUDIO -> {
+            putForUpdates(endpoint, path, id, data)
+        },
+        postProcessAudio = { endpoint, path, id, data ->
             Log.d(TAG, "feedbackToBackend: using POST process_audio")
-            postProcessAudio(dispatchPlan.endpoint, filePath, userId, metadata)
-        }
-        FeedbackRoute.POST_TRANSFER -> {
+            postProcessAudio(endpoint, path, id, data)
+        },
+        postTransfer = { endpoint, path, id ->
             Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
-            postTransfer(dispatchPlan.endpoint, filePath, userId)
+            postTransfer(endpoint, path, id)
         }
-    }
+    )
 }
 
 fun postProcessAudio(
