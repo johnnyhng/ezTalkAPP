@@ -300,6 +300,16 @@ Status:
 - test `optStringList(...)` in [WavUtil.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/WavUtil.kt)
 - verify missing keys, empty arrays, and blank items are handled safely
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - JVM tests for `JSONObject.optStringList(...)`
+  - coverage for missing keys, empty arrays, and blank-item filtering
+  - coverage for preserving original item order of non-blank values
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 4: JSONL core field persistence
 
 - test `saveJsonl(...)` writes:
