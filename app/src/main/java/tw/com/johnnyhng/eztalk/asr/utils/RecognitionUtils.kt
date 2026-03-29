@@ -73,6 +73,46 @@ internal fun buildRemoteCandidateWriteback(
     )
 }
 
+internal fun resolveRemoteCandidates(
+    jsonlPath: String,
+    wavFilePath: String,
+    userId: String,
+    recognitionUrl: String,
+    originalText: String,
+    currentText: String,
+    readJsonlBlock: (String) -> JSONObject?,
+    postRecognitionBlock: (String, String, String) -> JSONObject?,
+    saveJsonlBlock: (RemoteCandidateMetadata) -> Unit
+): List<String> {
+    val jsonlData = readJsonlBlock(jsonlPath)
+    val existingCandidates = readCachedRemoteCandidates(jsonlData)
+
+    if (existingCandidates.isNotEmpty()) {
+        return existingCandidates
+    }
+
+    if (recognitionUrl.isBlank()) {
+        return emptyList()
+    }
+
+    val response = postRecognitionBlock(recognitionUrl, wavFilePath, userId) ?: return emptyList()
+
+    return try {
+        val latestJsonlData = readJsonlBlock(jsonlPath)
+        val metadata = buildRemoteCandidateWriteback(
+            latestJsonlData = latestJsonlData,
+            fallbackOriginalText = originalText,
+            fallbackCurrentText = currentText,
+            response = response
+        ) ?: return emptyList()
+
+        saveJsonlBlock(metadata)
+        metadata.remoteCandidates
+    } catch (e: Exception) {
+        emptyList()
+    }
+}
+
 suspend fun getRemoteCandidates(
     context: Context,
     wavFilePath: String,
@@ -84,56 +124,36 @@ suspend fun getRemoteCandidates(
     val jsonlFile = File(wavFilePath).resolveSibling(
         File(wavFilePath).nameWithoutExtension + ".jsonl"
     )
+    val filename = File(wavFilePath).nameWithoutExtension
 
     return withContext(Dispatchers.IO) {
-        val jsonlData = readJsonl(jsonlFile.absolutePath)
-        val existingCandidates = readCachedRemoteCandidates(jsonlData)
-
-        if (existingCandidates.isNotEmpty()) {
-            Log.d(TAG, "Found existing remote candidates in jsonl file")
-            return@withContext existingCandidates
-        }
-
-        if (recognitionUrl.isNotBlank()) {
-            val response = postForRecognition(recognitionUrl, wavFilePath, userId)
-            if (response != null) {
-                try {
-                    // Re-read the jsonl file to get the most up-to-date user edits before writing.
-                    val latestJsonlData = readJsonl(jsonlFile.absolutePath)
-                    val metadata = buildRemoteCandidateWriteback(
-                        latestJsonlData = latestJsonlData,
-                        fallbackOriginalText = originalText,
-                        fallbackCurrentText = currentText,
-                        response = response
-                    ) ?: return@withContext emptyList()
-
-                    val sentences = metadata.remoteCandidates
-                    if (sentences.isEmpty()) {
-                        return@withContext emptyList()
-                    }
-
-                    // Save to jsonl
-                    val file = File(wavFilePath)
-                    val filename = file.nameWithoutExtension
-
-                    saveJsonl(
-                        context = context,
-                        userId = userId,
-                        filename = filename,
-                        originalText = metadata.originalText,
-                        modifiedText = metadata.modifiedText,
-                        checked = metadata.checked,
-                        mutable = metadata.mutable,
-                        removable = metadata.removable,
-                        localCandidates = metadata.localCandidates,
-                        remoteCandidates = metadata.remoteCandidates
-                    )
-                    return@withContext sentences
-                } catch (e: Exception) {
-                    Log.e(TAG, "Could not parse remote recognition result", e)
-                }
+        resolveRemoteCandidates(
+            jsonlPath = jsonlFile.absolutePath,
+            wavFilePath = wavFilePath,
+            userId = userId,
+            recognitionUrl = recognitionUrl,
+            originalText = originalText,
+            currentText = currentText,
+            readJsonlBlock = ::readJsonl,
+            postRecognitionBlock = ::postForRecognition,
+            saveJsonlBlock = { metadata ->
+                saveJsonl(
+                    context = context,
+                    userId = userId,
+                    filename = filename,
+                    originalText = metadata.originalText,
+                    modifiedText = metadata.modifiedText,
+                    checked = metadata.checked,
+                    mutable = metadata.mutable,
+                    removable = metadata.removable,
+                    localCandidates = metadata.localCandidates,
+                    remoteCandidates = metadata.remoteCandidates
+                )
+            }
+        ).also { candidates ->
+            if (candidates.isNotEmpty()) {
+                Log.d(TAG, "Resolved ${candidates.size} remote candidates")
             }
         }
-        return@withContext emptyList()
     }
 }

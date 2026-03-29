@@ -300,6 +300,14 @@ Status:
 - cover cache hit/miss, malformed responses, write-back preservation, and failure paths
 - focus on branch coverage, not only happy paths
 
+Status:
+
+- completed
+- remote-candidate orchestration was extracted into a pure helper so cache, fetch, blank-url, null-response, and write-back paths can be unit tested directly
+- `RecognitionUtilsKt` line coverage increased from `29` covered lines to `47`
+- `RecognitionUtilsKt` branch coverage is now fully covered for the selected core scope (`42 / 42`)
+- filtered `core logic` line coverage increased from about `25.08%` (`160 / 638`) to about `27.06%` (`178 / 658`)
+
 ### Batch D: Raise `WavUtil.kt` coverage
 
 - expand JSONL round-trip cases
