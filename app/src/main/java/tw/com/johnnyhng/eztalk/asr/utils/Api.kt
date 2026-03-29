@@ -12,6 +12,12 @@ import java.net.URL
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.HttpsURLConnection
 
+internal enum class FeedbackRoute {
+    PUT_UPDATES,
+    POST_PROCESS_AUDIO,
+    POST_TRANSFER
+}
+
 
 /**
  * Reads a WAV file and returns its content as a JSONArray of bytes.
@@ -93,6 +99,20 @@ internal fun buildMergedCandidates(metadata: JSONObject?): JSONArray {
     return JSONArray(merged)
 }
 
+internal fun decideFeedbackRoute(
+    metadata: JSONObject?,
+    recognitionUrl: String
+): FeedbackRoute {
+    val hasRemoteCandidates = metadata?.optStringList("remote_candidates").orEmpty().isNotEmpty()
+    val hasLocalCandidates = metadata?.optStringList("local_candidates").orEmpty().isNotEmpty()
+
+    return when {
+        hasRemoteCandidates -> FeedbackRoute.PUT_UPDATES
+        hasLocalCandidates && recognitionUrl.isNotBlank() -> FeedbackRoute.POST_PROCESS_AUDIO
+        else -> FeedbackRoute.POST_TRANSFER
+    }
+}
+
 /**
  * Packages a WAV file and its metadata into a JSON object for uploading.
  *
@@ -115,24 +135,23 @@ fun feedbackToBackend(
 ): Boolean {
     val jsonlPath = filePath.substringBeforeLast(".") + ".jsonl"
     val metadata = readJsonl(jsonlPath)
-    val hasRemoteCandidates = metadata?.optStringList("remote_candidates").orEmpty().isNotEmpty()
-    val hasLocalCandidates = metadata?.optStringList("local_candidates").orEmpty().isNotEmpty()
+    val route = decideFeedbackRoute(metadata, recognitionUrl)
 
     Log.d(
         TAG,
-        "feedbackToBackend: filePath=$filePath, jsonlPath=$jsonlPath, hasRemoteCandidates=$hasRemoteCandidates, hasLocalCandidates=$hasLocalCandidates"
+        "feedbackToBackend: filePath=$filePath, jsonlPath=$jsonlPath, route=$route"
     )
 
-    return when {
-        hasRemoteCandidates -> {
+    return when (route) {
+        FeedbackRoute.PUT_UPDATES -> {
             Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
             putForUpdates("$backendUrl/api/updates", filePath, userId, metadata)
         }
-        hasLocalCandidates && recognitionUrl.isNotBlank() -> {
+        FeedbackRoute.POST_PROCESS_AUDIO -> {
             Log.d(TAG, "feedbackToBackend: using POST process_audio")
             postProcessAudio(recognitionUrl, filePath, userId, metadata)
         }
-        else -> {
+        FeedbackRoute.POST_TRANSFER -> {
             Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
             postTransfer("$backendUrl/api/transfer", filePath, userId)
         }

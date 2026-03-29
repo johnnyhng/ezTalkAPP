@@ -453,6 +453,16 @@ Status:
 
 - test `feedbackToBackend(...)` chooses `PUT /api/updates` when `remote_candidates` exist
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - extracted `FeedbackRoute` and `decideFeedbackRoute(...)` in `Api.kt`
+  - JVM test covering remote-candidate routing to `PUT /api/updates`
+  - `feedbackToBackend(...)` now delegates route selection to the extracted helper
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 13: feedback routing with local-only candidates
 
 - test `feedbackToBackend(...)` chooses `POST process_audio` when only `local_candidates` exist
