@@ -372,6 +372,17 @@ Status:
   - `local_candidates`
   - workflow flags
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - extracted a small pure metadata builder seam in `RecognitionUtils.kt`
+  - JVM tests covering preservation of latest `modified`, workflow flags, and `local_candidates`
+  - JVM test covering fallback behavior when latest JSON metadata is absent
+  - JVM test covering legacy `canCheck` fallback when `mutable` is missing
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 8: remote candidate cache hit behavior
 
 - test [RecognitionUtils.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/RecognitionUtils.kt) when cached `remote_candidates` already exist

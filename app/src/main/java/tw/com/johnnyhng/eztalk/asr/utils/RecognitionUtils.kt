@@ -5,7 +5,47 @@ import android.util.Log
 import tw.com.johnnyhng.eztalk.asr.TAG
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
+
+internal data class RemoteCandidateMetadata(
+    val originalText: String,
+    val modifiedText: String,
+    val checked: Boolean,
+    val mutable: Boolean,
+    val removable: Boolean,
+    val localCandidates: List<String>,
+    val remoteCandidates: List<String>
+)
+
+internal fun buildRemoteCandidateMetadata(
+    latestJsonlData: JSONObject?,
+    fallbackOriginalText: String,
+    fallbackCurrentText: String,
+    remoteCandidates: List<String>
+): RemoteCandidateMetadata {
+    val originalText =
+        latestJsonlData?.optString("original", fallbackOriginalText) ?: fallbackOriginalText
+    val modifiedText =
+        latestJsonlData?.optString("modified", fallbackCurrentText) ?: fallbackCurrentText
+    val checked = latestJsonlData?.optBoolean("checked", false) ?: false
+    val mutable = latestJsonlData?.optBoolean(
+        "mutable",
+        latestJsonlData.optBoolean("canCheck", true)
+    ) ?: true
+    val removable = latestJsonlData?.optBoolean("removable", false) ?: false
+    val localCandidates = latestJsonlData?.optStringList("local_candidates").orEmpty()
+
+    return RemoteCandidateMetadata(
+        originalText = originalText,
+        modifiedText = modifiedText,
+        checked = checked,
+        mutable = mutable,
+        removable = removable,
+        localCandidates = localCandidates,
+        remoteCandidates = remoteCandidates
+    )
+}
 
 suspend fun getRemoteCandidates(
     context: Context,
@@ -44,31 +84,28 @@ suspend fun getRemoteCandidates(
 
                     // Re-read the jsonl file to get the most up-to-date user edits before writing.
                     val latestJsonlData = readJsonl(jsonlFile.absolutePath)
+                    val metadata = buildRemoteCandidateMetadata(
+                        latestJsonlData = latestJsonlData,
+                        fallbackOriginalText = originalText,
+                        fallbackCurrentText = currentText,
+                        remoteCandidates = sentences
+                    )
 
                     // Save to jsonl
                     val file = File(wavFilePath)
                     val filename = file.nameWithoutExtension
-                    val original =
-                        latestJsonlData?.optString("original", originalText) ?: originalText
-                    val modified =
-                        latestJsonlData?.optString("modified", currentText) ?: currentText
-                    val checked = latestJsonlData?.optBoolean("checked", false) ?: false
-                    val mutable = latestJsonlData?.optBoolean("mutable", latestJsonlData.optBoolean("canCheck", true)) ?: true
-                    val removable = latestJsonlData?.optBoolean("removable", false) ?: false
-                    val localCandidates = latestJsonlData?.optStringList("local_candidates").orEmpty()
-
 
                     saveJsonl(
                         context = context,
                         userId = userId,
                         filename = filename,
-                        originalText = original,
-                        modifiedText = modified,
-                        checked = checked,
-                        mutable = mutable,
-                        removable = removable,
-                        localCandidates = localCandidates,
-                        remoteCandidates = sentences
+                        originalText = metadata.originalText,
+                        modifiedText = metadata.modifiedText,
+                        checked = metadata.checked,
+                        mutable = metadata.mutable,
+                        removable = metadata.removable,
+                        localCandidates = metadata.localCandidates,
+                        remoteCandidates = metadata.remoteCandidates
                     )
                     return@withContext sentences
                 } catch (e: Exception) {
