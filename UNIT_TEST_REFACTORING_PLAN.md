@@ -506,6 +506,19 @@ Status:
 - this batch improves regression protection for queue-state persistence and hashing helpers
 - it does not change the current `core logic` Jacoco number because `Utils.kt` is not yet included in `jacocoCoreLogicReport`
 
+### Batch R: Add `ModelManager` filesystem tests without production changes
+
+Status:
+
+- completed
+- added Robolectric-backed tests for:
+  - `listModels(...)` directory creation and valid-model filtering
+  - `getModel(...)` named selection and fallback selection
+  - `deleteModel(...)` success, protection, and missing-directory cases
+- these tests avoid relying on asset-copy behavior, which is not stable enough in the current unit-test environment to use as a deterministic coverage target
+- this batch improves regression protection for model directory management
+- it does not change the current `core logic` Jacoco number because `ModelManager.kt` is not yet included in `jacocoCoreLogicReport`
+
 Target cases:
 
 - importing lines creates the right current text + queue
