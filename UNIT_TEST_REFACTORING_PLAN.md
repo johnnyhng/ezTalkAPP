@@ -513,6 +513,16 @@ Status:
   - `removable`
   - feedback success / skip
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - extracted `shouldAttemptFeedback(...)` and `reduceTranscriptAfterConfirmation(...)`
+  - JVM tests covering feedback-attempt gating and confirmation state transitions
+  - integrated the extracted workflow helpers back into `Home.kt` and `TranslateScreen.kt`
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 17: data collect queue logic
 
 - test [DataCollectViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/DataCollectViewModel.kt)

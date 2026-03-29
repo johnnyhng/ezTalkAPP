@@ -60,6 +60,8 @@ import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.readJsonl
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
+import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
+import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import java.io.File
 import java.text.SimpleDateFormat
@@ -501,15 +503,9 @@ fun TranslateScreen(
                 tts?.speak(textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
 
                 currentTranscript?.let { transcript ->
-                    val useFeedbackLogic = userSettings.enableTtsFeedback
-                    if (useFeedbackLogic) {
+                    val shouldRunFeedback = shouldAttemptFeedback(transcript, userSettings.enableTtsFeedback)
+                    if (shouldRunFeedback) {
                         coroutineScope.launch {
-                            // IMPROVEMENT: If removable is already true, skip backend sync
-                            if (transcript.removable) {
-                                Log.d(TAG, "Already synced, skip feedback.")
-                                return@launch
-                            }
-
                             // wait for candidates to avoid race condition (方案二)
                             fetchJob?.join()
                             
@@ -522,13 +518,13 @@ fun TranslateScreen(
                                 )
                             }
                             if (success) {
-                                val updatedTranscript = transcript.copy(
-                                    modifiedText = textInput,
-                                    checked = true,
-                                    mutable = false,
-                                    removable = true,
+                                val updatedTranscript = reduceTranscriptAfterConfirmation(
+                                    transcript = transcript,
+                                    newText = textInput,
+                                    lockTranscript = true
+                                ).copy(
                                     localCandidates = transcript.localCandidates,
-                                    remoteCandidates = remoteCandidates // Ensure candidates are included
+                                    remoteCandidates = remoteCandidates
                                 )
                                 currentTranscript = updatedTranscript
 
@@ -555,7 +551,11 @@ fun TranslateScreen(
                             }
                         }
                     } else {
-                        val updatedTranscript = transcript.copy(modifiedText = textInput, checked = true)
+                        val updatedTranscript = reduceTranscriptAfterConfirmation(
+                            transcript = transcript,
+                            newText = textInput,
+                            lockTranscript = userSettings.enableTtsFeedback
+                        )
                         currentTranscript = updatedTranscript
                         val file = File(transcript.wavFilePath)
                         val filename = file.nameWithoutExtension

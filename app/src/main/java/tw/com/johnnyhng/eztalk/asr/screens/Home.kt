@@ -31,6 +31,8 @@ import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.*
+import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
+import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
 import tw.com.johnnyhng.eztalk.asr.widgets.*
 import java.io.File
 import java.util.*
@@ -124,11 +126,10 @@ fun HomeScreen(
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         
         val item = resultList[index]
-        val useFeedbackLogic = userSettings.enableTtsFeedback
-        if (useFeedbackLogic) {
+        val shouldRunFeedback = shouldAttemptFeedback(item, userSettings.enableTtsFeedback)
+        if (shouldRunFeedback) {
             coroutineScope.launch {
                 fetchingJobs[item.wavFilePath]?.join()
-                if (item.removable) return@launch
                 val success = withContext(Dispatchers.IO) {
                     feedbackToBackend(
                         userSettings.backendUrl,
@@ -143,11 +144,10 @@ fun HomeScreen(
                         if (cIndex == -1) {
                             null
                         } else {
-                            resultList[cIndex].copy(
-                                modifiedText = text,
-                                checked = true,
-                                mutable = false,
-                                removable = true
+                            reduceTranscriptAfterConfirmation(
+                                transcript = resultList[cIndex],
+                                newText = text,
+                                lockTranscript = true
                             ).also { resultList[cIndex] = it }
                         }
                     }
@@ -175,7 +175,11 @@ fun HomeScreen(
                 }
             }
         } else {
-            val updated = item.copy(modifiedText = text, checked = true)
+            val updated = reduceTranscriptAfterConfirmation(
+                transcript = item,
+                newText = text,
+                lockTranscript = userSettings.enableTtsFeedback
+            )
             resultList[index] = updated
             coroutineScope.launch(Dispatchers.IO) {
                 saveJsonl(
@@ -197,30 +201,10 @@ fun HomeScreen(
     fun handleDialogTtsConfirm(index: Int, text: String) {
         val item = resultList.getOrNull(index) ?: return
 
-        if (userSettings.enableTtsFeedback) {
+        val shouldRunFeedback = shouldAttemptFeedback(item, userSettings.enableTtsFeedback)
+        if (shouldRunFeedback) {
             coroutineScope.launch {
                 fetchingJobs[item.wavFilePath]?.join()
-                if (item.removable) {
-                    val updatedItem = item.copy(modifiedText = text, checked = true, mutable = false, removable = true)
-                    resultList[index] = updatedItem
-                    withContext(Dispatchers.IO) {
-                        saveJsonl(
-                            context = context,
-                            userId = userSettings.userId,
-                            filename = File(updatedItem.wavFilePath).nameWithoutExtension,
-                            originalText = updatedItem.recognizedText,
-                            modifiedText = updatedItem.modifiedText,
-                            checked = updatedItem.checked,
-                            mutable = updatedItem.mutable,
-                            removable = updatedItem.removable,
-                            localCandidates = updatedItem.localCandidates,
-                            remoteCandidates = updatedItem.remoteCandidates
-                        )
-                    }
-                    transcriptToEditInDialog = null
-                    return@launch
-                }
-
                 val success = withContext(Dispatchers.IO) {
                     feedbackToBackend(
                         userSettings.backendUrl,
@@ -231,11 +215,10 @@ fun HomeScreen(
                 }
 
                 if (success) {
-                    val updatedItem = item.copy(
-                        modifiedText = text,
-                        checked = true,
-                        mutable = false,
-                        removable = true
+                    val updatedItem = reduceTranscriptAfterConfirmation(
+                        transcript = item,
+                        newText = text,
+                        lockTranscript = true
                     )
                     resultList[index] = updatedItem
                     withContext(Dispatchers.IO) {
@@ -260,7 +243,11 @@ fun HomeScreen(
                 }
             }
         } else {
-            val updatedItem = item.copy(modifiedText = text, checked = true)
+            val updatedItem = reduceTranscriptAfterConfirmation(
+                transcript = item,
+                newText = text,
+                lockTranscript = userSettings.enableTtsFeedback
+            )
             resultList[index] = updatedItem
             coroutineScope.launch(Dispatchers.IO) {
                 saveJsonl(
@@ -472,7 +459,11 @@ fun HomeScreen(
                     transcriptToEditInDialog = null
                 },
                 onConfirm = { newText ->
-                    val updatedItem = transcript.copy(modifiedText = newText, checked = true)
+                    val updatedItem = reduceTranscriptAfterConfirmation(
+                        transcript = transcript,
+                        newText = newText,
+                        lockTranscript = false
+                    )
                     resultList[index] = updatedItem
                     coroutineScope.launch(Dispatchers.IO) {
                         saveJsonl(
