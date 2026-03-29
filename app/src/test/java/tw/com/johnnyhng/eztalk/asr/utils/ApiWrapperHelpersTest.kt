@@ -54,6 +54,46 @@ class ApiWrapperHelpersTest {
     }
 
     @Test
+    fun parseUploadMetadataSnapshotExtractsModifiedTextAndRemoteCandidates() {
+        val snapshot = parseUploadMetadataSnapshot(
+            """
+            {
+              "modified": "confirmed text",
+              "remote_candidates": ["r1", "r2"]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals("confirmed text", snapshot.label)
+        assertEquals(2, snapshot.remoteCandidates.length())
+        assertEquals("r1", snapshot.remoteCandidates.getString(0))
+        assertEquals("r2", snapshot.remoteCandidates.getString(1))
+    }
+
+    @Test
+    fun buildPackagedUploadJsonReturnsNullWhenEitherInputIsMissing() {
+        assertNull(buildPackagedUploadJson(null, JSONArray()))
+        assertNull(buildPackagedUploadJson(JSONObject(), null))
+    }
+
+    @Test
+    fun buildPackagedUploadJsonPreservesMetadataAndRawArray() {
+        val metadata = JSONObject().apply {
+            put("label", "confirmed")
+        }
+        val raw = JSONArray().apply {
+            put(3)
+            put(4)
+        }
+
+        val packaged = buildPackagedUploadJson(metadata, raw)
+
+        assertNotNull(packaged)
+        assertEquals("confirmed", packaged?.metadata?.getString("label"))
+        assertEquals(2, packaged?.raw?.length())
+    }
+
+    @Test
     fun buildFeedbackDispatchPlanUsesUpdatesEndpointWhenRemoteCandidatesExist() {
         val metadata = JSONObject().apply {
             put("remote_candidates", JSONArray().apply { put("r1") })

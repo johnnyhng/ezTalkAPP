@@ -408,6 +408,18 @@ Status:
 - `ApiKt` line coverage increased from `119` covered lines to `127`
 - filtered `core logic` line coverage increased from about `43.72%` (`338 / 773`) to about `44.48%` (`346 / 778`)
 
+### Batch K: Raise `Api.kt` metadata parsing coverage
+
+Status:
+
+- completed
+- extracted pure helpers for:
+  - parsing upload metadata snapshots from JSONL text
+  - building packaged upload objects before final JSON combination
+- added JVM tests for snapshot parsing and packaged upload construction
+- `ApiKt` line coverage increased from `127` covered lines to `133`
+- filtered `core logic` line coverage increased from about `44.48%` (`346 / 778`) to about `45.02%` (`352 / 782`)
+
 Target cases:
 
 - importing lines creates the right current text + queue

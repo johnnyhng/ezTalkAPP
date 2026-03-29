@@ -33,6 +33,11 @@ internal data class PackagedUploadJson(
     val raw: JSONArray
 )
 
+internal data class UploadMetadataSnapshot(
+    val label: String,
+    val remoteCandidates: JSONArray
+)
+
 
 /**
  * Reads a WAV file and returns its content as a JSONArray of bytes.
@@ -76,15 +81,12 @@ internal fun packageUploadJsonMetadata(path: String, userId: String): JSONObject
         val wavFile = File(path)
         val jsonlPath = path.substringBeforeLast(".") + ".jsonl"
         val jsonlFile = File(jsonlPath)
-        var label = ""
-        var remoteCandidates = JSONArray()
+        var snapshot = UploadMetadataSnapshot("", JSONArray())
         if (jsonlFile.exists()) {
             try {
                 val jsonlContent = jsonlFile.readText()
                 if (jsonlContent.isNotBlank()) {
-                    val jsonObject = JSONObject(jsonlContent)
-                    label = jsonObject.optString("modified", "")
-                    remoteCandidates = jsonObject.optJSONArray("remote_candidates") ?: JSONArray()
+                    snapshot = parseUploadMetadataSnapshot(jsonlContent)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error reading or parsing jsonl file: $jsonlPath", e)
@@ -96,13 +98,21 @@ internal fun packageUploadJsonMetadata(path: String, userId: String): JSONObject
         return buildUploadJsonMetadata(
             filename = wavFile.name,
             userId = userId,
-            label = label,
-            remoteCandidates = remoteCandidates
+            label = snapshot.label,
+            remoteCandidates = snapshot.remoteCandidates
         )
     } catch (e: Exception) {
         Log.e(TAG, "Error packaging upload JSON metadata for $path", e)
         return null
     }
+}
+
+internal fun parseUploadMetadataSnapshot(jsonlContent: String): UploadMetadataSnapshot {
+    val jsonObject = JSONObject(jsonlContent)
+    return UploadMetadataSnapshot(
+        label = jsonObject.optString("modified", ""),
+        remoteCandidates = jsonObject.optJSONArray("remote_candidates") ?: JSONArray()
+    )
 }
 
 internal fun buildUploadJsonMetadata(
@@ -236,6 +246,14 @@ internal fun combineUploadJson(
     }
 }
 
+internal fun buildPackagedUploadJson(
+    metadata: JSONObject?,
+    rawArray: JSONArray?
+): PackagedUploadJson? {
+    if (metadata == null || rawArray == null) return null
+    return PackagedUploadJson(metadata = metadata, raw = rawArray)
+}
+
 internal fun buildProcessAudioRequestPlan(
     filePath: String,
     userId: String,
@@ -320,7 +338,8 @@ internal fun buildRecognitionRequestPlan(
 fun packageUploadJson(path: String, userId: String): JSONObject? {
     val metadata = packageUploadJsonMetadata(path, userId) ?: return null
     val rawArray = readWavFileToJsonArray(path) ?: return null
-    return combineUploadJson(metadata, rawArray)
+    val packaged = buildPackagedUploadJson(metadata, rawArray) ?: return null
+    return combineUploadJson(packaged.metadata, packaged.raw)
 }
 
 internal fun executeFeedbackDispatch(
