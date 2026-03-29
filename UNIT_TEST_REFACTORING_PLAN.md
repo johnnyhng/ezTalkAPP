@@ -1,0 +1,554 @@
+# Unit Test Plan For Future Refactoring
+
+This document proposes how to add unit tests to `ezTalkAPP` in a way that supports future refactoring without forcing a full architecture rewrite first.
+
+## Current state
+
+The project currently has only template test files:
+
+- [ExampleUnitTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/test/java/com/k2fsa/sherpa/onnx/simulate/streaming/asr/ExampleUnitTest.kt)
+- [ExampleInstrumentedTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/com/k2fsa/sherpa/onnx/simulate/streaming/asr/ExampleInstrumentedTest.kt)
+
+There is no meaningful automated coverage yet for:
+
+- transcript workflow rules
+- feedback routing
+- JSONL metadata behavior
+- queue/state logic
+- model selection behavior
+- recognition result orchestration
+
+## Goal
+
+The goal is not “test everything.” The goal is to protect the logic that is most likely to break during refactoring:
+
+- persistence rules
+- state transitions
+- workflow flags such as `checked`, `mutable`, `removable`
+- candidate-fetch caching behavior
+- per-screen business rules that currently live inside Compose screens
+
+## Testing strategy
+
+Use a staged approach:
+
+1. extract pure or mostly-pure logic into small testable collaborators
+2. add JVM unit tests first for fast feedback
+3. use instrumented tests only for Android-specific pieces that cannot reasonably be isolated
+
+This matters because much of the current logic is embedded in:
+
+- Compose screens
+- Android framework classes
+- file and network helpers
+
+Directly testing those parts as-is will be slow and brittle.
+
+## Recommended test split
+
+### 1. Pure JVM unit tests
+
+These should become the bulk of the future suite.
+
+Best candidates:
+
+- queue navigation logic from [DataCollectViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/DataCollectViewModel.kt)
+- transcript state transition rules from [Home.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/Home.kt) and [TranslateScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/TranslateScreen.kt)
+- remote candidate merge/caching rules from [RecognitionUtils.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/RecognitionUtils.kt)
+- JSONL serialization rules from [WavUtil.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/WavUtil.kt)
+- feedback routing rules from [Api.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/Api.kt)
+- settings-to-behavior mapping from [HomeViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/HomeViewModel.kt)
+
+### 2. Android/JVM boundary tests
+
+These are still unit-style tests, but require a small seam around Android dependencies.
+
+Good examples:
+
+- DataStore-backed settings reads/writes
+- file path generation under `context.filesDir`
+- model directory discovery under `files/models/<userId>`
+
+These can often be tested with:
+
+- fake file systems or temp directories
+- fake settings repositories
+- wrapper interfaces around Android APIs
+
+### 3. Instrumented tests
+
+Keep these minimal and focused on integration points:
+
+- app startup and navigation smoke tests
+- one end-to-end screen interaction per major screen
+- one storage integration test proving `.wav` / `.jsonl` can be created and read on device
+
+Do not put most workflow logic here. It will slow the team down.
+
+## Refactoring seam plan
+
+Before writing many tests, introduce a few small seams.
+
+### A. Extract transcript workflow logic
+
+Current problem:
+
+- important rules are embedded directly in `Home.kt`, `TranslateScreen.kt`, and dialog callbacks
+
+Extract into small classes/functions such as:
+
+- `TranscriptFeedbackDecider`
+- `TranscriptStateReducer`
+- `TtsFeedbackPolicy`
+
+What these would own:
+
+- when TTS should trigger backend feedback
+- when feedback should be skipped
+- when `mutable` becomes `false`
+- when `removable` becomes `true`
+- how `checked` changes
+
+This is the highest-value extraction because these rules are currently easy to regress.
+
+### B. Extract JSONL metadata logic
+
+Current problem:
+
+- JSONL behavior is spread across `WavUtil.kt`, `RecognitionUtils.kt`, `Api.kt`, `Home.kt`, `TranslateScreen.kt`, and `FileManager.kt`
+
+Extract something like:
+
+- `TranscriptMetadataRepository`
+- `TranscriptMetadata`
+
+Responsibilities:
+
+- load metadata
+- save metadata
+- preserve existing fields during updates
+- merge remote candidates without losing user edits
+
+This makes file behavior testable without going through UI.
+
+### C. Extract remote candidate service
+
+Current problem:
+
+- `getRemoteCandidates(...)` mixes file I/O, caching, network requests, and merge behavior
+
+Split it into:
+
+- cache lookup
+- network fetch
+- metadata merge/write-back
+
+Possible shape:
+
+- `RemoteCandidateService`
+- `RemoteCandidateApi`
+- `TranscriptMetadataStore`
+
+### D. Extract recording result post-processing
+
+Current problem:
+
+- `RecognitionManager` does too much in one place
+
+Separate:
+
+- speech segmentation / audio capture
+- transcript creation
+- file persistence
+
+This does not need to be a big rewrite. Even one extracted helper would make finalization logic easier to test.
+
+## Priority order for test coverage
+
+### Priority 1: workflow rules
+
+Add tests for the behavior most likely to regress during refactoring.
+
+Target cases:
+
+- `enableTtsFeedback = true` and item is not yet synced
+  - feedback should be attempted
+  - success should set `checked = true`, `mutable = false`, `removable = true`
+- `enableTtsFeedback = true` and item already has `removable = true`
+  - TTS should still be allowed
+  - backend feedback should be skipped
+- `enableTtsFeedback = false`
+  - text should still be confirmed
+  - `mutable/removable` should remain unchanged unless explicitly changed elsewhere
+- dialog TTS confirm should follow the same state rules as Home row TTS
+
+Why first:
+
+- this is user-visible behavior
+- this is already evolving
+- this is easy to break by moving code around
+
+### Priority 2: metadata persistence
+
+Target cases:
+
+- `saveJsonl(...)` writes expected keys
+- writing without `remote_candidates` does not create the field
+- rewriting metadata preserves expected values
+- reading malformed or missing JSONL fails safely
+- remote candidate write-back does not lose latest edited `modified` text
+
+Why second:
+
+- the app relies heavily on `.jsonl` as the real source of truth
+
+### Priority 3: remote candidate behavior
+
+Target cases:
+
+- if cached `remote_candidates` exist, network should not be called
+- if no cache exists, network response should be parsed and saved
+- if remote response is malformed, result should be empty and not crash
+- if metadata has been edited between fetch start and save, the latest metadata should win
+
+Why third:
+
+- there is already explicit re-read logic designed to avoid races
+- that logic should be locked down before refactoring
+
+### Priority 4: data collection queue logic
+
+Target cases:
+
+- importing lines creates the right current text + queue
+- `moveToNext()` updates remaining/previous counts correctly
+- `moveToPrevious()` restores the previous item correctly
+- `retryLastCompleted()` behaves like a rollback
+- enabling sequence mode with no saved queue shows the empty-queue state
+
+Why fourth:
+
+- this logic is stateful but mostly deterministic
+- it is a strong candidate for clean JVM tests
+
+### Priority 5: model selection and settings logic
+
+Target cases:
+
+- default model is copied when no model exists
+- selected model from settings is restored correctly
+- changing user ID invalidates the initialized model key
+- changing selected model forces re-initialization path
+
+Why fifth:
+
+- less volatile than transcript workflows
+- still important for refactoring safety
+
+## Proposed test package structure
+
+Add JVM tests under:
+
+- `app/src/test/java/tw/com/johnnyhng/eztalk/asr/workflow/`
+- `app/src/test/java/tw/com/johnnyhng/eztalk/asr/metadata/`
+- `app/src/test/java/tw/com/johnnyhng/eztalk/asr/candidates/`
+- `app/src/test/java/tw/com/johnnyhng/eztalk/asr/datacollect/`
+- `app/src/test/java/tw/com/johnnyhng/eztalk/asr/settings/`
+
+Suggested file names:
+
+- `TranscriptFeedbackDeciderTest.kt`
+
+## Execution roadmap in 18 batches
+
+To keep progress measurable and avoid a large all-at-once testing effort, implement the suite in 18 small batches.
+
+### Batch 1: test scaffolding
+
+- replace template tests with real package structure
+- add shared test fixture helpers
+- confirm the JVM test task runs cleanly
+
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - app-level JVM test package under `app/src/test/java/tw/com/johnnyhng/eztalk/asr/`
+  - shared fixture helper in `fixtures/TestFixtures.kt`
+  - scaffolding smoke tests
+  - app-package-aligned instrumented smoke test
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
+### Batch 2: basic data model checks
+
+- add baseline tests for [Transcript.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/data/classes/Transcript.kt)
+- lock down default values and copy behavior
+
+### Batch 3: JSON helper behavior
+
+- test `optStringList(...)` in [WavUtil.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/WavUtil.kt)
+- verify missing keys, empty arrays, and blank items are handled safely
+
+### Batch 4: JSONL core field persistence
+
+- test `saveJsonl(...)` writes:
+  - `original`
+  - `modified`
+  - `checked`
+  - `mutable`
+  - `removable`
+
+### Batch 5: JSONL candidate persistence
+
+- test `saveJsonl(...)` with and without:
+  - `local_candidates`
+  - `remote_candidates`
+- verify omitted fields are not written accidentally
+
+### Batch 6: JSONL read failure safety
+
+- test `readJsonl(...)` for:
+  - missing file
+  - empty file
+  - malformed JSON
+
+### Batch 7: metadata merge preservation
+
+- extract or wrap a small metadata merge seam
+- test that updating remote data does not erase:
+  - latest `modified`
+  - `local_candidates`
+  - workflow flags
+
+### Batch 8: remote candidate cache hit behavior
+
+- test [RecognitionUtils.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/RecognitionUtils.kt) when cached `remote_candidates` already exist
+- verify network fetch is skipped
+
+### Batch 9: remote candidate fetch parsing
+
+- test successful parsing of `sentence_candidates`
+- test malformed response fallback to empty result
+
+### Batch 10: remote write-back race protection
+
+- test re-read-before-save behavior in `RecognitionUtils`
+- verify latest metadata wins if edits happen between fetch start and save
+
+### Batch 11: merged candidate ordering
+
+- test merged candidate behavior in [Api.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/Api.kt)
+- lock down:
+  - local first
+  - remote second
+  - `distinct()` de-duplication
+
+### Batch 12: feedback routing with remote candidates
+
+- test `feedbackToBackend(...)` chooses `PUT /api/updates` when `remote_candidates` exist
+
+### Batch 13: feedback routing with local-only candidates
+
+- test `feedbackToBackend(...)` chooses `POST process_audio` when only `local_candidates` exist
+
+### Batch 14: feedback routing with no candidates
+
+- test `feedbackToBackend(...)` chooses `POST /api/transfer` when neither local nor remote candidates exist
+
+### Batch 15: process_audio request payload shape
+
+- test `postProcessAudio(...)` request JSON shape
+- for now, keep it aligned with `postForRecognition(...)`
+
+### Batch 16: transcript workflow state rules
+
+- extract a small reducer or policy from Home/Translate behavior
+- test transitions for:
+  - `checked`
+  - `mutable`
+  - `removable`
+  - feedback success / skip
+
+### Batch 17: data collect queue logic
+
+- test [DataCollectViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/DataCollectViewModel.kt)
+- cover:
+  - import
+  - next
+  - previous
+  - retry
+  - skip
+
+### Batch 18: minimal integration coverage
+
+- keep instrumented coverage very small
+- add smoke tests for:
+  - settings read/write
+  - one storage round-trip
+  - one major screen interaction path
+
+## Recommended implementation order
+
+Do the work in this order:
+
+1. batches 1-6 for metadata foundations
+2. batches 8-15 for candidates and feedback routing
+3. batches 16-18 for workflow policy and minimal integration coverage
+
+## Notes
+
+- prefer JVM tests unless Android framework access is unavoidable
+- avoid testing large Compose screens directly until business rules are extracted into small seams
+- keep each batch independently shippable so coverage can grow without blocking refactors
+- `TranscriptStateReducerTest.kt`
+- `TranscriptMetadataRepositoryTest.kt`
+- `RemoteCandidateServiceTest.kt`
+- `DataCollectQueueStateTest.kt`
+- `HomeViewModelModelSelectionTest.kt`
+
+## Concrete first extraction set
+
+If the goal is to start small, extract only these first:
+
+1. `TranscriptFeedbackDecision`
+2. `TranscriptMetadataSnapshot`
+3. `RemoteCandidateCachePolicy`
+
+### Example scope for each
+
+`TranscriptFeedbackDecision`
+
+- input:
+  - current transcript flags
+  - `enableTtsFeedback`
+  - action source such as row TTS or dialog TTS
+- output:
+  - whether backend feedback should run
+  - the next transcript flags after success
+
+`TranscriptMetadataSnapshot`
+
+- input/output object around:
+  - `original`
+  - `modified`
+  - `checked`
+  - `mutable`
+  - `removable`
+  - `remote_candidates`
+
+`RemoteCandidateCachePolicy`
+
+- input:
+  - cached metadata
+  - remote response
+- output:
+  - whether to reuse cache
+  - merged metadata to save
+
+These three would already unlock a meaningful unit-test base.
+
+## Suggested fake interfaces
+
+To avoid Android-heavy tests, introduce interfaces around unstable dependencies.
+
+Suggested interfaces:
+
+- `FeedbackApi`
+- `RecognitionApi`
+- `TranscriptMetadataStore`
+- `AudioFileStore`
+- `SettingsRepository`
+- `Clock`
+
+Why:
+
+- lets tests use fake implementations
+- avoids real network
+- avoids real `Context`
+- avoids timing-dependent assertions
+
+## Test data strategy
+
+Keep fixtures very small and explicit.
+
+Recommended fixtures:
+
+- one basic mutable transcript
+- one already-synced transcript with `removable = true`
+- one data-collect transcript with `mutable = false`
+- one JSONL payload with cached `remote_candidates`
+- one malformed API response
+
+Avoid large fixture files until the test suite stabilizes.
+
+## What not to test first
+
+Do not start with:
+
+- pixel-perfect Compose UI tests
+- microphone integration tests
+- full Sherpa-ONNX decoding tests
+- real network calls to backend/recognition services
+
+These are expensive and do not protect refactoring as efficiently as pure workflow tests.
+
+## Dependency recommendations for future test work
+
+The project already has JUnit configured in [app/build.gradle.kts](/home/hhs/workspace/ezTalkAPP/app/build.gradle.kts).
+
+For a more practical unit-test setup, future additions should likely include:
+
+- `kotlinx-coroutines-test`
+- a mocking library such as MockK
+- optionally Truth or AssertJ for clearer assertions
+- optionally Robolectric only if some Android-bound logic cannot be isolated
+
+These are recommendations only. They are not required for this planning document.
+
+## Minimal rollout plan
+
+If the team wants the safest path, do it in four small phases.
+
+### Phase 1
+
+- add test dependencies
+- replace the example test files
+- create one new workflow-focused test package
+
+### Phase 2
+
+- extract transcript workflow decision logic
+- add tests for Home / dialog / Translate TTS feedback rules
+
+### Phase 3
+
+- extract metadata repository logic
+- add tests for JSONL read/write and candidate merge behavior
+
+### Phase 4
+
+- extract queue/state logic and model-selection helpers
+- add tests for DataCollect and model lifecycle behavior
+
+## Success criteria
+
+The refactoring effort is in a good place when:
+
+- TTS feedback rules are covered by fast JVM tests
+- metadata persistence behavior is covered by fast JVM tests
+- remote candidate caching behavior is covered by fast JVM tests
+- DataCollect queue navigation is covered by fast JVM tests
+- only a very small number of instrumented tests are needed
+
+## Short version
+
+If you want the highest ROI test plan for future refactoring, start here:
+
+1. extract transcript workflow rules out of Compose screens
+2. unit test `checked/mutable/removable` transitions
+3. extract JSONL metadata behavior
+4. unit test remote candidate caching and merge behavior
+5. then cover DataCollect queue logic
+
+That order will protect the app’s most fragile behavior with the least amount of test infrastructure.
