@@ -288,6 +288,13 @@ Status:
 - add tests for error paths and fallback behavior
 - cover candidate merge edge cases and missing-field handling
 
+Status:
+
+- completed
+- `Api.kt` request-building logic now has dedicated pure helpers for update and recognition payloads
+- `ApiKt` line coverage increased from `22` covered lines to `51`
+- filtered `core logic` line coverage increased from about `21.20%` (`131 / 618`) to about `25.08%` (`160 / 638`)
+
 ### Batch C: Raise `RecognitionUtils.kt` coverage
 
 - cover cache hit/miss, malformed responses, write-back preservation, and failure paths

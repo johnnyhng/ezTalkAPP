@@ -49,7 +49,7 @@ internal fun readWavFileToJsonArray(path: String): JSONArray? {
     }
 }
 
-private fun packageUploadJsonMetadata(path: String, userId: String): JSONObject? {
+internal fun packageUploadJsonMetadata(path: String, userId: String): JSONObject? {
     try {
         val wavFile = File(path)
         val jsonlPath = path.substringBeforeLast(".") + ".jsonl"
@@ -125,6 +125,50 @@ internal fun buildProcessAudioPayload(
         put("label", metadata?.optString("modified") ?: "tmp")
         put("num_of_stn", 8)
         raw?.let { put("raw", it) }
+    }
+}
+
+internal fun buildRecognitionPayload(
+    filePath: String,
+    userId: String,
+    raw: JSONArray? = null
+): JSONObject {
+    return JSONObject().apply {
+        put("login_user", userId.split("@")[0])
+        put("filename", filePath.substringAfterLast("/"))
+        put("label", "tmp")
+        put("num_of_stn", 8)
+        raw?.let { put("raw", it) }
+    }
+}
+
+internal fun buildUpdatePayload(
+    filePath: String,
+    userId: String,
+    metadata: JSONObject? = null
+): JSONObject {
+    val account = JSONObject().apply {
+        put("user_id", userId.split("@")[0])
+        put("password", sha256(sha256("password")))
+    }
+
+    val label = JSONObject().apply {
+        put("original", "tmp")
+        put("modified", metadata?.optString("modified") ?: "")
+        put("candidates", buildMergedCandidates(metadata))
+    }
+
+    val streamFilesMove = JSONArray().apply {
+        put(JSONObject().apply {
+            put(filePath.substringAfterLast("/"), label)
+        })
+    }
+
+    return JSONObject().apply {
+        put("account", account)
+        put("streamFilesMove", streamFilesMove)
+        put("update_files", "True")
+        put("sentence", metadata?.optString("modified") ?: "")
     }
 }
 
@@ -290,26 +334,11 @@ fun putForUpdates(
         connection.connectTimeout = 5000 // 5 seconds
         connection.readTimeout = 5000 // 5 seconds
 
-        // TODO: Use OAUTH2 for authentication
-        val  account = JSONObject()
-        account.put("user_id", userId.split("@")[0])
-        account.put("password", sha256(sha256("password")))
-
-        val jsonPayload = JSONObject()
-        jsonPayload.put("account", account)
-        val jsonArray = JSONArray()
-        val element = JSONObject()
-        val label = JSONObject()
-        label.put("original", "tmp")
-        label.put("modified", metadata?.optString("modified") ?: "")
-        label.put("candidates", buildMergedCandidates(metadata))
-        element.put(filePath.substringAfterLast("/"), label)
-        jsonArray.put(element)
-        jsonPayload.put("streamFilesMove", jsonArray)
-        jsonPayload.put("update_files", "True")
-        jsonPayload.put("sentence", metadata?.optString("modified") ?: "")
-
-
+        val jsonPayload = buildUpdatePayload(
+            filePath = filePath,
+            userId = userId,
+            metadata = metadata
+        )
 
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
         connection.setRequestProperty("Accept", "application/json")
@@ -448,15 +477,12 @@ fun postForRecognition(
         connection.connectTimeout = 15000 // 15 seconds
         connection.readTimeout = 15000 // 15 seconds
 
-        val jsonPayload = JSONObject()
-        jsonPayload.put("login_user", userId.split("@")[0])
-        jsonPayload.put("filename", filePath.substringAfterLast("/"))
-        jsonPayload.put("label", "tmp")
-        jsonPayload.put("num_of_stn", 8)
-
-
         if (sendFileByJson) {
-            jsonPayload.put("raw", readWavFileToJsonArray(filePath))
+            val jsonPayload = buildRecognitionPayload(
+                filePath = filePath,
+                userId = userId,
+                raw = readWavFileToJsonArray(filePath)
+            )
 
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
@@ -470,6 +496,11 @@ fun postForRecognition(
                 Log.e(TAG, "File not found for upload: $filePath")
                 return null
             }
+
+            val jsonPayload = buildRecognitionPayload(
+                filePath = filePath,
+                userId = userId
+            )
 
             val boundary = "Boundary-${System.currentTimeMillis()}"
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
