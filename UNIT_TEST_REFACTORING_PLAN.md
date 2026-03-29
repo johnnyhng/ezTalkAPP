@@ -467,6 +467,15 @@ Status:
 
 - test `feedbackToBackend(...)` chooses `POST process_audio` when only `local_candidates` exist
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - JVM test covering local-only routing to `POST process_audio`
+  - JVM test covering fallback to transfer when local candidates exist but recognition URL is blank
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 14: feedback routing with no candidates
 
 - test `feedbackToBackend(...)` chooses `POST /api/transfer` when neither local nor remote candidates exist
