@@ -8,6 +8,7 @@ import java.io.DataOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import javax.net.ssl.HostnameVerifier
@@ -302,6 +303,42 @@ internal fun buildMultipartRequestContent(
     )
 }
 
+internal fun buildJsonRequestContent(payload: JSONObject): ByteArray =
+    payload.toString().toByteArray(Charsets.UTF_8)
+
+internal fun writeUploadRequest(
+    connection: HttpURLConnection,
+    plan: UploadRequestPlan,
+    boundaryProvider: () -> String = { "Boundary-${System.currentTimeMillis()}" }
+) {
+    when (plan) {
+        is UploadRequestPlan.Json -> {
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.outputStream.use { os ->
+                os.write(buildJsonRequestContent(plan.payload))
+            }
+        }
+        is UploadRequestPlan.Multipart -> {
+            val requestContent = buildMultipartRequestContent(
+                jsonPayload = plan.payload,
+                file = plan.file,
+                boundary = boundaryProvider()
+            )
+            connection.setRequestProperty("Content-Type", requestContent.contentType)
+            connection.outputStream.use { os ->
+                os.write(requestContent.body)
+            }
+        }
+    }
+}
+
+internal fun readStreamText(inputStream: InputStream?): String? =
+    inputStream?.bufferedReader()?.use { it.readText() }
+
+internal fun parseRecognitionResponseBody(responseBody: String): JSONObject? =
+    JSONObject(responseBody).optJSONObject("response")
+
 internal fun buildProcessAudioRequestPlan(
     filePath: String,
     userId: String,
@@ -474,24 +511,8 @@ fun postProcessAudio(
             metadata = metadata,
             sendFileByJson = sendFileByJson
         )) {
-            is UploadRequestPlan.Json -> {
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.setRequestProperty("Accept", "application/json")
-            connection.outputStream.use { os ->
-                    val input = plan.payload.toString().toByteArray(Charsets.UTF_8)
-                os.write(input, 0, input.size)
-            }
-            }
-            is UploadRequestPlan.Multipart -> {
-                val file = plan.file
-                val jsonPayload = plan.payload
-                val boundary = "Boundary-${System.currentTimeMillis()}"
-                val requestContent = buildMultipartRequestContent(jsonPayload, file, boundary)
-                connection.setRequestProperty("Content-Type", requestContent.contentType)
-                connection.outputStream.use { os ->
-                    os.write(requestContent.body)
-                }
-            }
+            is UploadRequestPlan.Json,
+            is UploadRequestPlan.Multipart -> writeUploadRequest(connection, plan)
             null -> {
                 Log.e(TAG, "File not found for upload: $filePath")
                 return false
@@ -504,8 +525,7 @@ fun postProcessAudio(
             true
         } else {
             Log.e(TAG, "process_audio post failed. Response code: $responseCode, message: ${connection.responseMessage}")
-            val errorStream = connection.errorStream?.bufferedReader()?.readText()
-            Log.e(TAG, "Error body: $errorStream")
+            Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
             false
         }
     } catch (e: Exception) {
@@ -541,12 +561,7 @@ fun putForUpdates(
             metadata = metadata
         )
 
-        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        connection.setRequestProperty("Accept", "application/json")
-        connection.outputStream.use { os ->
-            val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
-            os.write(input, 0, input.size)
-        }
+        writeUploadRequest(connection, UploadRequestPlan.Json(jsonPayload))
 
         val responseCode = connection.responseCode
         if (isSuccessfulResponse(responseCode)) {
@@ -554,8 +569,7 @@ fun putForUpdates(
             true
         } else {
             Log.e(TAG, "Update failed. Response code: $responseCode, message: ${connection.responseMessage}")
-            val errorStream = connection.errorStream?.bufferedReader()?.readText()
-            Log.e(TAG, "Error body: $errorStream")
+            Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
             false
         }
     } catch (e: Exception) {
@@ -590,24 +604,8 @@ fun postTransfer(
             userId = userId,
             sendFileByJson = sendFileByJson
         )) {
-            is UploadRequestPlan.Json -> {
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.setRequestProperty("Accept", "application/json")
-            connection.outputStream.use { os ->
-                    val input = plan.payload.toString().toByteArray(Charsets.UTF_8)
-                os.write(input, 0, input.size)
-            }
-            }
-            is UploadRequestPlan.Multipart -> {
-                val metadata = plan.payload
-                val file = plan.file
-                val boundary = "Boundary-${System.currentTimeMillis()}"
-                val requestContent = buildMultipartRequestContent(metadata, file, boundary)
-                connection.setRequestProperty("Content-Type", requestContent.contentType)
-                connection.outputStream.use { os ->
-                    os.write(requestContent.body)
-                }
-            }
+            is UploadRequestPlan.Json,
+            is UploadRequestPlan.Multipart -> writeUploadRequest(connection, plan)
             null -> {
                 Log.e(TAG, "Failed to create metadata for $filePath")
                 return false
@@ -620,8 +618,7 @@ fun postTransfer(
             true
         } else {
             Log.e(TAG, "Transfer post failed. Response code: $responseCode, message: ${connection.responseMessage}")
-            val errorStream = connection.errorStream?.bufferedReader()?.readText()
-            Log.e(TAG, "Error body: $errorStream")
+            Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
             false
         }
     } catch (e: Exception) {
@@ -652,24 +649,8 @@ fun postForRecognition(
             userId = userId,
             sendFileByJson = sendFileByJson
         )) {
-            is UploadRequestPlan.Json -> {
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.setRequestProperty("Accept", "application/json")
-            connection.outputStream.use { os ->
-                    val input = plan.payload.toString().toByteArray(Charsets.UTF_8)
-                os.write(input, 0, input.size)
-            }
-            }
-            is UploadRequestPlan.Multipart -> {
-                val file = plan.file
-                val jsonPayload = plan.payload
-                val boundary = "Boundary-${System.currentTimeMillis()}"
-                val requestContent = buildMultipartRequestContent(jsonPayload, file, boundary)
-                connection.setRequestProperty("Content-Type", requestContent.contentType)
-                connection.outputStream.use { os ->
-                    os.write(requestContent.body)
-                }
-            }
+            is UploadRequestPlan.Json,
+            is UploadRequestPlan.Multipart -> writeUploadRequest(connection, plan)
             null -> {
                 Log.e(TAG, "File not found for upload: $filePath")
                 return null
@@ -678,13 +659,10 @@ fun postForRecognition(
 
         val responseCode = connection.responseCode
         if (isSuccessfulResponse(responseCode)) {
-            val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
-            val jsonResponse = JSONObject(responseBody)
-            jsonResponse.opt("response")
+            parseRecognitionResponseBody(readStreamText(connection.inputStream) ?: "")
         } else {
             Log.e(TAG, "Recognition post failed. Response code: $responseCode, message: ${connection.responseMessage}")
-            val errorStream = connection.errorStream?.bufferedReader()?.readText()
-            Log.e(TAG, "Error body: $errorStream")
+            Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
             null
         }
     } catch (e: Exception) {

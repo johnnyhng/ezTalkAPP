@@ -8,7 +8,12 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import tw.com.johnnyhng.eztalk.asr.fixtures.TestFixtures
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.OutputStream
+import java.net.HttpURLConnection
+import java.net.ProtocolException
+import java.net.URL
 
 class ApiWrapperHelpersTest {
     @Test
@@ -113,6 +118,87 @@ class ApiWrapperHelpersTest {
         assertTrue(body.contains("filename=\"sample.wav\""))
         assertTrue(body.contains("Content-Type: audio/wav"))
         assertTrue(body.contains("--Boundary-test--"))
+    }
+
+    @Test
+    fun buildJsonRequestContentSerializesPayloadAsUtf8Json() {
+        val bytes = buildJsonRequestContent(JSONObject().apply {
+            put("label", "confirmed")
+            put("value", 3)
+        })
+
+        assertEquals("""{"label":"confirmed","value":3}""", String(bytes, Charsets.UTF_8))
+    }
+
+    @Test
+    fun writeUploadRequestWritesJsonPayloadAndHeaders() {
+        val connection = FakeHttpURLConnection()
+        val payload = JSONObject().apply { put("label", "confirmed") }
+
+        writeUploadRequest(connection, UploadRequestPlan.Json(payload))
+
+        assertEquals("application/json; charset=utf-8", connection.properties["Content-Type"])
+        assertEquals("application/json", connection.properties["Accept"])
+        assertEquals("""{"label":"confirmed"}""", connection.outputAsString())
+    }
+
+    @Test
+    fun writeUploadRequestWritesMultipartPayloadAndBoundary() {
+        val file = File(TestFixtures.tempDir("multipart-write"), "sample.wav").apply {
+            writeBytes(ByteArray(48) { index -> index.toByte() })
+        }
+        val connection = FakeHttpURLConnection()
+
+        writeUploadRequest(
+            connection = connection,
+            plan = UploadRequestPlan.Multipart(
+                file = file,
+                payload = JSONObject().apply { put("label", "confirmed") }
+            ),
+            boundaryProvider = { "Boundary-fixed" }
+        )
+
+        assertEquals("multipart/form-data; boundary=Boundary-fixed", connection.properties["Content-Type"])
+        val body = connection.outputAsString()
+        assertTrue(body.contains("name=\"json\""))
+        assertTrue(body.contains("\"label\":\"confirmed\""))
+        assertTrue(body.contains("filename=\"sample.wav\""))
+    }
+
+    @Test
+    fun readStreamTextReturnsNullForMissingStream() {
+        assertNull(readStreamText(null))
+    }
+
+    @Test
+    fun readStreamTextReturnsWholeStreamContent() {
+        val text = readStreamText(ByteArrayInputStream("error body".toByteArray()))
+
+        assertEquals("error body", text)
+    }
+
+    @Test
+    fun parseRecognitionResponseBodyReturnsNestedResponseObject() {
+        val response = parseRecognitionResponseBody(
+            """
+            {
+              "response": {
+                "result": "ok",
+                "sentence_candidates": ["a", "b"]
+              }
+            }
+            """.trimIndent()
+        )
+
+        assertNotNull(response)
+        assertEquals("ok", response?.getString("result"))
+        assertEquals("b", response?.getJSONArray("sentence_candidates")?.getString(1))
+    }
+
+    @Test
+    fun parseRecognitionResponseBodyReturnsNullWhenResponseFieldIsMissingOrNotObject() {
+        assertNull(parseRecognitionResponseBody("""{"foo":1}"""))
+        assertNull(parseRecognitionResponseBody("""{"response":"bad"}"""))
     }
 
     @Test
@@ -244,5 +330,30 @@ class ApiWrapperHelpersTest {
 
         assertTrue(result)
         assertEquals("https://backend/api/transfer", called)
+    }
+
+    private class FakeHttpURLConnection : HttpURLConnection(URL("http://localhost")) {
+        val properties = linkedMapOf<String, String>()
+        private val output = java.io.ByteArrayOutputStream()
+
+        override fun setRequestProperty(key: String?, value: String?) {
+            if (key != null && value != null) {
+                properties[key] = value
+            }
+        }
+
+        override fun getOutputStream(): OutputStream = output
+
+        fun outputAsString(): String = output.toString(Charsets.UTF_8.name())
+
+        override fun disconnect() = Unit
+        override fun usingProxy(): Boolean = false
+        override fun connect() = Unit
+        override fun setRequestMethod(method: String?) {
+            this.method = method
+        }
+        override fun getInputStream() = throw UnsupportedOperationException()
+        override fun getResponseCode(): Int = 200
+        override fun getResponseMessage(): String = "OK"
     }
 }

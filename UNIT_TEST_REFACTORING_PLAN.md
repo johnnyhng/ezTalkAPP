@@ -434,6 +434,21 @@ Status:
 - `ApiKt` line coverage increased from `133` covered lines to `160`
 - filtered `core logic` line coverage increased from about `45.02%` (`352 / 782`) to about `50.20%` (`379 / 755`)
 
+### Batch M: Consolidate request writing and response parsing in `Api.kt`
+
+Status:
+
+- completed
+- extracted shared helpers for:
+  - JSON request serialization
+  - upload-plan writing to `HttpURLConnection`
+  - stream text reading
+  - recognition response parsing
+- rewired `postProcessAudio`, `putForUpdates`, `postTransfer`, and `postForRecognition` to use those helpers instead of repeating inline request/response code
+- added JVM tests for the new helpers with a fake `HttpURLConnection`
+- `ApiKt` line coverage increased from `160` covered lines to `182`
+- filtered `core logic` line coverage increased from about `50.20%` (`379 / 755`) to about `55.39%` (`401 / 724`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
