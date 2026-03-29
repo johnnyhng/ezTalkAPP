@@ -18,6 +18,11 @@ internal enum class FeedbackRoute {
     POST_TRANSFER
 }
 
+internal sealed class UploadRequestPlan {
+    data class Json(val payload: JSONObject) : UploadRequestPlan()
+    data class Multipart(val file: File, val payload: JSONObject) : UploadRequestPlan()
+}
+
 
 /**
  * Reads a WAV file and returns its content as a JSONArray of bytes.
@@ -172,6 +177,84 @@ internal fun buildUpdatePayload(
     }
 }
 
+internal fun isSuccessfulResponse(responseCode: Int): Boolean {
+    return responseCode == HttpURLConnection.HTTP_OK
+}
+
+internal fun buildProcessAudioRequestPlan(
+    filePath: String,
+    userId: String,
+    metadata: JSONObject? = null,
+    sendFileByJson: Boolean,
+    rawReader: (String) -> JSONArray? = ::readWavFileToJsonArray
+): UploadRequestPlan? {
+    return if (sendFileByJson) {
+        UploadRequestPlan.Json(
+            buildProcessAudioPayload(
+                filePath = filePath,
+                userId = userId,
+                metadata = metadata,
+                raw = rawReader(filePath)
+            )
+        )
+    } else {
+        val file = File(filePath)
+        if (!file.exists()) return null
+        UploadRequestPlan.Multipart(
+            file = file,
+            payload = buildProcessAudioPayload(
+                filePath = filePath,
+                userId = userId,
+                metadata = metadata
+            )
+        )
+    }
+}
+
+internal fun buildTransferRequestPlan(
+    filePath: String,
+    userId: String,
+    sendFileByJson: Boolean,
+    uploadJsonBuilder: (String, String) -> JSONObject? = ::packageUploadJson,
+    metadataBuilder: (String, String) -> JSONObject? = ::packageUploadJsonMetadata
+): UploadRequestPlan? {
+    return if (sendFileByJson) {
+        uploadJsonBuilder(filePath, userId)?.let(UploadRequestPlan::Json)
+    } else {
+        val metadata = metadataBuilder(filePath, userId) ?: return null
+        val file = File(filePath)
+        if (!file.exists()) return null
+        UploadRequestPlan.Multipart(file = file, payload = metadata)
+    }
+}
+
+internal fun buildRecognitionRequestPlan(
+    filePath: String,
+    userId: String,
+    sendFileByJson: Boolean,
+    rawReader: (String) -> JSONArray? = ::readWavFileToJsonArray
+): UploadRequestPlan? {
+    return if (sendFileByJson) {
+        UploadRequestPlan.Json(
+            buildRecognitionPayload(
+                filePath = filePath,
+                userId = userId,
+                raw = rawReader(filePath)
+            )
+        )
+    } else {
+        val file = File(filePath)
+        if (!file.exists()) return null
+        UploadRequestPlan.Multipart(
+            file = file,
+            payload = buildRecognitionPayload(
+                filePath = filePath,
+                userId = userId
+            )
+        )
+    }
+}
+
 /**
  * Packages a WAV file and its metadata into a JSON object for uploading.
  *
@@ -239,66 +322,62 @@ fun postProcessAudio(
         connection.connectTimeout = 15000
         connection.readTimeout = 15000
 
-        if (sendFileByJson) {
-            val jsonPayload = buildProcessAudioPayload(
-                filePath = filePath,
-                userId = userId,
-                metadata = metadata,
-                raw = readWavFileToJsonArray(filePath)
-            )
-
+        when (val plan = buildProcessAudioRequestPlan(
+            filePath = filePath,
+            userId = userId,
+            metadata = metadata,
+            sendFileByJson = sendFileByJson
+        )) {
+            is UploadRequestPlan.Json -> {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.outputStream.use { os ->
-                val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
+                    val input = plan.payload.toString().toByteArray(Charsets.UTF_8)
                 os.write(input, 0, input.size)
             }
-        } else {
-            val file = File(filePath)
-            if (!file.exists()) {
+            }
+            is UploadRequestPlan.Multipart -> {
+                val file = plan.file
+                val jsonPayload = plan.payload
+                val boundary = "Boundary-${System.currentTimeMillis()}"
+                connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+                DataOutputStream(connection.outputStream).use { dos ->
+                    val lineEnd = "\r\n"
+                    val twoHyphens = "--"
+
+                    dos.writeBytes(twoHyphens + boundary + lineEnd)
+                    dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
+                    dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
+                    dos.writeBytes(lineEnd)
+                    dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
+                    dos.writeBytes(lineEnd)
+
+                    dos.writeBytes(twoHyphens + boundary + lineEnd)
+                    dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
+                    dos.writeBytes("Content-Type: audio/wav$lineEnd")
+                    dos.writeBytes(lineEnd)
+
+                    FileInputStream(file).use { fis ->
+                        val buffer = ByteArray(4096)
+                        var bytesRead: Int
+                        while (fis.read(buffer).also { bytesRead = it } != -1) {
+                            dos.write(buffer, 0, bytesRead)
+                        }
+                    }
+                    dos.writeBytes(lineEnd)
+
+                    dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+                }
+            }
+            null -> {
                 Log.e(TAG, "File not found for upload: $filePath")
                 return false
-            }
-
-            val boundary = "Boundary-${System.currentTimeMillis()}"
-            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-            val jsonPayload = buildProcessAudioPayload(
-                filePath = filePath,
-                userId = userId,
-                metadata = metadata
-            )
-
-            DataOutputStream(connection.outputStream).use { dos ->
-                val lineEnd = "\r\n"
-                val twoHyphens = "--"
-
-                dos.writeBytes(twoHyphens + boundary + lineEnd)
-                dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
-                dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
-                dos.writeBytes(lineEnd)
-                dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
-                dos.writeBytes(lineEnd)
-
-                dos.writeBytes(twoHyphens + boundary + lineEnd)
-                dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
-                dos.writeBytes("Content-Type: audio/wav$lineEnd")
-                dos.writeBytes(lineEnd)
-
-                FileInputStream(file).use { fis ->
-                    val buffer = ByteArray(4096)
-                    var bytesRead: Int
-                    while (fis.read(buffer).also { bytesRead = it } != -1) {
-                        dos.write(buffer, 0, bytesRead)
-                    }
-                }
-                dos.writeBytes(lineEnd)
-
-                dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
             }
         }
 
         val responseCode = connection.responseCode
-        if (responseCode == HttpURLConnection.HTTP_OK) {
+        if (isSuccessfulResponse(responseCode)) {
             Log.d(TAG, "postProcessAudio: success, responseCode=$responseCode")
             true
         } else {
@@ -348,7 +427,7 @@ fun putForUpdates(
         }
 
         val responseCode = connection.responseCode
-        if (responseCode == HttpURLConnection.HTTP_OK) {
+        if (isSuccessfulResponse(responseCode)) {
             Log.d(TAG, "putForUpdates: success, responseCode=$responseCode")
             true
         } else {
@@ -384,68 +463,63 @@ fun postTransfer(
         connection.connectTimeout = 5000 // 5 seconds
         connection.readTimeout = 5000 // 5 seconds
 
-        if (sendFileByJson) {
-            val jsonPayload = packageUploadJson(filePath, userId)
-            if (jsonPayload == null) {
-                Log.e(TAG, "Failed to create JSON payload for $filePath")
-                return false
-            }
-
+        when (val plan = buildTransferRequestPlan(
+            filePath = filePath,
+            userId = userId,
+            sendFileByJson = sendFileByJson
+        )) {
+            is UploadRequestPlan.Json -> {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.outputStream.use { os ->
-                val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
+                    val input = plan.payload.toString().toByteArray(Charsets.UTF_8)
                 os.write(input, 0, input.size)
             }
-        } else {
-            val metadata = packageUploadJsonMetadata(filePath, userId)
-            if (metadata == null) {
+            }
+            is UploadRequestPlan.Multipart -> {
+                val metadata = plan.payload
+                val file = plan.file
+                val boundary = "Boundary-${System.currentTimeMillis()}"
+                connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+                DataOutputStream(connection.outputStream).use { dos ->
+                    val lineEnd = "\r\n"
+                    val twoHyphens = "--"
+
+                    // Part 1: JSON metadata
+                    dos.writeBytes(twoHyphens + boundary + lineEnd)
+                    dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
+                    dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
+                    dos.writeBytes(lineEnd)
+                    dos.write(metadata.toString().toByteArray(Charsets.UTF_8))
+                    dos.writeBytes(lineEnd)
+
+                    // Part 2: File
+                    dos.writeBytes(twoHyphens + boundary + lineEnd)
+                    dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
+                    dos.writeBytes("Content-Type: audio/wav$lineEnd")
+                    dos.writeBytes(lineEnd)
+
+                    FileInputStream(file).use { fis ->
+                        val buffer = ByteArray(4096)
+                        var bytesRead: Int
+                        while (fis.read(buffer).also { bytesRead = it } != -1) {
+                            dos.write(buffer, 0, bytesRead)
+                        }
+                    }
+                    dos.writeBytes(lineEnd)
+
+                    dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+                }
+            }
+            null -> {
                 Log.e(TAG, "Failed to create metadata for $filePath")
                 return false
-            }
-            val file = File(filePath)
-            if (!file.exists()) {
-                Log.e(TAG, "File not found for upload: $filePath")
-                return false
-            }
-
-            val boundary = "Boundary-${System.currentTimeMillis()}"
-            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-
-            DataOutputStream(connection.outputStream).use { dos ->
-                val lineEnd = "\r\n"
-                val twoHyphens = "--"
-
-                // Part 1: JSON metadata
-                dos.writeBytes(twoHyphens + boundary + lineEnd)
-                dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
-                dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
-                dos.writeBytes(lineEnd)
-                dos.write(metadata.toString().toByteArray(Charsets.UTF_8))
-                dos.writeBytes(lineEnd)
-
-                // Part 2: File
-                dos.writeBytes(twoHyphens + boundary + lineEnd)
-                dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
-                dos.writeBytes("Content-Type: audio/wav$lineEnd")
-                dos.writeBytes(lineEnd)
-
-                FileInputStream(file).use { fis ->
-                    val buffer = ByteArray(4096)
-                    var bytesRead: Int
-                    while (fis.read(buffer).also { bytesRead = it } != -1) {
-                        dos.write(buffer, 0, bytesRead)
-                    }
-                }
-                dos.writeBytes(lineEnd)
-
-                // End of multipart
-                dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
             }
         }
 
         val responseCode = connection.responseCode
-        if (responseCode == HttpURLConnection.HTTP_OK) {
+        if (isSuccessfulResponse(responseCode)) {
             Log.d(TAG, "postTransfer: success, responseCode=$responseCode")
             true
         } else {
@@ -477,68 +551,64 @@ fun postForRecognition(
         connection.connectTimeout = 15000 // 15 seconds
         connection.readTimeout = 15000 // 15 seconds
 
-        if (sendFileByJson) {
-            val jsonPayload = buildRecognitionPayload(
-                filePath = filePath,
-                userId = userId,
-                raw = readWavFileToJsonArray(filePath)
-            )
-
+        when (val plan = buildRecognitionRequestPlan(
+            filePath = filePath,
+            userId = userId,
+            sendFileByJson = sendFileByJson
+        )) {
+            is UploadRequestPlan.Json -> {
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
             connection.outputStream.use { os ->
-                val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
+                    val input = plan.payload.toString().toByteArray(Charsets.UTF_8)
                 os.write(input, 0, input.size)
             }
-        } else {
-            val file = File(filePath)
-            if (!file.exists()) {
+            }
+            is UploadRequestPlan.Multipart -> {
+                val file = plan.file
+                val jsonPayload = plan.payload
+                val boundary = "Boundary-${System.currentTimeMillis()}"
+                connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+                DataOutputStream(connection.outputStream).use { dos ->
+                    val lineEnd = "\r\n"
+                    val twoHyphens = "--"
+
+                    // Part 1: JSON metadata
+                    dos.writeBytes(twoHyphens + boundary + lineEnd)
+                    dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
+                    dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
+                    dos.writeBytes(lineEnd)
+                    dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
+                    dos.writeBytes(lineEnd)
+
+                    // Part 2: File
+                    dos.writeBytes(twoHyphens + boundary + lineEnd)
+                    dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
+                    dos.writeBytes("Content-Type: audio/wav$lineEnd")
+                    dos.writeBytes(lineEnd)
+
+                    FileInputStream(file).use { fis ->
+                        val buffer = ByteArray(4096)
+                        var bytesRead: Int
+                        while (fis.read(buffer).also { bytesRead = it } != -1) {
+                            dos.write(buffer, 0, bytesRead)
+                        }
+                    }
+                    dos.writeBytes(lineEnd)
+
+                    // End of multipart
+                    dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+                }
+            }
+            null -> {
                 Log.e(TAG, "File not found for upload: $filePath")
                 return null
-            }
-
-            val jsonPayload = buildRecognitionPayload(
-                filePath = filePath,
-                userId = userId
-            )
-
-            val boundary = "Boundary-${System.currentTimeMillis()}"
-            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-
-            DataOutputStream(connection.outputStream).use { dos ->
-                val lineEnd = "\r\n"
-                val twoHyphens = "--"
-
-                // Part 1: JSON metadata
-                dos.writeBytes(twoHyphens + boundary + lineEnd)
-                dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
-                dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
-                dos.writeBytes(lineEnd)
-                dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
-                dos.writeBytes(lineEnd)
-
-                // Part 2: File
-                dos.writeBytes(twoHyphens + boundary + lineEnd)
-                dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
-                dos.writeBytes("Content-Type: audio/wav$lineEnd")
-                dos.writeBytes(lineEnd)
-
-                FileInputStream(file).use { fis ->
-                    val buffer = ByteArray(4096)
-                    var bytesRead: Int
-                    while (fis.read(buffer).also { bytesRead = it } != -1) {
-                        dos.write(buffer, 0, bytesRead)
-                    }
-                }
-                dos.writeBytes(lineEnd)
-
-                // End of multipart
-                dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
             }
         }
 
         val responseCode = connection.responseCode
-        if (responseCode == HttpURLConnection.HTTP_OK) {
+        if (isSuccessfulResponse(responseCode)) {
             val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
             val jsonResponse = JSONObject(responseBody)
             jsonResponse.opt("response")

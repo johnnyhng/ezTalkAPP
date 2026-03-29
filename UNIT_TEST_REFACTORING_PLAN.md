@@ -357,6 +357,22 @@ This coverage plan is complete when all of the following are true:
 - the 80% gate is enforced in Gradle for the selected scope
 - full-module coverage is still reported, but not used as the short-term acceptance gate
 
+## Follow-up batches after initial 18-step rollout
+
+### Batch G: Raise `Api.kt` wrapper coverage
+
+Status:
+
+- completed
+- network wrapper preparation was extracted into pure request-plan helpers for:
+  - `postProcessAudio`
+  - `postTransfer`
+  - `postForRecognition`
+- HTTP success classification was also extracted into a pure helper
+- this made the outer wrapper behavior testable without real network calls
+- `ApiKt` line coverage increased from `51` covered lines to `94`
+- filtered `core logic` line coverage increased from about `37.32%` (`262 / 702`) to about `41.21%` (`305 / 740`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
