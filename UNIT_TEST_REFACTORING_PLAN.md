@@ -220,6 +220,99 @@ Why third:
 
 Target cases:
 
+- moving forward consumes the current prompt and updates queue/history correctly
+- moving backward restores the last prompt without corrupting current state
+- retry/skip paths keep queue order stable
+- empty queue and boundary conditions fail safely
+
+Why fourth:
+
+- this logic is stateful but mostly pure after extraction
+- regressions here are subtle and annoying for users
+
+## Coverage target reset
+
+After adding `Jacoco`, the first full-module report showed that the current top-line number is not a useful engineering target:
+
+- full `app` module line coverage is about 4%
+- this number is dominated by large untested areas such as `com.k2fsa.sherpa.onnx`, Android-heavy screens, and framework glue
+
+Trying to force the entire module to 80% now would create a lot of low-value tests and still leave the code hard to maintain.
+
+The correct target is:
+
+- core logic coverage >= 80%
+- full module coverage improves gradually, but is not the primary gate yet
+
+## What counts toward the 80% goal
+
+The 80% goal should apply to the code that holds product logic and refactoring risk:
+
+- [Api.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/Api.kt)
+- [RecognitionUtils.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/RecognitionUtils.kt)
+- [WavUtil.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/WavUtil.kt)
+- [TranscriptWorkflow.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/workflow/TranscriptWorkflow.kt)
+- [DataCollectQueue.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/datacollect/DataCollectQueue.kt)
+- [SettingsManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/SettingsManager.kt) if it remains an active configuration seam
+
+The 80% goal should not initially include:
+
+- `com.k2fsa.sherpa.onnx/*`
+- generated code such as `R`, `BuildConfig`, manifests
+- Compose screen bodies
+- Android framework callback glue
+- native/audio/player/TTS boundary code that has not been isolated yet
+
+## Coverage execution plan
+
+### Batch A: Fix the metric first
+
+- update Jacoco excludes so the report separates `core logic` from `full module`
+- keep the full-module report for visibility
+- add a second report or filtered class set for the 80% target
+
+Expected outcome:
+
+- coverage numbers become interpretable
+- the team stops optimizing for a misleading global percentage
+
+### Batch B: Raise `Api.kt` coverage
+
+- add tests for request payload variants
+- add tests for error paths and fallback behavior
+- cover candidate merge edge cases and missing-field handling
+
+### Batch C: Raise `RecognitionUtils.kt` coverage
+
+- cover cache hit/miss, malformed responses, write-back preservation, and failure paths
+- focus on branch coverage, not only happy paths
+
+### Batch D: Raise `WavUtil.kt` coverage
+
+- expand JSONL round-trip cases
+- add overwrite, empty-field, malformed-content, and missing-file scenarios
+
+### Batch E: Complete reducer coverage
+
+- finish transition matrix tests for `TranscriptWorkflow.kt`
+- finish queue edge-case tests for `DataCollectQueue.kt`
+
+### Batch F: Close configuration gaps
+
+- expand `SettingsManager` coverage
+- add a Jacoco verification gate for the selected core-logic scope
+
+## Success criteria
+
+This coverage plan is complete when all of the following are true:
+
+- a filtered `core logic` Jacoco report exists
+- the filtered report reaches at least 80% line coverage
+- the 80% gate is enforced in Gradle for the selected scope
+- full-module coverage is still reported, but not used as the short-term acceptance gate
+
+Target cases:
+
 - importing lines creates the right current text + queue
 - `moveToNext()` updates remaining/previous counts correctly
 - `moveToPrevious()` restores the previous item correctly
