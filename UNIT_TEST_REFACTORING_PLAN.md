@@ -478,6 +478,20 @@ Status:
 - `ApiKt` line coverage increased from `207` covered lines to `226`
 - filtered `core logic` line coverage increased from about `57.41%` (`426 / 742`) to about `58.32%` (`445 / 763`)
 
+### Batch P: Raise `WavUtil` and `RecognitionUtils` coverage without production edits
+
+Status:
+
+- completed
+- added JVM-only tests, with no production code changes, for:
+  - `WavUtil.readWavFileToFloatArray(...)` valid-file success path
+  - private `writeWavHeader(...)` via reflection
+  - `RecognitionUtils.getRemoteCandidates(...)` blank-url outer branch
+- this batch intentionally avoided `saveAsWav(...)` / `saveJsonl(...)` wrapper tests because those paths still depend on Android `Log` behavior that does not credit cleanly in plain JVM coverage
+- `WavUtilKt` line coverage increased from `94` covered lines to `108`
+- `RecognitionUtilsKt` line coverage increased from `47` covered lines to `51`
+- filtered `core logic` line coverage increased from about `58.32%` (`445 / 763`) to about `60.67%` (`463 / 763`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
