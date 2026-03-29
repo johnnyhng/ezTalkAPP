@@ -61,6 +61,17 @@ class ApiWrapperHelpersTest {
     }
 
     @Test
+    fun buildUploadJsonMetadataUsesDefaultRemoteCandidatesWhenOmitted() {
+        val metadata = buildUploadJsonMetadata(
+            filename = "sample.wav",
+            userId = "tester@example.com",
+            label = "confirmed text"
+        )
+
+        assertEquals(0, metadata.getJSONArray("remote_candidates").length())
+    }
+
+    @Test
     fun parseUploadMetadataSnapshotExtractsModifiedTextAndRemoteCandidates() {
         val snapshot = parseUploadMetadataSnapshot(
             """

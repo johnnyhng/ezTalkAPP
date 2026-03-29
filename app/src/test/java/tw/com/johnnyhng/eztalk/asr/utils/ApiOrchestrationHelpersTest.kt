@@ -5,6 +5,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import tw.com.johnnyhng.eztalk.asr.fixtures.TestFixtures
 import java.io.File
@@ -100,6 +101,32 @@ class ApiOrchestrationHelpersTest {
     }
 
     @Test
+    fun packageUploadJsonReturnsCombinedObjectWhenInjectedLoadersSucceed() {
+        val result = packageUploadJson(
+            path = "/tmp/sample.wav",
+            userId = "tester@example.com",
+            metadataLoader = { _, _ -> JSONObject().apply { put("label", "confirmed") } },
+            rawLoader = { JSONArray().apply { put(1); put(2) } }
+        )
+
+        assertNotNull(result)
+        assertEquals("confirmed", result?.getString("label"))
+        assertEquals(2, result?.getJSONArray("raw")?.length())
+    }
+
+    @Test
+    fun packageUploadJsonReturnsNullWhenInjectedLoadersFail() {
+        val result = packageUploadJson(
+            path = "/tmp/sample.wav",
+            userId = "tester@example.com",
+            metadataLoader = { _, _ -> null },
+            rawLoader = { JSONArray().apply { put(1) } }
+        )
+
+        assertNull(result)
+    }
+
+    @Test
     fun buildFeedbackExecutionReadsJsonlPathAndChoosesDispatchRoute() {
         var requestedPath = ""
 
@@ -119,5 +146,88 @@ class ApiOrchestrationHelpersTest {
         assertEquals("/tmp/sample.jsonl", requestedPath)
         assertEquals(FeedbackRoute.POST_PROCESS_AUDIO, execution.dispatchPlan.route)
         assertEquals("https://recognition.example.com/process_audio", execution.dispatchPlan.endpoint)
+    }
+
+    @Test
+    fun dispatchFeedbackExecutionDispatchesToInjectedUpdatesTransport() {
+        var called = ""
+
+        val result = dispatchFeedbackExecution(
+            execution = buildFeedbackExecution(
+                backendUrl = "https://backend.example.com",
+                recognitionUrl = "https://recognition.example.com/process_audio",
+                filePath = "/tmp/sample.wav",
+                metadataReader = {
+                    JSONObject().apply {
+                        put("remote_candidates", JSONArray().apply { put("r1") })
+                    }
+                }
+            ),
+            filePath = "/tmp/sample.wav",
+            userId = "tester@example.com",
+            putUpdates = { endpoint, _, _, _ ->
+                called = endpoint
+                true
+            },
+            postProcessAudioBlock = { _, _, _, _ -> false },
+            postTransferBlock = { _, _, _ -> false }
+        )
+
+        assertTrue(result)
+        assertEquals("https://backend.example.com/api/updates", called)
+    }
+
+    @Test
+    fun dispatchFeedbackExecutionDispatchesToInjectedRecognitionTransport() {
+        var called = ""
+
+        val result = dispatchFeedbackExecution(
+            execution = buildFeedbackExecution(
+                backendUrl = "https://backend.example.com",
+                recognitionUrl = "https://recognition.example.com/process_audio",
+                filePath = "/tmp/sample.wav",
+                metadataReader = {
+                    JSONObject().apply {
+                        put("local_candidates", JSONArray().apply { put("l1") })
+                    }
+                }
+            ),
+            filePath = "/tmp/sample.wav",
+            userId = "tester@example.com",
+            putUpdates = { _, _, _, _ -> false },
+            postProcessAudioBlock = { endpoint, _, _, _ ->
+                called = endpoint
+                true
+            },
+            postTransferBlock = { _, _, _ -> false }
+        )
+
+        assertTrue(result)
+        assertEquals("https://recognition.example.com/process_audio", called)
+    }
+
+    @Test
+    fun dispatchFeedbackExecutionDispatchesToInjectedTransferTransport() {
+        var called = ""
+
+        val result = dispatchFeedbackExecution(
+            execution = buildFeedbackExecution(
+                backendUrl = "https://backend.example.com",
+                recognitionUrl = "",
+                filePath = "/tmp/sample.wav",
+                metadataReader = { null }
+            ),
+            filePath = "/tmp/sample.wav",
+            userId = "tester@example.com",
+            putUpdates = { _, _, _, _ -> false },
+            postProcessAudioBlock = { _, _, _, _ -> false },
+            postTransferBlock = { endpoint, _, _ ->
+                called = endpoint
+                true
+            }
+        )
+
+        assertTrue(result)
+        assertEquals("https://backend.example.com/api/transfer", called)
     }
 }

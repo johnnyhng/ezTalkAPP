@@ -76,6 +76,19 @@ class ApiRequestPayloadTest {
         assertEquals(0, label.getJSONArray("candidates").length())
     }
 
+    @Test
+    fun buildUpdatePayloadUsesDefaultNullMetadataWhenOmitted() {
+        val payload = buildUpdatePayload(
+            filePath = "/tmp/sample.wav",
+            userId = "tester@example.com"
+        )
+
+        assertEquals("", payload.getString("sentence"))
+        val moved = payload.getJSONArray("streamFilesMove").getJSONObject(0)
+        val label = moved.getJSONObject("sample.wav")
+        assertEquals("", label.getString("modified"))
+    }
+
     private fun JSONArray.toIntList(): List<Int> =
         List(length()) { index -> getInt(index) }
 

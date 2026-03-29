@@ -455,11 +455,25 @@ internal fun buildRecognitionRequestPlan(
  * @return A JSONObject ready for upload, or null on error.
  */
 fun packageUploadJson(path: String, userId: String): JSONObject? {
-    val packaged = buildUploadPackage(
+    return packageUploadJson(
         path = path,
         userId = userId,
         metadataLoader = ::packageUploadJsonMetadata,
         rawLoader = ::readWavFileToJsonArray
+    )
+}
+
+internal fun packageUploadJson(
+    path: String,
+    userId: String,
+    metadataLoader: (String, String) -> JSONObject?,
+    rawLoader: (String) -> JSONArray?
+): JSONObject? {
+    val packaged = buildUploadPackage(
+        path = path,
+        userId = userId,
+        metadataLoader = metadataLoader,
+        rawLoader = rawLoader
     ) ?: return null
     return combineUploadJson(packaged.metadata, packaged.raw)
 }
@@ -497,11 +511,33 @@ fun feedbackToBackend(
     filePath: String,
     userId: String
 ): Boolean {
+    return executeFeedbackToBackend(
+        backendUrl = backendUrl,
+        recognitionUrl = recognitionUrl,
+        filePath = filePath,
+        userId = userId,
+        metadataReader = ::readJsonl,
+        putUpdates = ::putForUpdates,
+        postProcessAudioBlock = ::postProcessAudio,
+        postTransferBlock = ::postTransfer
+    )
+}
+
+internal fun executeFeedbackToBackend(
+    backendUrl: String,
+    recognitionUrl: String,
+    filePath: String,
+    userId: String,
+    metadataReader: (String) -> JSONObject?,
+    putUpdates: (String, String, String, JSONObject?) -> Boolean,
+    postProcessAudioBlock: (String, String, String, JSONObject?) -> Boolean,
+    postTransferBlock: (String, String, String) -> Boolean
+): Boolean {
     val execution = buildFeedbackExecution(
         backendUrl = backendUrl,
         recognitionUrl = recognitionUrl,
         filePath = filePath,
-        metadataReader = ::readJsonl
+        metadataReader = metadataReader
     )
 
     Log.d(
@@ -509,22 +545,21 @@ fun feedbackToBackend(
         "feedbackToBackend: filePath=$filePath, jsonlPath=${execution.jsonlPath}, route=${execution.dispatchPlan.route}"
     )
 
-    return executeFeedbackDispatch(
-        dispatchPlan = execution.dispatchPlan,
+    return dispatchFeedbackExecution(
+        execution = execution,
         filePath = filePath,
         userId = userId,
-        metadata = execution.metadata,
         putUpdates = { endpoint, path, id, data ->
             Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
-            putForUpdates(endpoint, path, id, data)
+            putUpdates(endpoint, path, id, data)
         },
-        postProcessAudio = { endpoint, path, id, data ->
+        postProcessAudioBlock = { endpoint, path, id, data ->
             Log.d(TAG, "feedbackToBackend: using POST process_audio")
-            postProcessAudio(endpoint, path, id, data)
+            postProcessAudioBlock(endpoint, path, id, data)
         },
-        postTransfer = { endpoint, path, id ->
+        postTransferBlock = { endpoint, path, id ->
             Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
-            postTransfer(endpoint, path, id)
+            postTransferBlock(endpoint, path, id)
         }
     )
 }
@@ -546,6 +581,25 @@ internal fun buildFeedbackExecution(
         jsonlPath = jsonlPath,
         metadata = metadata,
         dispatchPlan = dispatchPlan
+    )
+}
+
+internal fun dispatchFeedbackExecution(
+    execution: FeedbackExecution,
+    filePath: String,
+    userId: String,
+    putUpdates: (String, String, String, JSONObject?) -> Boolean,
+    postProcessAudioBlock: (String, String, String, JSONObject?) -> Boolean,
+    postTransferBlock: (String, String, String) -> Boolean
+): Boolean {
+    return executeFeedbackDispatch(
+        dispatchPlan = execution.dispatchPlan,
+        filePath = filePath,
+        userId = userId,
+        metadata = execution.metadata,
+        putUpdates = putUpdates,
+        postProcessAudio = postProcessAudioBlock,
+        postTransfer = postTransferBlock
     )
 }
 

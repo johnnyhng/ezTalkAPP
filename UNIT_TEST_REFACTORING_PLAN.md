@@ -465,6 +465,19 @@ Status:
 - `ApiKt` line coverage increased from `182` covered lines to `207`
 - filtered `core logic` line coverage increased from about `55.39%` (`401 / 724`) to about `57.41%` (`426 / 742`)
 
+### Batch O: Cover `Api.kt` default wrappers and dispatch seams
+
+Status:
+
+- completed
+- extracted a no-log `dispatchFeedbackExecution(...)` seam so feedback dispatch can be unit tested without Robolectric logging dependencies
+- added JVM tests for:
+  - `packageUploadJson(...)` with injected loaders
+  - `dispatchFeedbackExecution(...)` for update / recognition / transfer routes
+  - default-argument paths for `buildUploadJsonMetadata(...)` and `buildUpdatePayload(...)`
+- `ApiKt` line coverage increased from `207` covered lines to `226`
+- filtered `core logic` line coverage increased from about `57.41%` (`426 / 742`) to about `58.32%` (`445 / 763`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
