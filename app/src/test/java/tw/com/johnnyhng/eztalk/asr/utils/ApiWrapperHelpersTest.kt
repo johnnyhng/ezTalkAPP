@@ -7,6 +7,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import tw.com.johnnyhng.eztalk.asr.fixtures.TestFixtures
+import java.io.File
 
 class ApiWrapperHelpersTest {
     @Test
@@ -91,6 +93,26 @@ class ApiWrapperHelpersTest {
         assertNotNull(packaged)
         assertEquals("confirmed", packaged?.metadata?.getString("label"))
         assertEquals(2, packaged?.raw?.length())
+    }
+
+    @Test
+    fun buildMultipartRequestContentBuildsMultipartHeadersAndPayload() {
+        val file = File(TestFixtures.tempDir("multipart-content"), "sample.wav").apply {
+            writeBytes(ByteArray(48) { index -> index.toByte() })
+        }
+        val content = buildMultipartRequestContent(
+            jsonPayload = JSONObject().apply { put("label", "confirmed") },
+            file = file,
+            boundary = "Boundary-test"
+        )
+        val body = String(content.body, Charsets.UTF_8)
+
+        assertEquals("multipart/form-data; boundary=Boundary-test", content.contentType)
+        assertTrue(body.contains("name=\"json\""))
+        assertTrue(body.contains("\"label\":\"confirmed\""))
+        assertTrue(body.contains("filename=\"sample.wav\""))
+        assertTrue(body.contains("Content-Type: audio/wav"))
+        assertTrue(body.contains("--Boundary-test--"))
     }
 
     @Test

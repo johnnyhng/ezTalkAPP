@@ -5,6 +5,7 @@ import tw.com.johnnyhng.eztalk.asr.TAG
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.DataOutputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
@@ -36,6 +37,11 @@ internal data class PackagedUploadJson(
 internal data class UploadMetadataSnapshot(
     val label: String,
     val remoteCandidates: JSONArray
+)
+
+internal data class MultipartRequestContent(
+    val contentType: String,
+    val body: ByteArray
 )
 
 
@@ -254,6 +260,48 @@ internal fun buildPackagedUploadJson(
     return PackagedUploadJson(metadata = metadata, raw = rawArray)
 }
 
+internal fun buildMultipartRequestContent(
+    jsonPayload: JSONObject,
+    file: File,
+    boundary: String
+): MultipartRequestContent {
+    val body = ByteArrayOutputStream().use { output ->
+        DataOutputStream(output).use { dos ->
+            val lineEnd = "\r\n"
+            val twoHyphens = "--"
+
+            dos.writeBytes(twoHyphens + boundary + lineEnd)
+            dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
+            dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
+            dos.writeBytes(lineEnd)
+            dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
+            dos.writeBytes(lineEnd)
+
+            dos.writeBytes(twoHyphens + boundary + lineEnd)
+            dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"$lineEnd")
+            dos.writeBytes("Content-Type: audio/wav$lineEnd")
+            dos.writeBytes(lineEnd)
+
+            FileInputStream(file).use { fis ->
+                val buffer = ByteArray(4096)
+                var bytesRead: Int
+                while (fis.read(buffer).also { bytesRead = it } != -1) {
+                    dos.write(buffer, 0, bytesRead)
+                }
+            }
+            dos.writeBytes(lineEnd)
+
+            dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+        }
+        output.toByteArray()
+    }
+
+    return MultipartRequestContent(
+        contentType = "multipart/form-data; boundary=$boundary",
+        body = body
+    )
+}
+
 internal fun buildProcessAudioRequestPlan(
     filePath: String,
     userId: String,
@@ -438,34 +486,10 @@ fun postProcessAudio(
                 val file = plan.file
                 val jsonPayload = plan.payload
                 val boundary = "Boundary-${System.currentTimeMillis()}"
-                connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-
-                DataOutputStream(connection.outputStream).use { dos ->
-                    val lineEnd = "\r\n"
-                    val twoHyphens = "--"
-
-                    dos.writeBytes(twoHyphens + boundary + lineEnd)
-                    dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
-                    dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
-                    dos.writeBytes(lineEnd)
-                    dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
-                    dos.writeBytes(lineEnd)
-
-                    dos.writeBytes(twoHyphens + boundary + lineEnd)
-                    dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
-                    dos.writeBytes("Content-Type: audio/wav$lineEnd")
-                    dos.writeBytes(lineEnd)
-
-                    FileInputStream(file).use { fis ->
-                        val buffer = ByteArray(4096)
-                        var bytesRead: Int
-                        while (fis.read(buffer).also { bytesRead = it } != -1) {
-                            dos.write(buffer, 0, bytesRead)
-                        }
-                    }
-                    dos.writeBytes(lineEnd)
-
-                    dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+                val requestContent = buildMultipartRequestContent(jsonPayload, file, boundary)
+                connection.setRequestProperty("Content-Type", requestContent.contentType)
+                connection.outputStream.use { os ->
+                    os.write(requestContent.body)
                 }
             }
             null -> {
@@ -578,36 +602,10 @@ fun postTransfer(
                 val metadata = plan.payload
                 val file = plan.file
                 val boundary = "Boundary-${System.currentTimeMillis()}"
-                connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-
-                DataOutputStream(connection.outputStream).use { dos ->
-                    val lineEnd = "\r\n"
-                    val twoHyphens = "--"
-
-                    // Part 1: JSON metadata
-                    dos.writeBytes(twoHyphens + boundary + lineEnd)
-                    dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
-                    dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
-                    dos.writeBytes(lineEnd)
-                    dos.write(metadata.toString().toByteArray(Charsets.UTF_8))
-                    dos.writeBytes(lineEnd)
-
-                    // Part 2: File
-                    dos.writeBytes(twoHyphens + boundary + lineEnd)
-                    dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
-                    dos.writeBytes("Content-Type: audio/wav$lineEnd")
-                    dos.writeBytes(lineEnd)
-
-                    FileInputStream(file).use { fis ->
-                        val buffer = ByteArray(4096)
-                        var bytesRead: Int
-                        while (fis.read(buffer).also { bytesRead = it } != -1) {
-                            dos.write(buffer, 0, bytesRead)
-                        }
-                    }
-                    dos.writeBytes(lineEnd)
-
-                    dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+                val requestContent = buildMultipartRequestContent(metadata, file, boundary)
+                connection.setRequestProperty("Content-Type", requestContent.contentType)
+                connection.outputStream.use { os ->
+                    os.write(requestContent.body)
                 }
             }
             null -> {
@@ -666,37 +664,10 @@ fun postForRecognition(
                 val file = plan.file
                 val jsonPayload = plan.payload
                 val boundary = "Boundary-${System.currentTimeMillis()}"
-                connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-
-                DataOutputStream(connection.outputStream).use { dos ->
-                    val lineEnd = "\r\n"
-                    val twoHyphens = "--"
-
-                    // Part 1: JSON metadata
-                    dos.writeBytes(twoHyphens + boundary + lineEnd)
-                    dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
-                    dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
-                    dos.writeBytes(lineEnd)
-                    dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
-                    dos.writeBytes(lineEnd)
-
-                    // Part 2: File
-                    dos.writeBytes(twoHyphens + boundary + lineEnd)
-                    dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
-                    dos.writeBytes("Content-Type: audio/wav$lineEnd")
-                    dos.writeBytes(lineEnd)
-
-                    FileInputStream(file).use { fis ->
-                        val buffer = ByteArray(4096)
-                        var bytesRead: Int
-                        while (fis.read(buffer).also { bytesRead = it } != -1) {
-                            dos.write(buffer, 0, bytesRead)
-                        }
-                    }
-                    dos.writeBytes(lineEnd)
-
-                    // End of multipart
-                    dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+                val requestContent = buildMultipartRequestContent(jsonPayload, file, boundary)
+                connection.setRequestProperty("Content-Type", requestContent.contentType)
+                connection.outputStream.use { os ->
+                    os.write(requestContent.body)
                 }
             }
             null -> {

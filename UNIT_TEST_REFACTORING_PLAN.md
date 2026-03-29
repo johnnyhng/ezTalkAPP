@@ -420,6 +420,20 @@ Status:
 - `ApiKt` line coverage increased from `127` covered lines to `133`
 - filtered `core logic` line coverage increased from about `44.48%` (`346 / 778`) to about `45.02%` (`352 / 782`)
 
+### Batch L: Consolidate multipart request building in `Api.kt`
+
+Status:
+
+- completed
+- extracted a shared `buildMultipartRequestContent(...)` helper and rewired:
+  - `postProcessAudio`
+  - `postTransfer`
+  - `postForRecognition`
+- added JVM tests for multipart body construction and Robolectric-backed local HTTP integration tests for the outer wrappers
+- the integration tests are kept for behavior verification even though Jacoco does not currently credit those Robolectric-executed wrapper lines in this project
+- `ApiKt` line coverage increased from `133` covered lines to `160`
+- filtered `core logic` line coverage increased from about `45.02%` (`352 / 782`) to about `50.20%` (`379 / 755`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
