@@ -109,24 +109,125 @@ fun packageUploadJson(path: String, userId: String): JSONObject? {
 
 fun feedbackToBackend(
     backendUrl: String,
+    recognitionUrl: String,
     filePath: String,
     userId: String
 ): Boolean {
     val jsonlPath = filePath.substringBeforeLast(".") + ".jsonl"
     val metadata = readJsonl(jsonlPath)
-    val hasRemoteCandidates = metadata?.optJSONArray("remote_candidates") != null
+    val hasRemoteCandidates = metadata?.optStringList("remote_candidates").orEmpty().isNotEmpty()
+    val hasLocalCandidates = metadata?.optStringList("local_candidates").orEmpty().isNotEmpty()
 
     Log.d(
         TAG,
-        "feedbackToBackend: filePath=$filePath, jsonlPath=$jsonlPath, hasRemoteCandidates=$hasRemoteCandidates"
+        "feedbackToBackend: filePath=$filePath, jsonlPath=$jsonlPath, hasRemoteCandidates=$hasRemoteCandidates, hasLocalCandidates=$hasLocalCandidates"
     )
 
-    return if (hasRemoteCandidates) {
-        Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
-        putForUpdates("$backendUrl/api/updates", filePath, userId, metadata)
-    } else {
-        Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
-        postTransfer("$backendUrl/api/transfer", filePath, userId)
+    return when {
+        hasRemoteCandidates -> {
+            Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
+            putForUpdates("$backendUrl/api/updates", filePath, userId, metadata)
+        }
+        hasLocalCandidates && recognitionUrl.isNotBlank() -> {
+            Log.d(TAG, "feedbackToBackend: using POST process_audio")
+            postProcessAudio(recognitionUrl, filePath, userId, metadata)
+        }
+        else -> {
+            Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
+            postTransfer("$backendUrl/api/transfer", filePath, userId)
+        }
+    }
+}
+
+fun postProcessAudio(
+    processAudioUrl: String,
+    filePath: String,
+    userId: String,
+    metadata: JSONObject? = null,
+    sendFileByJson: Boolean = true
+): Boolean {
+    return try {
+        Log.d(
+            TAG,
+            "postProcessAudio: url=$processAudioUrl, filePath=$filePath, sendFileByJson=$sendFileByJson"
+        )
+        val url = URL(processAudioUrl)
+        val connection = url.openConnection() as HttpURLConnection
+        val hostnameVerifier = HostnameVerifier { _, _ -> true }
+        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
+
+        connection.requestMethod = "POST"
+        connection.doOutput = true
+        connection.connectTimeout = 15000
+        connection.readTimeout = 15000
+
+        val jsonPayload = JSONObject()
+        jsonPayload.put("login_user", userId.split("@")[0])
+        jsonPayload.put("filename", filePath.substringAfterLast("/"))
+        jsonPayload.put("label", metadata?.optString("modified") ?: "tmp")
+        jsonPayload.put("num_of_stn", 8)
+
+        if (sendFileByJson) {
+            jsonPayload.put("raw", readWavFileToJsonArray(filePath))
+
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.outputStream.use { os ->
+                val input = jsonPayload.toString().toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+        } else {
+            val file = File(filePath)
+            if (!file.exists()) {
+                Log.e(TAG, "File not found for upload: $filePath")
+                return false
+            }
+
+            val boundary = "Boundary-${System.currentTimeMillis()}"
+            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+            DataOutputStream(connection.outputStream).use { dos ->
+                val lineEnd = "\r\n"
+                val twoHyphens = "--"
+
+                dos.writeBytes(twoHyphens + boundary + lineEnd)
+                dos.writeBytes("Content-Disposition: form-data; name=\"json\"$lineEnd")
+                dos.writeBytes("Content-Type: application/json; charset=UTF-8$lineEnd")
+                dos.writeBytes(lineEnd)
+                dos.write(jsonPayload.toString().toByteArray(Charsets.UTF_8))
+                dos.writeBytes(lineEnd)
+
+                dos.writeBytes(twoHyphens + boundary + lineEnd)
+                dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"" + lineEnd)
+                dos.writeBytes("Content-Type: audio/wav$lineEnd")
+                dos.writeBytes(lineEnd)
+
+                FileInputStream(file).use { fis ->
+                    val buffer = ByteArray(4096)
+                    var bytesRead: Int
+                    while (fis.read(buffer).also { bytesRead = it } != -1) {
+                        dos.write(buffer, 0, bytesRead)
+                    }
+                }
+                dos.writeBytes(lineEnd)
+
+                dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+            }
+        }
+
+        val responseCode = connection.responseCode
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            Log.d(TAG, "postProcessAudio: success, responseCode=$responseCode")
+            true
+        } else {
+            Log.e(TAG, "process_audio post failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            val errorStream = connection.errorStream?.bufferedReader()?.readText()
+            Log.e(TAG, "Error body: $errorStream")
+            false
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Exception during process_audio post", e)
+        false
     }
 }
 
