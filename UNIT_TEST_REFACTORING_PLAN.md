@@ -326,6 +326,13 @@ Status:
 - finish transition matrix tests for `TranscriptWorkflow.kt`
 - finish queue edge-case tests for `DataCollectQueue.kt`
 
+Status:
+
+- completed
+- `TranscriptWorkflowKt` branch coverage is now fully covered (`6 / 6`)
+- `DataCollectQueueKt` branch coverage is now fully covered (`30 / 30`)
+- this batch focused on the remaining edge cases only: disabled feedback, empty import input, blank current text, blank-only remaining queue, and non-blank remaining count behavior
+
 ### Batch F: Close configuration gaps
 
 - expand `SettingsManager` coverage

@@ -32,6 +32,18 @@ class TranscriptWorkflowTest {
     }
 
     @Test
+    fun shouldAttemptFeedbackReturnsFalseWhenFeatureIsDisabled() {
+        val transcript = TestFixtures.transcript(removable = false)
+
+        val result = shouldAttemptFeedback(
+            transcript = transcript,
+            enableTtsFeedback = false
+        )
+
+        assertFalse(result)
+    }
+
+    @Test
     fun reduceTranscriptAfterConfirmationWithoutLockOnlyMarksCheckedAndUpdatesText() {
         val transcript = TestFixtures.transcript(
             modifiedText = "before",
