@@ -253,7 +253,7 @@ The 80% goal should apply to the code that holds product logic and refactoring r
 - [WavUtil.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/WavUtil.kt)
 - [TranscriptWorkflow.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/workflow/TranscriptWorkflow.kt)
 - [DataCollectQueue.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/datacollect/DataCollectQueue.kt)
-- [SettingsManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/SettingsManager.kt) if it remains an active configuration seam
+- [SettingsManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/SettingsManager.kt) if it remains an active configuration seam
 
 The 80% goal should not initially include:
 
@@ -275,6 +275,12 @@ Expected outcome:
 
 - coverage numbers become interpretable
 - the team stops optimizing for a misleading global percentage
+
+Status:
+
+- completed
+- Gradle now exposes both `:app:jacocoTestReport` and `:app:jacocoCoreLogicReport`
+- the current filtered `core logic` report starts at about 21.20% line coverage (`131 / 618`)
 
 ### Batch B: Raise `Api.kt` coverage
 

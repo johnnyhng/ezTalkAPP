@@ -1,7 +1,10 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    jacoco
 }
+
+import org.gradle.testing.jacoco.tasks.JacocoReport
 
 android {
     namespace = "tw.com.johnnyhng.eztalk.asr"
@@ -53,6 +56,63 @@ android {
     }
 }
 
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+val jacocoExecutionData = fileTree(layout.buildDirectory.get().asFile) {
+    include(
+        "jacoco/testDebugUnitTest.exec",
+        "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec"
+    )
+}
+
+val jacocoSourceDirectories = files(
+    "$projectDir/src/main/java",
+    "$projectDir/src/main/kotlin"
+)
+
+val jacocoBaseExcludes = listOf(
+    "**/R.class",
+    "**/R$*.class",
+    "**/BuildConfig.*",
+    "**/Manifest*.*",
+    "**/*Test*.*",
+    "**/*${'$'}Companion.class",
+    "**/*${'$'}Lambda${'$'}*.*",
+    "**/*${'$'}inlined${'$'}*.*"
+)
+
+val jacocoFullModuleExcludes = jacocoBaseExcludes
+
+val jacocoCoreLogicIncludes = listOf(
+    "tw/com/johnnyhng/eztalk/asr/utils/ApiKt.class",
+    "tw/com/johnnyhng/eztalk/asr/utils/RecognitionUtilsKt.class",
+    "tw/com/johnnyhng/eztalk/asr/utils/WavUtilKt.class",
+    "tw/com/johnnyhng/eztalk/asr/workflow/TranscriptWorkflowKt.class",
+    "tw/com/johnnyhng/eztalk/asr/datacollect/DataCollectQueueKt.class",
+    "tw/com/johnnyhng/eztalk/asr/managers/SettingsManager.class",
+    "tw/com/johnnyhng/eztalk/asr/managers/SettingsManager${'$'}*.class"
+)
+
+fun jacocoDebugClassTrees(
+    includes: List<String>? = null,
+    excludes: List<String> = emptyList()
+) = files(
+    fileTree("${layout.buildDirectory.get().asFile}/tmp/kotlin-classes/debug") {
+        if (includes != null) {
+            include(includes)
+        }
+        exclude(excludes)
+    },
+    fileTree("${layout.buildDirectory.get().asFile}/intermediates/javac/debug/classes") {
+        if (includes != null) {
+            include(includes)
+        }
+        exclude(excludes)
+    }
+)
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -78,4 +138,39 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("testDebugUnitTest")
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+
+    classDirectories.setFrom(jacocoDebugClassTrees(excludes = jacocoFullModuleExcludes))
+    sourceDirectories.setFrom(jacocoSourceDirectories)
+    executionData.setFrom(jacocoExecutionData)
+}
+
+tasks.register<JacocoReport>("jacocoCoreLogicReport") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "Generates a Jacoco report for the core refactoring-risk logic."
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+
+    classDirectories.setFrom(
+        jacocoDebugClassTrees(
+            includes = jacocoCoreLogicIncludes,
+            excludes = jacocoBaseExcludes
+        )
+    )
+    sourceDirectories.setFrom(jacocoSourceDirectories)
+    executionData.setFrom(jacocoExecutionData)
 }
