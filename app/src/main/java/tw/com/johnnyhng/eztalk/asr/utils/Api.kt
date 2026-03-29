@@ -45,6 +45,17 @@ internal data class MultipartRequestContent(
     val body: ByteArray
 )
 
+internal data class UploadMetadataSource(
+    val wavFile: File,
+    val jsonlFile: File
+)
+
+internal data class FeedbackExecution(
+    val jsonlPath: String,
+    val metadata: JSONObject?,
+    val dispatchPlan: FeedbackDispatchPlan
+)
+
 
 /**
  * Reads a WAV file and returns its content as a JSONArray of bytes.
@@ -54,13 +65,14 @@ internal data class MultipartRequestContent(
  */
 internal fun readWavFileToJsonArray(path: String): JSONArray? {
     try {
-        val wavFile = File(path)
-        val fileInputStream = FileInputStream(wavFile)
-        val byteBuffer = fileInputStream.readBytes()
-        fileInputStream.close()
-        val rawArray = wavBytesToJsonArray(byteBuffer)
+        val rawArray = readWavJsonArray(
+            wavFile = File(path),
+            byteReader = { file ->
+                FileInputStream(file).use { it.readBytes() }
+            }
+        )
         if (rawArray == null) {
-            Log.e(TAG, "WAV file is too small to contain a valid header: ${wavFile.name}")
+            Log.e(TAG, "WAV file is too small to contain a valid header: ${File(path).name}")
             return null
         }
         return rawArray
@@ -69,6 +81,11 @@ internal fun readWavFileToJsonArray(path: String): JSONArray? {
         return null
     }
 }
+
+internal fun readWavJsonArray(
+    wavFile: File,
+    byteReader: (File) -> ByteArray
+): JSONArray? = wavBytesToJsonArray(byteReader(wavFile))
 
 internal fun wavBytesToJsonArray(byteBuffer: ByteArray): JSONArray? {
     val headerSize = 44
@@ -85,25 +102,14 @@ internal fun wavBytesToJsonArray(byteBuffer: ByteArray): JSONArray? {
 
 internal fun packageUploadJsonMetadata(path: String, userId: String): JSONObject? {
     try {
-        val wavFile = File(path)
-        val jsonlPath = path.substringBeforeLast(".") + ".jsonl"
-        val jsonlFile = File(jsonlPath)
-        var snapshot = UploadMetadataSnapshot("", JSONArray())
-        if (jsonlFile.exists()) {
-            try {
-                val jsonlContent = jsonlFile.readText()
-                if (jsonlContent.isNotBlank()) {
-                    snapshot = parseUploadMetadataSnapshot(jsonlContent)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error reading or parsing jsonl file: $jsonlPath", e)
-            }
-        } else {
-            Log.w(TAG, "jsonl file not found for wav: $path")
-        }
+        val source = buildUploadMetadataSource(path)
+        val snapshot = readUploadMetadataSnapshot(
+            jsonlFile = source.jsonlFile,
+            jsonlReader = { it.readText() }
+        )
 
         return buildUploadJsonMetadata(
-            filename = wavFile.name,
+            filename = source.wavFile.name,
             userId = userId,
             label = snapshot.label,
             remoteCandidates = snapshot.remoteCandidates
@@ -111,6 +117,34 @@ internal fun packageUploadJsonMetadata(path: String, userId: String): JSONObject
     } catch (e: Exception) {
         Log.e(TAG, "Error packaging upload JSON metadata for $path", e)
         return null
+    }
+}
+
+internal fun buildUploadMetadataSource(path: String): UploadMetadataSource =
+    UploadMetadataSource(
+        wavFile = File(path),
+        jsonlFile = File(path.substringBeforeLast(".") + ".jsonl")
+    )
+
+internal fun readUploadMetadataSnapshot(
+    jsonlFile: File,
+    jsonlReader: (File) -> String
+): UploadMetadataSnapshot {
+    if (!jsonlFile.exists()) {
+        Log.w(TAG, "jsonl file not found for wav: ${jsonlFile.path}")
+        return UploadMetadataSnapshot("", JSONArray())
+    }
+
+    return try {
+        val jsonlContent = jsonlReader(jsonlFile)
+        if (jsonlContent.isBlank()) {
+            UploadMetadataSnapshot("", JSONArray())
+        } else {
+            parseUploadMetadataSnapshot(jsonlContent)
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Error reading or parsing jsonl file: ${jsonlFile.path}", e)
+        UploadMetadataSnapshot("", JSONArray())
     }
 }
 
@@ -421,10 +455,24 @@ internal fun buildRecognitionRequestPlan(
  * @return A JSONObject ready for upload, or null on error.
  */
 fun packageUploadJson(path: String, userId: String): JSONObject? {
-    val metadata = packageUploadJsonMetadata(path, userId) ?: return null
-    val rawArray = readWavFileToJsonArray(path) ?: return null
-    val packaged = buildPackagedUploadJson(metadata, rawArray) ?: return null
+    val packaged = buildUploadPackage(
+        path = path,
+        userId = userId,
+        metadataLoader = ::packageUploadJsonMetadata,
+        rawLoader = ::readWavFileToJsonArray
+    ) ?: return null
     return combineUploadJson(packaged.metadata, packaged.raw)
+}
+
+internal fun buildUploadPackage(
+    path: String,
+    userId: String,
+    metadataLoader: (String, String) -> JSONObject?,
+    rawLoader: (String) -> JSONArray?
+): PackagedUploadJson? {
+    val metadata = metadataLoader(path, userId) ?: return null
+    val rawArray = rawLoader(path) ?: return null
+    return buildPackagedUploadJson(metadata, rawArray)
 }
 
 internal fun executeFeedbackDispatch(
@@ -449,25 +497,23 @@ fun feedbackToBackend(
     filePath: String,
     userId: String
 ): Boolean {
-    val jsonlPath = filePath.substringBeforeLast(".") + ".jsonl"
-    val metadata = readJsonl(jsonlPath)
-    val dispatchPlan = buildFeedbackDispatchPlan(
+    val execution = buildFeedbackExecution(
         backendUrl = backendUrl,
         recognitionUrl = recognitionUrl,
-        metadata = metadata
+        filePath = filePath,
+        metadataReader = ::readJsonl
     )
-    val route = dispatchPlan.route
 
     Log.d(
         TAG,
-        "feedbackToBackend: filePath=$filePath, jsonlPath=$jsonlPath, route=$route"
+        "feedbackToBackend: filePath=$filePath, jsonlPath=${execution.jsonlPath}, route=${execution.dispatchPlan.route}"
     )
 
     return executeFeedbackDispatch(
-        dispatchPlan = dispatchPlan,
+        dispatchPlan = execution.dispatchPlan,
         filePath = filePath,
         userId = userId,
-        metadata = metadata,
+        metadata = execution.metadata,
         putUpdates = { endpoint, path, id, data ->
             Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
             putForUpdates(endpoint, path, id, data)
@@ -480,6 +526,26 @@ fun feedbackToBackend(
             Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
             postTransfer(endpoint, path, id)
         }
+    )
+}
+
+internal fun buildFeedbackExecution(
+    backendUrl: String,
+    recognitionUrl: String,
+    filePath: String,
+    metadataReader: (String) -> JSONObject?
+): FeedbackExecution {
+    val jsonlPath = filePath.substringBeforeLast(".") + ".jsonl"
+    val metadata = metadataReader(jsonlPath)
+    val dispatchPlan = buildFeedbackDispatchPlan(
+        backendUrl = backendUrl,
+        recognitionUrl = recognitionUrl,
+        metadata = metadata
+    )
+    return FeedbackExecution(
+        jsonlPath = jsonlPath,
+        metadata = metadata,
+        dispatchPlan = dispatchPlan
     )
 }
 

@@ -449,6 +449,22 @@ Status:
 - `ApiKt` line coverage increased from `160` covered lines to `182`
 - filtered `core logic` line coverage increased from about `50.20%` (`379 / 755`) to about `55.39%` (`401 / 724`)
 
+### Batch N: Extract upload and feedback orchestration seams in `Api.kt`
+
+Status:
+
+- completed
+- extracted shared helpers for:
+  - WAV file byte reading to upload-array conversion
+  - upload metadata source resolution
+  - upload metadata snapshot loading
+  - upload package assembly
+  - feedback execution planning
+- rewired `packageUploadJsonMetadata`, `packageUploadJson`, and `feedbackToBackend` to use those helpers
+- added JVM tests for the new orchestration helpers without relying on Robolectric-only file wrappers
+- `ApiKt` line coverage increased from `182` covered lines to `207`
+- filtered `core logic` line coverage increased from about `55.39%` (`401 / 724`) to about `57.41%` (`426 / 742`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
