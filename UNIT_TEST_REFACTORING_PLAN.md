@@ -480,6 +480,15 @@ Status:
 
 - test `feedbackToBackend(...)` chooses `POST /api/transfer` when neither local nor remote candidates exist
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - JVM test covering transfer routing when metadata is missing
+  - JVM test covering transfer routing when neither local nor remote candidate arrays exist
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 15: process_audio request payload shape
 
 - test `postProcessAudio(...)` request JSON shape
