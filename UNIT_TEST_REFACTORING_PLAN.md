@@ -492,6 +492,20 @@ Status:
 - `RecognitionUtilsKt` line coverage increased from `47` covered lines to `51`
 - filtered `core logic` line coverage increased from about `58.32%` (`445 / 763`) to about `60.67%` (`463 / 763`)
 
+### Batch Q: Add pure `Utils.kt` tests without touching production code
+
+Status:
+
+- completed
+- added tests for:
+  - `sha256(String)`
+  - `sha256(File)`
+  - `saveQueueState(...)`
+  - `restoreQueueState(...)`
+  - `deleteQueueState(...)`
+- this batch improves regression protection for queue-state persistence and hashing helpers
+- it does not change the current `core logic` Jacoco number because `Utils.kt` is not yet included in `jacocoCoreLogicReport`
+
 Target cases:
 
 - importing lines creates the right current text + queue
