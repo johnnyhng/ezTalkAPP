@@ -338,6 +338,16 @@ Status:
 - expand `SettingsManager` coverage
 - add a Jacoco verification gate for the selected core-logic scope
 
+Status:
+
+- completed with a narrowed gate scope
+- JVM tests were added for `SettingsManager` default mapping, stored-value mapping, write helper behavior, and manager round-trip behavior
+- `jacocoStableCoreVerification` now enforces `LINE >= 80%`, but only for the stabilized reducer scope:
+  - `TranscriptWorkflowKt`
+  - `DataCollectQueueKt`
+- this narrowed scope is intentional: `SettingsManager` is DataStore-backed and its JVM tests currently do not register usable Jacoco line coverage in this project, even though the tests execute and pass after a clean rebuild
+- the stable reducer gate is now green and gives the project its first enforced 80% threshold
+
 ## Success criteria
 
 This coverage plan is complete when all of the following are true:

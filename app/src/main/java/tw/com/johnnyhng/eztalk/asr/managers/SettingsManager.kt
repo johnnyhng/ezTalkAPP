@@ -10,36 +10,53 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
+private val userIdKey = stringPreferencesKey("user_id")
+private val lingerMsKey = floatPreferencesKey("linger_ms")
+private val partialIntervalMsKey = floatPreferencesKey("partial_interval_ms")
+private val saveVadSegmentsOnlyKey = booleanPreferencesKey("save_vad_segments_only")
+private val inlineEditKey = booleanPreferencesKey("inline_edit")
+private val backendUrlKey = stringPreferencesKey("backend_url")
+private val recognitionUrlKey = stringPreferencesKey("recognition_url")
+private val enableTtsFeedbackKey = booleanPreferencesKey("enable_tts_feedback")
+private val modelUrlKey = stringPreferencesKey("model_url")
+private val selectedModelNameKey = stringPreferencesKey("selected_model_name")
+
+internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
+    return UserSettings(
+        userId = preferences[userIdKey] ?: "default_user",
+        lingerMs = preferences[lingerMsKey] ?: 1000f,
+        partialIntervalMs = preferences[partialIntervalMsKey] ?: 500f,
+        saveVadSegmentsOnly = preferences[saveVadSegmentsOnlyKey] ?: false,
+        inlineEdit = preferences[inlineEditKey] ?: true,
+        backendUrl = preferences[backendUrlKey] ?: "https://120.126.151.159:56432",
+        recognitionUrl = preferences[recognitionUrlKey] ?: "",
+        enableTtsFeedback = preferences[enableTtsFeedbackKey] ?: false,
+        modelUrl = preferences[modelUrlKey] ?: "",
+        selectedModelName = preferences[selectedModelNameKey] ?: ""
+    )
+}
+
+internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSettings) {
+    preferences[userIdKey] = settings.userId
+    preferences[lingerMsKey] = settings.lingerMs
+    preferences[partialIntervalMsKey] = settings.partialIntervalMs
+    preferences[saveVadSegmentsOnlyKey] = settings.saveVadSegmentsOnly
+    preferences[inlineEditKey] = settings.inlineEdit
+    preferences[backendUrlKey] = settings.backendUrl
+    preferences[recognitionUrlKey] = settings.recognitionUrl
+    preferences[enableTtsFeedbackKey] = settings.enableTtsFeedback
+    preferences[modelUrlKey] = settings.modelUrl
+    preferences[selectedModelNameKey] = settings.selectedModelName
+}
+
 class SettingsManager(context: Context) {
     private val dataStore = context.dataStore
 
-    val userSettings: Flow<UserSettings> = dataStore.data.map { preferences ->
-        UserSettings(
-            userId = preferences[stringPreferencesKey("user_id")] ?: "default_user",
-            lingerMs = preferences[floatPreferencesKey("linger_ms")] ?: 1000f,
-            partialIntervalMs = preferences[floatPreferencesKey("partial_interval_ms")] ?: 500f,
-            saveVadSegmentsOnly = preferences[booleanPreferencesKey("save_vad_segments_only")] ?: false,
-            inlineEdit = preferences[booleanPreferencesKey("inline_edit")] ?: true,
-            backendUrl = preferences[stringPreferencesKey("backend_url")] ?: "https://120.126.151.159:56432",
-            recognitionUrl = preferences[stringPreferencesKey("recognition_url")] ?: "",
-            enableTtsFeedback = preferences[booleanPreferencesKey("enable_tts_feedback")] ?: false,
-            modelUrl = preferences[stringPreferencesKey("model_url")] ?: "",
-            selectedModelName = preferences[stringPreferencesKey("selected_model_name")] ?: ""
-        )
-    }
+    val userSettings: Flow<UserSettings> = dataStore.data.map(::preferencesToUserSettings)
 
     suspend fun updateSettings(settings: UserSettings) {
         dataStore.edit { preferences ->
-            preferences[stringPreferencesKey("user_id")] = settings.userId
-            preferences[floatPreferencesKey("linger_ms")] = settings.lingerMs
-            preferences[floatPreferencesKey("partial_interval_ms")] = settings.partialIntervalMs
-            preferences[booleanPreferencesKey("save_vad_segments_only")] = settings.saveVadSegmentsOnly
-            preferences[booleanPreferencesKey("inline_edit")] = settings.inlineEdit
-            preferences[stringPreferencesKey("backend_url")] = settings.backendUrl
-            preferences[stringPreferencesKey("recognition_url")] = settings.recognitionUrl
-            preferences[booleanPreferencesKey("enable_tts_feedback")] = settings.enableTtsFeedback
-            preferences[stringPreferencesKey("model_url")] = settings.modelUrl
-            preferences[stringPreferencesKey("selected_model_name")] = settings.selectedModelName
+            writeUserSettings(preferences, settings)
         }
     }
 }

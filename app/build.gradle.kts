@@ -5,6 +5,7 @@ plugins {
 }
 
 import org.gradle.testing.jacoco.tasks.JacocoReport
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
 
 android {
     namespace = "tw.com.johnnyhng.eztalk.asr"
@@ -91,8 +92,14 @@ val jacocoCoreLogicIncludes = listOf(
     "tw/com/johnnyhng/eztalk/asr/utils/WavUtilKt.class",
     "tw/com/johnnyhng/eztalk/asr/workflow/TranscriptWorkflowKt.class",
     "tw/com/johnnyhng/eztalk/asr/datacollect/DataCollectQueueKt.class",
+    "tw/com/johnnyhng/eztalk/asr/managers/SettingsManagerKt.class",
     "tw/com/johnnyhng/eztalk/asr/managers/SettingsManager.class",
     "tw/com/johnnyhng/eztalk/asr/managers/SettingsManager${'$'}*.class"
+)
+
+val jacocoStableCoreIncludes = listOf(
+    "tw/com/johnnyhng/eztalk/asr/workflow/TranscriptWorkflowKt.class",
+    "tw/com/johnnyhng/eztalk/asr/datacollect/DataCollectQueueKt.class"
 )
 
 fun jacocoDebugClassTrees(
@@ -173,4 +180,29 @@ tasks.register<JacocoReport>("jacocoCoreLogicReport") {
     )
     sourceDirectories.setFrom(jacocoSourceDirectories)
     executionData.setFrom(jacocoExecutionData)
+}
+
+tasks.register<JacocoCoverageVerification>("jacocoStableCoreVerification") {
+    dependsOn("testDebugUnitTest")
+    group = "verification"
+    description = "Verifies line coverage for the stabilized reducer core scope."
+
+    classDirectories.setFrom(
+        jacocoDebugClassTrees(
+            includes = jacocoStableCoreIncludes,
+            excludes = jacocoBaseExcludes
+        )
+    )
+    sourceDirectories.setFrom(jacocoSourceDirectories)
+    executionData.setFrom(jacocoExecutionData)
+
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
 }
