@@ -91,6 +91,8 @@ val jacocoCoreLogicIncludes = listOf(
     "tw/com/johnnyhng/eztalk/asr/utils/RecognitionUtilsKt.class",
     "tw/com/johnnyhng/eztalk/asr/utils/UtilsKt.class",
     "tw/com/johnnyhng/eztalk/asr/utils/WavUtilKt.class",
+    "tw/com/johnnyhng/eztalk/asr/data/classes/UserSettings.class",
+    "tw/com/johnnyhng/eztalk/asr/data/classes/Model.class",
     "tw/com/johnnyhng/eztalk/asr/workflow/TranscriptWorkflowKt.class",
     "tw/com/johnnyhng/eztalk/asr/datacollect/DataCollectQueueKt.class",
     "tw/com/johnnyhng/eztalk/asr/managers/ModelManager.class",

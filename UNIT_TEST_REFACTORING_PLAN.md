@@ -533,6 +533,22 @@ Status:
   - `ModelManager.kt` line coverage: `17 / 39`
   - filtered `core logic` line coverage increased from about `60.68%` (`463 / 763`) to about `61.91%` (`525 / 848`)
 
+### Batch T: Count `UserSettings` and `Model` in `core logic`
+
+Status:
+
+- completed
+- added pure JVM tests for:
+  - `UserSettings.effectiveRecognitionUrl`
+  - `Model.MODELS`
+- updated `jacocoCoreLogicReport` to include:
+  - `UserSettings`
+  - `Model`
+- measured result:
+  - `UserSettings.kt` line coverage: `17 / 17`
+  - `Model.kt` line coverage: `11 / 11`
+  - filtered `core logic` line coverage increased from about `61.91%` (`525 / 848`) to about `63.12%` (`553 / 876`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
