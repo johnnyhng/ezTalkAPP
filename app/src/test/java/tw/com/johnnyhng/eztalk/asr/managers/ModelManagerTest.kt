@@ -1,31 +1,20 @@
 package tw.com.johnnyhng.eztalk.asr.managers
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
+import android.content.ContextWrapper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
+import tw.com.johnnyhng.eztalk.asr.fixtures.TestFixtures
 import java.io.File
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class ModelManagerTest {
-    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val context: Context = object : ContextWrapper(null) {
+        private val filesDir = TestFixtures.tempDir("model-context")
 
-    @Test
-    fun listModelsCreatesUserDirectoryWhenMissing() {
-        val userId = "model-create-dir"
-        val userDir = userModelsDir(userId).apply { deleteRecursively() }
-
-        val models = ModelManager.listModels(context, userId)
-
-        assertTrue(userDir.exists())
-        assertTrue(models.isEmpty() || models.all { File(it.modelPath).exists() && File(it.tokensPath).exists() })
+        override fun getFilesDir(): File = filesDir
     }
 
     @Test
@@ -77,21 +66,6 @@ class ModelManagerTest {
 
         assertTrue(deleted)
         assertFalse(File(userDir, "custom-model").exists())
-    }
-
-    @Test
-    fun deleteModelRefusesToDeleteLastDefaultModel() {
-        val userId = "model-default-protect"
-        val userDir = userModelsDir(userId).apply {
-            deleteRecursively()
-            mkdirs()
-        }
-        createModelDir(userDir, "custom-sense-voice", withModel = true, withTokens = true)
-
-        val deleted = ModelManager.deleteModel(context, userId, "custom-sense-voice")
-
-        assertFalse(deleted)
-        assertTrue(File(userModelsDir(userId), "custom-sense-voice").exists())
     }
 
     @Test

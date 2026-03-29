@@ -1,23 +1,23 @@
 package tw.com.johnnyhng.eztalk.asr.utils
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
+import android.content.ContextWrapper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
+import tw.com.johnnyhng.eztalk.asr.fixtures.TestFixtures
 import java.io.File
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class UtilsTest {
-    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val context: Context = object : ContextWrapper(null) {
+        private val filesDir = TestFixtures.tempDir("utils-context")
+
+        override fun getFilesDir(): File = filesDir
+    }
 
     @Test
     fun sha256StringReturnsExpectedDigest() {

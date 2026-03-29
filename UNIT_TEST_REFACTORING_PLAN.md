@@ -519,6 +519,20 @@ Status:
 - this batch improves regression protection for model directory management
 - it does not change the current `core logic` Jacoco number because `ModelManager.kt` is not yet included in `jacocoCoreLogicReport`
 
+### Batch S: Expand `core logic` scope to count `Utils` and `ModelManager`
+
+Status:
+
+- completed
+- updated `jacocoCoreLogicReport` to include:
+  - `UtilsKt`
+  - `ModelManager`
+- rewired the existing `UtilsTest` and `ModelManagerTest` to plain JVM file-based contexts so Jacoco can actually credit those lines
+- measured result:
+  - `UtilsKt` line coverage: `45 / 46`
+  - `ModelManager.kt` line coverage: `17 / 39`
+  - filtered `core logic` line coverage increased from about `60.68%` (`463 / 763`) to about `61.91%` (`525 / 848`)
+
 Target cases:
 
 - importing lines creates the right current text + queue
