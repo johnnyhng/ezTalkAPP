@@ -1072,3 +1072,25 @@ If you want the highest ROI test plan for future refactoring, start here:
 5. then cover DataCollect queue logic
 
 That order will protect the app’s most fragile behavior with the least amount of test infrastructure.
+
+## Recent progress
+
+### Batch U: DataCollect screen behavior tests
+
+- added [DataCollectWidgetBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/DataCollectWidgetBehaviorTest.kt)
+- focus:
+  - manual mode text entry and clear action
+  - sequence mode queue controls and callback wiring
+  - TTS callback surface behavior
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+
+### Batch V: Settings screen behavior tests
+
+- added [SettingsScreenBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/SettingsScreenBehaviorTest.kt)
+- focus:
+  - seeded backend URL is rendered and editable
+  - inline edit and TTS feedback switches reflect persisted state and can toggle
+  - key settings labels remain visible on screen
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
