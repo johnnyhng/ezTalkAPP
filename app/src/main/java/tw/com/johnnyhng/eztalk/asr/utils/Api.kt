@@ -83,7 +83,7 @@ private fun packageUploadJsonMetadata(path: String, userId: String): JSONObject?
     }
 }
 
-private fun buildMergedCandidates(metadata: JSONObject?): JSONArray {
+internal fun buildMergedCandidates(metadata: JSONObject?): JSONArray {
     if (metadata == null) return JSONArray()
 
     val merged = (

@@ -438,6 +438,17 @@ Status:
   - remote second
   - `distinct()` de-duplication
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - exposed `buildMergedCandidates(...)` for package-level JVM testing
+  - JVM tests covering local-first ordering
+  - JVM tests covering `distinct()` de-duplication with first-seen order preserved
+  - JVM test covering empty output when metadata is absent
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 12: feedback routing with remote candidates
 
 - test `feedbackToBackend(...)` chooses `PUT /api/updates` when `remote_candidates` exist
