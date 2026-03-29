@@ -388,6 +388,16 @@ Status:
 - test [RecognitionUtils.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/RecognitionUtils.kt) when cached `remote_candidates` already exist
 - verify network fetch is skipped
 
+Status:
+
+- completed on 2026-03-29
+- implemented:
+  - extracted cached remote-candidate lookup into a small pure helper in `RecognitionUtils.kt`
+  - JVM tests covering missing metadata, missing key, and cache-hit ordering
+  - `getRemoteCandidates(...)` now uses the extracted cached-candidate helper for its early return path
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+
 ### Batch 9: remote candidate fetch parsing
 
 - test successful parsing of `sentence_candidates`

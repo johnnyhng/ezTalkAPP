@@ -18,6 +18,10 @@ internal data class RemoteCandidateMetadata(
     val remoteCandidates: List<String>
 )
 
+internal fun readCachedRemoteCandidates(jsonlData: JSONObject?): List<String> {
+    return jsonlData?.optStringList("remote_candidates").orEmpty()
+}
+
 internal fun buildRemoteCandidateMetadata(
     latestJsonlData: JSONObject?,
     fallbackOriginalText: String,
@@ -61,15 +65,11 @@ suspend fun getRemoteCandidates(
 
     return withContext(Dispatchers.IO) {
         val jsonlData = readJsonl(jsonlFile.absolutePath)
-        val existingCandidates = jsonlData?.optJSONArray("remote_candidates")
+        val existingCandidates = readCachedRemoteCandidates(jsonlData)
 
-        if (existingCandidates != null && existingCandidates.length() > 0) {
+        if (existingCandidates.isNotEmpty()) {
             Log.d(TAG, "Found existing remote candidates in jsonl file")
-            val sentences = mutableListOf<String>()
-            for (i in 0 until existingCandidates.length()) {
-                sentences.add(existingCandidates.getString(i))
-            }
-            return@withContext sentences
+            return@withContext existingCandidates
         }
 
         if (recognitionUrl.isNotBlank()) {
