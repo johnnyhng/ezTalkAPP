@@ -549,6 +549,19 @@ Status:
   - `Model.kt` line coverage: `11 / 11`
   - filtered `core logic` line coverage increased from about `61.91%` (`525 / 848`) to about `63.12%` (`553 / 876`)
 
+### Batch U: Start screen behavior tests with `DataCollect`
+
+Status:
+
+- completed
+- added the first Compose behavior tests for the `DataCollect` screen surface via `DataCollectWidget`
+- covered:
+  - manual mode text entry and clear action
+  - sequence mode queue controls and upload/TTS callbacks
+  - sequence mode switch callback wiring
+- verified by compiling `:app:compileDebugAndroidTestKotlin`
+- device execution is still pending because there is no connected device in the current environment
+
 Target cases:
 
 - importing lines creates the right current text + queue
