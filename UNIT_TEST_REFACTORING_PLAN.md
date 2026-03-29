@@ -373,6 +373,16 @@ Status:
 - `ApiKt` line coverage increased from `51` covered lines to `94`
 - filtered `core logic` line coverage increased from about `37.32%` (`262 / 702`) to about `41.21%` (`305 / 740`)
 
+### Batch H: Raise `WavUtil.kt` wrapper coverage
+
+Status:
+
+- completed
+- file-target and delete-plan helpers were extracted so wrapper path logic becomes directly testable
+- this batch focused on the outer file-layer decisions instead of the already-covered PCM/header/JSON pure helpers
+- `WavUtilKt` line coverage increased from `86` covered lines to `94`
+- filtered `core logic` line coverage increased from about `41.21%` (`305 / 740`) to about `41.68%` (`313 / 751`)
+
 Target cases:
 
 - importing lines creates the right current text + queue

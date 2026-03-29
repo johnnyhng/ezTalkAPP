@@ -11,6 +11,16 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+internal data class TranscriptFileTargets(
+    val dir: File,
+    val wavFile: File,
+    val jsonlFile: File
+)
+
+internal data class DeleteTranscriptPlan(
+    val wavFile: File,
+    val jsonlFile: File
+)
 
 /**
  * Saves a FloatArray of audio samples to a WAV file in a structured directory.
@@ -32,8 +42,8 @@ fun saveAsWav(
     userId: String,
     filename: String
 ): String? {
-    // Directory path is now just based on the user ID
-    val dir = File(context.filesDir, "wavs/$userId")
+    val targets = buildTranscriptFileTargets(context.filesDir, userId, filename)
+    val dir = targets.dir
 
     if (!dir.exists()) {
         if (!dir.mkdirs()) {
@@ -42,7 +52,7 @@ fun saveAsWav(
         }
     }
 
-    val file = File(dir, "$filename.wav")
+    val file = targets.wavFile
     try {
         FileOutputStream(file).use { out ->
             val pcmData = floatSamplesToPcm16(samples)
@@ -86,14 +96,15 @@ fun saveJsonl(
     localCandidates: List<String>? = null,
     remoteCandidates: List<String>? = null
 ): String? {
-    val dir = File(context.filesDir, "wavs/$userId")
+    val targets = buildTranscriptFileTargets(context.filesDir, userId, filename)
+    val dir = targets.dir
     if (!dir.exists()) {
         if (!dir.mkdirs()) {
             Log.e(TAG, "Failed to create directory for jsonl: ${dir.absolutePath}")
             return null
         }
     }
-    val file = File(dir, "$filename.jsonl")
+    val file = targets.jsonlFile
     try {
         val jsonLine = buildTranscriptJsonLine(
             originalText = originalText,
@@ -139,6 +150,19 @@ fun readJsonl(path: String): JSONObject? {
 fun JSONObject.optStringList(key: String): List<String> {
     val array = optJSONArray(key) ?: return emptyList()
     return List(array.length()) { index -> array.optString(index) }.filter { it.isNotBlank() }
+}
+
+internal fun buildTranscriptFileTargets(
+    filesDir: File,
+    userId: String,
+    filename: String
+): TranscriptFileTargets {
+    val dir = File(filesDir, "wavs/$userId")
+    return TranscriptFileTargets(
+        dir = dir,
+        wavFile = File(dir, "$filename.wav"),
+        jsonlFile = File(dir, "$filename.jsonl")
+    )
 }
 
 internal fun floatSamplesToPcm16(samples: FloatArray): ByteArray {
@@ -296,7 +320,8 @@ internal fun readWavFileToFloatArray(path: String): FloatArray? {
  */
 fun deleteTranscriptFiles(wavFilePath: String): Boolean {
     var allDeleted = true
-    val wavFile = File(wavFilePath)
+    val deletePlan = buildDeleteTranscriptPlan(wavFilePath)
+    val wavFile = deletePlan.wavFile
     if (wavFile.exists()) {
         try {
             if (wavFile.delete()) {
@@ -313,8 +338,8 @@ fun deleteTranscriptFiles(wavFilePath: String): Boolean {
         Log.w(TAG, "WAV file does not exist: $wavFilePath")
     }
 
-    val jsonlFilePath = wavFilePath.replace(".wav", ".jsonl")
-    val jsonlFile = File(jsonlFilePath)
+    val jsonlFilePath = deletePlan.jsonlFile.absolutePath
+    val jsonlFile = deletePlan.jsonlFile
     if (jsonlFile.exists()) {
         try {
             if (jsonlFile.delete()) {
@@ -331,4 +356,11 @@ fun deleteTranscriptFiles(wavFilePath: String): Boolean {
         Log.w(TAG, "JSONL file does not exist: $jsonlFilePath")
     }
     return allDeleted
+}
+
+internal fun buildDeleteTranscriptPlan(wavFilePath: String): DeleteTranscriptPlan {
+    return DeleteTranscriptPlan(
+        wavFile = File(wavFilePath),
+        jsonlFile = File(wavFilePath.replace(".wav", ".jsonl"))
+    )
 }
