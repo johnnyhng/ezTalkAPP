@@ -1141,3 +1141,15 @@ That order will protect the app’s most fragile behavior with the least amount 
 - result:
   - core logic line coverage: `64.16%`
   - `ApiKt` line coverage: `58.17%`
+
+### Batch AA: Home screen smoke behavior tests
+
+- added [HomeScreenBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/HomeScreenBehaviorTest.kt)
+- focus:
+  - top controls render on initial load
+  - clear action is safe when transcript list is empty
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+  - `./gradlew :app:connectedDebugAndroidTest`
+- result:
+  - connected Android tests: `21` tests, `0` failures
