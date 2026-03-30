@@ -210,3 +210,14 @@ tasks.register<JacocoCoverageVerification>("jacocoStableCoreVerification") {
         }
     }
 }
+
+tasks.register("verificationReport") {
+    group = "verification"
+    description = "Runs unit tests, core logic coverage, and connected Android behavior tests."
+
+    dependsOn(
+        "testDebugUnitTest",
+        "jacocoCoreLogicReport",
+        "connectedDebugAndroidTest"
+    )
+}
