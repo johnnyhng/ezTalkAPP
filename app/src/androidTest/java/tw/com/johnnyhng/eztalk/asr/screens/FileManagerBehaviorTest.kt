@@ -3,6 +3,7 @@ package tw.com.johnnyhng.eztalk.asr.screens
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -98,6 +99,66 @@ class FileManagerBehaviorTest {
             JSONObject(mutableJson.readText()).getBoolean("checked") &&
                 !JSONObject(immutableJson.readText()).getBoolean("checked")
         }
+    }
+
+    @Test
+    fun selectAllSecondClickUnchecksMutableEntriesAgain() {
+        val userId = "file-manager-select-all-toggle"
+        clearUserFiles(userId)
+        seedSettings(userId)
+        seedEntry(
+            userId = userId,
+            filename = "mutable",
+            originalText = "mutable original",
+            modifiedText = "mutable modified",
+            mutable = true,
+            checked = false
+        )
+        val mutableJson = File(application.filesDir, "wavs/$userId/mutable.jsonl")
+
+        val viewModel = HomeViewModel(application)
+        composeRule.setContent {
+            FileManagerScreen(homeViewModel = viewModel)
+        }
+
+        val selectAll = composeRule.onNode(
+            isToggleable() and hasAnySibling(hasText(context.getString(R.string.select_all)))
+        )
+
+        selectAll.performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            JSONObject(mutableJson.readText()).getBoolean("checked")
+        }
+
+        selectAll.performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            !JSONObject(mutableJson.readText()).getBoolean("checked")
+        }
+    }
+
+    @Test
+    fun immutableEntryCheckboxIsDisabled() {
+        val userId = "file-manager-immutable-disabled"
+        clearUserFiles(userId)
+        seedSettings(userId)
+        seedEntry(
+            userId = userId,
+            filename = "immutable",
+            originalText = "immutable original",
+            modifiedText = "immutable modified",
+            mutable = false,
+            checked = false
+        )
+
+        val viewModel = HomeViewModel(application)
+        composeRule.setContent {
+            FileManagerScreen(homeViewModel = viewModel)
+        }
+
+        composeRule.onNodeWithText("immutable.wav").assertIsDisplayed()
+        composeRule.onNode(
+            isToggleable() and hasAnySibling(hasText("immutable.wav"))
+        ).assertIsNotEnabled()
     }
 
     @Test

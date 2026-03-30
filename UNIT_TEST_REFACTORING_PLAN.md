@@ -1153,3 +1153,15 @@ That order will protect the app’s most fragile behavior with the least amount 
   - `./gradlew :app:connectedDebugAndroidTest`
 - result:
   - connected Android tests: `21` tests, `0` failures
+
+### Batch AB: FileManager interaction behavior tests
+
+- expanded [FileManagerBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/FileManagerBehaviorTest.kt)
+- focus:
+  - `Select All` can toggle mutable entries on and back off
+  - immutable entries expose disabled selection controls
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+  - `./gradlew :app:connectedDebugAndroidTest`
+- result:
+  - connected Android tests: `23` tests, `0` failures
