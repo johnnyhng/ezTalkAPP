@@ -3,6 +3,7 @@ package tw.com.johnnyhng.eztalk.asr.utils
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -133,6 +134,36 @@ class ApiHttpIntegrationTest {
     }
 
     @Test
+    fun postTransferMultipartModeUploadsJsonAndFileParts() {
+        val wavFile = createTempWavFile("transfer-multipart")
+        File(wavFile.parentFile, wavFile.nameWithoutExtension + ".jsonl").writeText(
+            """
+            {
+              "modified": "confirmed text",
+              "remote_candidates": ["r1"]
+            }
+            """.trimIndent()
+        )
+
+        val response = withHttpServer(responseCode = 200, responseBody = """{"ok":true}""") { serverUrl, requestRef ->
+            val success = postTransfer(
+                transferUrl = "$serverUrl/api/transfer",
+                filePath = wavFile.absolutePath,
+                userId = "tester@example.com",
+                sendFileByJson = false
+            )
+            assertTrue(success)
+            requestRef.get()
+        }
+
+        assertEquals("POST", response.method)
+        assertTrue(response.contentType.contains("multipart/form-data"))
+        assertTrue(response.body.contains("name=\"json\""))
+        assertTrue(response.body.contains("\"label\":\"confirmed text\""))
+        assertTrue(response.body.contains("filename=\"${wavFile.name}\""))
+    }
+
+    @Test
     fun postForRecognitionJsonModeParsesResponseObject() {
         val wavFile = createTempWavFile("recognition-json")
 
@@ -160,6 +191,78 @@ class ApiHttpIntegrationTest {
         assertNotNull(response)
         assertEquals("ok", response?.getString("result"))
         assertEquals("a", response?.getJSONArray("sentence_candidates")?.getString(0))
+    }
+
+    @Test
+    fun postForRecognitionMultipartModeParsesResponseObject() {
+        val wavFile = createTempWavFile("recognition-multipart")
+
+        val response = withHttpServer(
+            responseCode = 200,
+            responseBody = """
+                {
+                  "response": {
+                    "result": "multipart-ok",
+                    "sentence_candidates": ["x", "y"]
+                  }
+                }
+            """.trimIndent()
+        ) { serverUrl, requestRef ->
+            val result = postForRecognition(
+                recognitionUrl = "$serverUrl/process_audio",
+                filePath = wavFile.absolutePath,
+                userId = "tester@example.com",
+                sendFileByJson = false
+            )
+            val request = requestRef.get()
+            assertEquals("POST", request.method)
+            assertTrue(request.contentType.contains("multipart/form-data"))
+            assertTrue(request.body.contains("filename=\"${wavFile.name}\""))
+            result
+        }
+
+        assertNotNull(response)
+        assertEquals("multipart-ok", response?.getString("result"))
+        assertEquals("x", response?.getJSONArray("sentence_candidates")?.getString(0))
+    }
+
+    @Test
+    fun postProcessAudioReturnsFalseOnNonSuccessResponse() {
+        val wavFile = createTempWavFile("process-failure")
+
+        val success = withHttpServer(
+            responseCode = 500,
+            responseBody = """{"error":"failed"}"""
+        ) { serverUrl, _ ->
+            postProcessAudio(
+                processAudioUrl = "$serverUrl/process_audio",
+                filePath = wavFile.absolutePath,
+                userId = "tester@example.com",
+                metadata = JSONObject().apply { put("modified", "confirmed text") },
+                sendFileByJson = true
+            )
+        }
+
+        assertFalse(success)
+    }
+
+    @Test
+    fun postForRecognitionReturnsNullOnNonSuccessResponse() {
+        val wavFile = createTempWavFile("recognition-failure")
+
+        val result = withHttpServer(
+            responseCode = 500,
+            responseBody = """{"error":"failed"}"""
+        ) { serverUrl, _ ->
+            postForRecognition(
+                recognitionUrl = "$serverUrl/process_audio",
+                filePath = wavFile.absolutePath,
+                userId = "tester@example.com",
+                sendFileByJson = true
+            )
+        }
+
+        assertEquals(null, result)
     }
 
     private fun createTempWavFile(prefix: String): File =

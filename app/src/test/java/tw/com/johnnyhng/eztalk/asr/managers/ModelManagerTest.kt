@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import tw.com.johnnyhng.eztalk.asr.fixtures.TestFixtures
@@ -89,6 +90,20 @@ class ModelManagerTest {
         val deleted = ModelManager.deleteModel(context, "model-missing-delete", "missing")
 
         assertFalse(deleted)
+    }
+
+    @Test
+    fun getModelReturnsNullWhenNoValidModelsExistAfterCopyAttempt() {
+        val userId = "model-empty"
+        val userDir = userModelsDir(userId).apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        File(userDir, "incomplete").mkdirs()
+
+        val model = ModelManager.getModel(context, userId, "missing")
+
+        assertNull(model)
     }
 
     private fun userModelsDir(userId: String): File =

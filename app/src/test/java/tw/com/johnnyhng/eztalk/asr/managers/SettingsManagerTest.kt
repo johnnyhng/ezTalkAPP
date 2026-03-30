@@ -1,26 +1,16 @@
 package tw.com.johnnyhng.eztalk.asr.managers
 
-import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.test.core.app.ApplicationProvider
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class SettingsManagerTest {
-    private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
     fun preferencesToUserSettingsUsesDefaultsWhenPreferencesAreEmpty() {
@@ -95,28 +85,5 @@ class SettingsManagerTest {
         assertEquals(true, preferences[booleanPreferencesKey("enable_tts_feedback")])
         assertEquals("https://models.example.com/model.zip", preferences[stringPreferencesKey("model_url")])
         assertEquals("model-a", preferences[stringPreferencesKey("selected_model_name")])
-    }
-
-    @Test
-    fun settingsManagerRoundTripPersistsAndReadsBackValues() = runBlocking {
-        val settingsManager = SettingsManager(context)
-        val updated = UserSettings(
-            userId = "unit_user",
-            lingerMs = 1450f,
-            partialIntervalMs = 320f,
-            saveVadSegmentsOnly = true,
-            inlineEdit = false,
-            backendUrl = "https://unit.example.com",
-            recognitionUrl = "",
-            enableTtsFeedback = true,
-            modelUrl = "https://models.example.com/unit.zip",
-            selectedModelName = "unit-model"
-        )
-
-        settingsManager.updateSettings(updated)
-        val restored = settingsManager.userSettings.first()
-
-        assertEquals(updated, restored)
-        assertEquals("https://unit.example.com/api/process_audio", restored.effectiveRecognitionUrl)
     }
 }

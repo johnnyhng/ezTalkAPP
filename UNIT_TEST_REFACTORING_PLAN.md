@@ -1201,3 +1201,20 @@ That order will protect the app’s most fragile behavior with the least amount 
   - `./gradlew :app:connectedDebugAndroidTest`
 - result:
   - connected Android tests: `29` tests, `0` failures
+
+### Batch AF: SettingsManager JVM coverage recovery
+
+- updated [SettingsManagerTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/test/java/tw/com/johnnyhng/eztalk/asr/managers/SettingsManagerTest.kt)
+- expanded [ModelManagerTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/test/java/tw/com/johnnyhng/eztalk/asr/managers/ModelManagerTest.kt)
+- expanded [ApiHttpIntegrationTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/test/java/tw/com/johnnyhng/eztalk/asr/utils/ApiHttpIntegrationTest.kt)
+- added [WavUtilReadWavFileTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/test/java/tw/com/johnnyhng/eztalk/asr/utils/WavUtilReadWavFileTest.kt)
+- focus:
+  - move `SettingsManager` helper coverage off Robolectric-only paths so Jacoco records it
+  - keep extending pure JVM / local HTTP tests for `ModelManager`, `Api`, and `WavUtil` without production changes
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+  - `./gradlew :app:jacocoCoreLogicReport`
+- result:
+  - `SettingsManager.kt` line coverage: `33 / 41` = `80.49%`
+  - core logic line coverage: `595 / 876` = `67.92%`
+  - core logic branch coverage: `239 / 328` = `72.87%`
