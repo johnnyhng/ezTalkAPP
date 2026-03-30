@@ -11,15 +11,15 @@ Latest verified on:
 
 Core logic Jacoco coverage:
 
-- line: `553 / 876` = `63.13%`
+- line: `562 / 876` = `64.16%`
 - branch: `219 / 328` = `66.77%`
-- instruction: `3581 / 5526` = `64.80%`
-- method: `75 / 116` = `64.66%`
+- instruction: `3610 / 5526` = `65.33%`
+- method: `76 / 116` = `65.52%`
 - class: `9 / 12` = `75.00%`
 
 Connected Android tests:
 
-- tests: `19`
+- tests: `29`
 - failures: `0`
 
 ## What this number means
