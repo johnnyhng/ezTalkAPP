@@ -1165,3 +1165,15 @@ That order will protect the app’s most fragile behavior with the least amount 
   - `./gradlew :app:connectedDebugAndroidTest`
 - result:
   - connected Android tests: `23` tests, `0` failures
+
+### Batch AC: Settings interaction behavior tests
+
+- expanded [SettingsScreenBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/SettingsScreenBehaviorTest.kt)
+- focus:
+  - save mode switch reflects state and can toggle
+  - edited backend URL and model URL remain visible after change
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+  - `./gradlew :app:connectedDebugAndroidTest`
+- result:
+  - connected Android tests: `25` tests, `0` failures

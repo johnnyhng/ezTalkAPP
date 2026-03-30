@@ -115,6 +115,69 @@ class SettingsScreenBehaviorTest {
             .assertIsDisplayed()
     }
 
+    @Test
+    fun settingsScreenSaveModeSwitchReflectsPersistedStateAndToggles() {
+        seedSettings(
+            UserSettings(
+                userId = "screen-user-save-mode",
+                saveVadSegmentsOnly = false
+            )
+        )
+        val viewModel = HomeViewModel(application)
+
+        composeRule.setContent {
+            SettingsScreen(homeViewModel = viewModel)
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.save_vad_segments)).performScrollTo()
+        composeRule.onNodeWithText(context.getString(R.string.save_full_audio)).performScrollTo()
+        composeRule.onAllNodes(isToggleable()).assertCountEquals(3)
+
+        val saveModeSwitch = composeRule.onAllNodes(isToggleable())[0]
+        saveModeSwitch.assertIsOn()
+        saveModeSwitch.performClick()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            try {
+                saveModeSwitch.assertIsOff()
+                true
+            } catch (_: AssertionError) {
+                false
+            }
+        }
+    }
+
+    @Test
+    fun settingsScreenEditedBackendAndModelUrlStayVisibleAfterEdit() {
+        seedSettings(
+            UserSettings(
+                userId = "screen-user-urls",
+                backendUrl = "https://old-backend.example.com",
+                modelUrl = "https://old-model.example.com/model.zip"
+            )
+        )
+        val viewModel = HomeViewModel(application)
+
+        composeRule.setContent {
+            SettingsScreen(homeViewModel = viewModel)
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.model_download_url))
+            .performScrollTo()
+        composeRule.onNodeWithText("https://old-model.example.com/model.zip")
+            .performTextReplacement("https://new-model.example.com/model.zip")
+
+        composeRule.onNodeWithText(context.getString(R.string.backend_url))
+            .performScrollTo()
+        composeRule.onNodeWithText("https://old-backend.example.com")
+            .performTextReplacement("https://new-backend.example.com")
+
+        composeRule.onNodeWithText("https://new-model.example.com/model.zip").assertIsDisplayed()
+        composeRule.onNodeWithText("https://new-backend.example.com")
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
     private fun seedSettings(settings: UserSettings) = runBlocking {
         SettingsManager(application).updateSettings(settings)
     }
