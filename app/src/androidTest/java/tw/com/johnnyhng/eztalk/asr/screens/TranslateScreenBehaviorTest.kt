@@ -74,6 +74,40 @@ class TranslateScreenBehaviorTest {
         composeRule.onNodeWithText("clipboard text").assertIsDisplayed()
     }
 
+    @Test
+    fun translateScreenCopyButtonIsSafeWhenTextIsEmpty() {
+        seedSettings("translate-screen-copy-empty")
+        val viewModel = HomeViewModel(application)
+
+        composeRule.setContent {
+            TranslateScreen(homeViewModel = viewModel)
+        }
+
+        composeRule.onNodeWithContentDescription(context.getString(R.string.copy)).performClick()
+
+        composeRule.onNodeWithText(context.getString(R.string.recognized_text)).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.start)).assertIsDisplayed()
+    }
+
+    @Test
+    fun translateScreenAllowsTypingAgainAfterClear() {
+        seedSettings("translate-screen-retype")
+        val viewModel = HomeViewModel(application)
+
+        composeRule.setContent {
+            TranslateScreen(homeViewModel = viewModel)
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.recognized_text))
+            .performTextInput("first text")
+        composeRule.onNodeWithContentDescription(context.getString(R.string.clear)).performClick()
+        composeRule.onNodeWithText("first text").assertDoesNotExist()
+
+        composeRule.onNodeWithText(context.getString(R.string.recognized_text))
+            .performTextInput("second text")
+        composeRule.onNodeWithText("second text").assertIsDisplayed()
+    }
+
     private fun seedSettings(userId: String) = runBlocking {
         SettingsManager(application).updateSettings(
             UserSettings(

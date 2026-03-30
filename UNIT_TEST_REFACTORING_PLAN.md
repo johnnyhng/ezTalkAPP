@@ -1177,3 +1177,15 @@ That order will protect the app’s most fragile behavior with the least amount 
   - `./gradlew :app:connectedDebugAndroidTest`
 - result:
   - connected Android tests: `25` tests, `0` failures
+
+### Batch AD: Translate interaction behavior tests
+
+- expanded [TranslateScreenBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/TranslateScreenBehaviorTest.kt)
+- focus:
+  - copy action is safe when no text exists
+  - typing can continue normally after clear
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+  - `./gradlew :app:connectedDebugAndroidTest`
+- result:
+  - connected Android tests: `27` tests, `0` failures
