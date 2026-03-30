@@ -1127,3 +1127,17 @@ That order will protect the app’s most fragile behavior with the least amount 
 - verification:
   - `./gradlew :app:compileDebugAndroidTestKotlin`
   - `./gradlew :app:connectedDebugAndroidTest`
+
+### Batch Z: Api execution flow coverage
+
+- added [ApiExecutionFlowTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/test/java/tw/com/johnnyhng/eztalk/asr/utils/ApiExecutionFlowTest.kt)
+- focus:
+  - upload metadata source and JSONL snapshot handling
+  - upload package assembly with injected loaders
+  - feedback execution planning and dispatch across transfer, process-audio, and updates routes
+- verification:
+  - `./gradlew :app:testDebugUnitTest`
+  - `./gradlew :app:jacocoCoreLogicReport`
+- result:
+  - core logic line coverage: `64.16%`
+  - `ApiKt` line coverage: `58.17%`
