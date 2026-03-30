@@ -1189,3 +1189,15 @@ That order will protect the app’s most fragile behavior with the least amount 
   - `./gradlew :app:connectedDebugAndroidTest`
 - result:
   - connected Android tests: `27` tests, `0` failures
+
+### Batch AE: Home list-effect behavior tests
+
+- expanded [HomeScreenBehaviorTest.kt](/home/hhs/workspace/ezTalkAPP/app/src/androidTest/java/tw/com/johnnyhng/eztalk/asr/screens/HomeScreenBehaviorTest.kt)
+- focus:
+  - injected transcript rows can be cleared from the visible list
+  - copy action is safe when visible transcripts already exist
+- verification:
+  - `./gradlew :app:compileDebugAndroidTestKotlin`
+  - `./gradlew :app:connectedDebugAndroidTest`
+- result:
+  - connected Android tests: `29` tests, `0` failures
