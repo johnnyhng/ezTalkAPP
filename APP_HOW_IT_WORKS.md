@@ -65,7 +65,7 @@ Their roles are:
   - loads saved `.wav` / `.jsonl` pairs from disk
   - allows editing, playback, selection, deletion, and feedback upload
 - [SettingsScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SettingsScreen.kt)
-  - edits persisted user settings such as URLs, model selection, timing, and TTS feedback mode
+  - edits persisted user settings such as backend URL, model selection, timing, and TTS feedback mode
 
 ### 2. View models and managers
 
@@ -76,6 +76,7 @@ The main state/control classes live under [app/src/main/java/tw/com/johnnyhng/ez
   - exposes user settings, selected model, model loading state
   - bridges UI to `RecognitionManager`
   - emits `partialText` and `finalTranscript`
+  - owns remote model dialog state, remote model download progress, and remote model update checks
 - [RecognitionManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/RecognitionManager.kt)
   - owns microphone recording and speech segmentation
   - runs partial and final recognition
@@ -90,6 +91,9 @@ The main state/control classes live under [app/src/main/java/tw/com/johnnyhng/ez
   - lists available local models per user
   - copies a default model from assets if needed
   - deletes models
+- [RemoteModelRepository.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/RemoteModelRepository.kt)
+  - lists remote models from backend
+  - downloads selected model files into the local per-user model directory
 
 ### 3. Utilities
 
@@ -105,7 +109,10 @@ The key utility files live under [app/src/main/java/tw/com/johnnyhng/eztalk/asr/
   - caches them into the same `.jsonl`
 - [Api.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/Api.kt)
   - upload / feedback / recognition HTTP calls
-  - decides whether feedback uses `PUT /api/updates` or `POST /api/transfer`
+  - decides whether feedback uses `PUT /updates`, `POST /process_audio`, or `POST /transfer`
+  - also implements remote model list / check-update / download helpers
+- [BackendEndpoints.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/BackendEndpoints.kt)
+  - centralizes API endpoint construction from a single `backendUrl`
 - [MediaController.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/MediaController.kt)
   - centralized audio playback for saved WAVs
 - [Utils.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/Utils.kt)
@@ -148,9 +155,15 @@ Important settings include:
 - `saveVadSegmentsOnly`
 - `inlineEdit`
 - `backendUrl`
-- `recognitionUrl`
 - `enableTtsFeedback`
 - `selectedModelName`
+
+Current behavior:
+
+- `backendUrl` is the single user-entered API base
+- the app uses it as-is, only trimming whitespace and a trailing slash
+- `effectiveRecognitionUrl` is derived from `backendUrl` as `backendUrl + /process_audio`
+- model list / model download / feedback routes all use the same `backendUrl`
 
 ## Main recognition flow
 
@@ -221,6 +234,31 @@ When the user opens inline edit for a saved item:
 - the local result is written into `localCandidates`
 - `local_candidates` is cached into the same `.jsonl`
 - later saves preserve both `local_candidates` and `remote_candidates`
+
+### Remote model flow
+
+Remote model management is driven by `SettingsScreen` + `RemoteModelsManager` through `HomeViewModel`.
+
+The current runtime path is:
+
+1. user opens the remote model dialog from Settings
+2. `HomeViewModel` calls `RemoteModelRepository.listRemoteModels(...)` on `Dispatchers.IO`
+3. backend model list is fetched from:
+   - `GET <backendUrl>/list_models/<user_id>`
+4. the response body is expected to look like:
+   - `{"models":["mobile", ...]}`
+5. each returned model name is shown in `RemoteModelsManager`
+6. when the dialog contains `mobile` and local `files/models/<userId>/mobile/model.int8.onnx` exists:
+   - the app computes local file SHA-256
+   - calls `GET <backendUrl>/check_update/<user_id>`
+   - compares local hash with backend `server_hash`
+   - if they differ, the `mobile` row is marked with an update-available icon
+7. when the user downloads a selected remote model:
+   - the app downloads `model.int8.onnx`
+   - then downloads `tokens.txt`
+   - both are stored under `files/models/<userId>/<modelName>/`
+
+This means the remote model dialog is now backed by the backend list API rather than local placeholder data.
 
 ### Home TTS / feedback flow
 
@@ -362,17 +400,35 @@ Backend calls are implemented in [Api.kt](/home/hhs/workspace/ezTalkAPP/app/src/
 The key decision point is `feedbackToBackend(...)`:
 
 - if the item already has `remote_candidates` in JSONL:
-  - use `PUT /api/updates`
+  - use `PUT /updates`
+- if there are no remote candidates but there are `local_candidates`:
+  - use `POST /process_audio`
 - otherwise:
-  - use `POST /api/transfer`
+  - use `POST /transfer`
 
-For `PUT /api/updates`:
+For `PUT /updates`:
 
 - the payload still uses the current `modified` text as the sentence being confirmed
 - the label payload also includes `candidates`
 - `candidates` is built by merging `local_candidates` and `remote_candidates`
 - merge order is local first, then remote
 - duplicates are removed while keeping first-seen order
+
+For `POST /process_audio` in local-only feedback mode:
+
+- the payload includes:
+  - `login_user`
+  - `filename`
+  - `label`
+  - `num_of_stn`
+  - `raw`
+  - merged `candidates` when available
+- this allows backend `process_audio` proxy logic to treat the request as an already-reviewed utterance when `label != "tmp"` and `candidates` are present
+
+For `POST /transfer`:
+
+- the app sends the upload payload without relying on candidate metadata
+- this is the fallback route when neither local nor remote candidates exist
 
 `Api.kt` also contains:
 
@@ -387,7 +443,7 @@ Settings are stored in Android DataStore via [SettingsManager.kt](/home/hhs/work
 That includes:
 
 - ASR timing values
-- backend and recognition URLs
+- backend URL
 - selected model
 - TTS feedback mode
 
