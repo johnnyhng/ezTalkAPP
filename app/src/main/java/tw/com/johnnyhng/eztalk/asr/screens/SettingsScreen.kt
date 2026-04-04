@@ -76,10 +76,9 @@ fun SettingsScreen(
     val models = homeViewModel.models
     val selectedModel = homeViewModel.selectedModel
     var modelMenuExpanded by remember { mutableStateOf(false) }
-    var modelUrl by remember(userSettings.modelUrl) { mutableStateOf(userSettings.modelUrl) }
     var backendUrl by remember(userSettings.backendUrl) { mutableStateOf(userSettings.backendUrl) }
-    val isDownloading = homeViewModel.isDownloading
-    val downloadProgress = homeViewModel.downloadProgress
+    val isDownloading by homeViewModel.isDownloadingFlow.collectAsState()
+    val downloadProgress by homeViewModel.downloadProgressFlow.collectAsState()
     val canDeleteModel = homeViewModel.canDeleteModel
 
     val languages = listOf("en" to "English", "zh" to "Chinese")
@@ -198,21 +197,10 @@ fun SettingsScreen(
                     }
                 }
             }
-            OutlinedTextField(
-                value = modelUrl,
-                onValueChange = { 
-                    modelUrl = it
-                    homeViewModel.updateModelUrl(it)
-                },
-                label = { Text(stringResource(R.string.model_download_url)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                enabled = !isDownloading
-            )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 IconButton(onClick = {
                     homeViewModel.showRemoteModelsDialog()
-                }, enabled = !isDownloading && modelUrl.isNotBlank()) {
+                }, enabled = !isDownloading && backendUrl.isNotBlank()) {
                     Icon(Icons.Default.Cloud, contentDescription = stringResource(R.string.check_version))
                 }
                 IconButton(onClick = {
@@ -224,8 +212,9 @@ fun SettingsScreen(
                 }
             }
             if (isDownloading) {
-                if (downloadProgress != null) {
-                    LinearProgressIndicator(progress = downloadProgress, modifier = Modifier.fillMaxWidth())
+                val progress = downloadProgress
+                if (progress != null) {
+                    LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
                 } else {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }

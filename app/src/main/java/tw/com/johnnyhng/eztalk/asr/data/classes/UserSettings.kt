@@ -1,5 +1,7 @@
 package tw.com.johnnyhng.eztalk.asr.data.classes
 
+import tw.com.johnnyhng.eztalk.asr.utils.BackendEndpoints
+
 data class UserSettings(
     val userId: String = "default_user",
     val lingerMs: Float = 1000f,
@@ -13,10 +15,5 @@ data class UserSettings(
     val selectedModelName: String = ""
 ) {
     val effectiveRecognitionUrl: String
-        get() = if (recognitionUrl.isNotBlank()) {
-            recognitionUrl
-        } else {
-            val base = backendUrl.trim().removeSuffix("/")
-            if (base.isNotBlank()) "$base/api/process_audio" else ""
-        }
+        get() = BackendEndpoints.processAudio(backendUrl)
 }

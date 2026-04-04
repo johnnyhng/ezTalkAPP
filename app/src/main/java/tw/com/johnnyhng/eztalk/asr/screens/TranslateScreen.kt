@@ -512,7 +512,6 @@ fun TranslateScreen(
                             val success = withContext(IO) {
                                 feedbackToBackend(
                                     userSettings.backendUrl,
-                                    userSettings.effectiveRecognitionUrl,
                                     transcript.wavFilePath,
                                     userSettings.userId
                                 )

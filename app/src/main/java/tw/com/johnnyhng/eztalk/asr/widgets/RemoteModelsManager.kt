@@ -27,8 +27,14 @@ fun RemoteModelsManager(
 ) {
     val remoteModels = homeViewModel.remoteModels
     var selectedModel by remember { mutableStateOf(remoteModels.firstOrNull()) }
-    val isDownloading = homeViewModel.isDownloading
-    val downloadProgress = homeViewModel.downloadProgress
+    val isDownloading by homeViewModel.isDownloadingFlow.collectAsState()
+    val downloadProgress by homeViewModel.downloadProgressFlow.collectAsState()
+
+    LaunchedEffect(remoteModels) {
+        if (selectedModel == null || remoteModels.none { it.name == selectedModel?.name }) {
+            selectedModel = remoteModels.firstOrNull()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = {
@@ -59,7 +65,7 @@ fun RemoteModelsManager(
                                     enabled = !isDownloading
                                 )
                                 Text(
-                                    text = model,
+                                    text = model.name,
                                     modifier = Modifier.padding(start = 16.dp)
                                 )
                             }
@@ -76,9 +82,10 @@ fun RemoteModelsManager(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         if (isDownloading) {
-                            if (downloadProgress != null) {
+                            val progress = downloadProgress
+                            if (progress != null) {
                                 LinearProgressIndicator(
-                                    progress = downloadProgress,
+                                    progress = progress,
                                     modifier = Modifier.weight(1f)
                                 )
                             } else {

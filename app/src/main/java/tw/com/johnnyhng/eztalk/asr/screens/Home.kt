@@ -133,7 +133,6 @@ fun HomeScreen(
                 val success = withContext(Dispatchers.IO) {
                     feedbackToBackend(
                         userSettings.backendUrl,
-                        userSettings.effectiveRecognitionUrl,
                         item.wavFilePath,
                         userSettings.userId
                     )
@@ -208,7 +207,6 @@ fun HomeScreen(
                 val success = withContext(Dispatchers.IO) {
                     feedbackToBackend(
                         userSettings.backendUrl,
-                        userSettings.effectiveRecognitionUrl,
                         item.wavFilePath,
                         userSettings.userId
                     )

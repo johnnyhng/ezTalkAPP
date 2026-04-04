@@ -145,7 +145,6 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     } else {
                         feedbackToBackend(
                             userSettings.backendUrl,
-                            userSettings.effectiveRecognitionUrl,
                             entry.wavFile.absolutePath,
                             userSettings.userId
                         )
