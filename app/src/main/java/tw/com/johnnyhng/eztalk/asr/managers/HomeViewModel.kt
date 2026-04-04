@@ -7,11 +7,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.data.classes.Model
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
@@ -21,7 +22,10 @@ sealed class DownloadUiEvent {
     data class ShowToast(val message: String) : DownloadUiEvent()
 }
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+class HomeViewModel @JvmOverloads constructor(
+    application: Application,
+    private val remoteModelRepository: RemoteModelRepository = DirectUrlRemoteModelRepository
+) : AndroidViewModel(application) {
     private val settingsManager = SettingsManager(application)
     
     val userSettings: StateFlow<UserSettings> = settingsManager.userSettings.stateIn(
@@ -55,8 +59,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val canDeleteModel: Boolean get() = _models.size > 1
 
     // Remote models for the dialog
-    private val _remoteModels = mutableStateListOf<String>()
-    val remoteModels: List<String> get() = _remoteModels
+    private val _remoteModels = mutableStateListOf<RemoteModelDescriptor>()
+    val remoteModels: List<RemoteModelDescriptor> get() = _remoteModels
     var isFetchingRemoteModels by mutableStateOf(false)
 
     // Recognition Manager integration
@@ -183,12 +187,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         return "$userId::$modelName"
     }
 
-    fun updateModelUrl(url: String) {
-        viewModelScope.launch {
-            settingsManager.updateSettings(userSettings.value.copy(modelUrl = url))
-        }
-    }
-
     fun deleteModel(model: Model) {
         if (ModelManager.deleteModel(getApplication(), userSettings.value.userId, model.name)) {
             loadModels()
@@ -207,25 +205,53 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun fetchRemoteModels() {
         isFetchingRemoteModels = true
         viewModelScope.launch {
-            delay(1000)
-            _remoteModels.clear()
-            _remoteModels.add("v1.0-sense-voice")
-            isFetchingRemoteModels = false
+            try {
+                val selectedRemoteModelName = selectedModel?.name
+                    ?: userSettings.value.selectedModelName.ifBlank { "custom-sense-voice" }
+                val remoteModels = withContext(Dispatchers.IO) {
+                    remoteModelRepository.listRemoteModels(
+                        modelApiBaseUrl = userSettings.value.backendUrl,
+                        userId = userSettings.value.userId,
+                        selectedModelName = selectedRemoteModelName
+                    )
+                }
+                _remoteModels.clear()
+                _remoteModels.addAll(remoteModels)
+            } finally {
+                isFetchingRemoteModels = false
+            }
         }
     }
 
-    fun downloadModel(modelName: String) {
+    fun downloadModel(remoteModel: RemoteModelDescriptor) {
         viewModelScope.launch {
             _isDownloading.value = true
-            _downloadProgress.value = 0f
-            for (i in 1..100) {
-                delay(50)
-                _downloadProgress.value = i / 100f
+            _downloadProgress.value = null
+            val result = withContext(Dispatchers.IO) {
+                remoteModelRepository.downloadModel(
+                    modelApiBaseUrl = userSettings.value.backendUrl,
+                    userId = userSettings.value.userId,
+                    remoteModel = remoteModel,
+                    userModelsDir = getApplication<Application>().filesDir.resolve("models/${userSettings.value.userId}"),
+                    onProgress = { progress -> _downloadProgress.value = progress }
+                )
             }
             _isDownloading.value = false
             _downloadProgress.value = null
-            _downloadEventFlow.emit(DownloadUiEvent.ShowToast("Download complete: $modelName"))
-            loadModels()
+
+            result.fold(
+                onSuccess = {
+                    _downloadEventFlow.emit(DownloadUiEvent.ShowToast("Download complete: ${remoteModel.name}"))
+                    loadModels()
+                },
+                onFailure = { error ->
+                    _downloadEventFlow.emit(
+                        DownloadUiEvent.ShowToast(
+                            error.message ?: "Download failed: ${remoteModel.name}"
+                        )
+                    )
+                }
+            )
         }
     }
 
@@ -234,7 +260,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSaveVadSegmentsOnly(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(saveVadSegmentsOnly = v)) }
     fun updateInlineEdit(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(inlineEdit = v)) }
     fun updateBackendUrl(v: String) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(backendUrl = v)) }
-    fun updateRecognitionUrl(v: String) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(recognitionUrl = v)) }
     fun updateEnableTtsFeedback(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(enableTtsFeedback = v)) }
 
     override fun onCleared() {
