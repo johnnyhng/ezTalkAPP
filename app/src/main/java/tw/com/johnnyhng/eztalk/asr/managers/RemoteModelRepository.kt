@@ -10,7 +10,8 @@ data class RemoteModelDescriptor(
     val name: String,
     val filename: String,
     val fileSizeBytes: Long,
-    val serverHash: String
+    val serverHash: String,
+    val updateAvailable: Boolean = false
 )
 
 interface RemoteModelRepository {

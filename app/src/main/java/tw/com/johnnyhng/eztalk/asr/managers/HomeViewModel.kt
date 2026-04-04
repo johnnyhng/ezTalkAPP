@@ -17,6 +17,9 @@ import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.data.classes.Model
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import tw.com.johnnyhng.eztalk.asr.utils.checkModelUpdate
+import tw.com.johnnyhng.eztalk.asr.utils.sha256
+import java.io.File
 
 sealed class DownloadUiEvent {
     data class ShowToast(val message: String) : DownloadUiEvent()
@@ -209,10 +212,16 @@ class HomeViewModel @JvmOverloads constructor(
                 val selectedRemoteModelName = selectedModel?.name
                     ?: userSettings.value.selectedModelName.ifBlank { "custom-sense-voice" }
                 val remoteModels = withContext(Dispatchers.IO) {
-                    remoteModelRepository.listRemoteModels(
+                    val fetchedModels = remoteModelRepository.listRemoteModels(
                         modelApiBaseUrl = userSettings.value.backendUrl,
                         userId = userSettings.value.userId,
                         selectedModelName = selectedRemoteModelName
+                    )
+                    markUpdateAvailability(
+                        remoteModels = fetchedModels,
+                        backendUrl = userSettings.value.backendUrl,
+                        userId = userSettings.value.userId,
+                        userModelsDir = getApplication<Application>().filesDir.resolve("models/${userSettings.value.userId}")
                     )
                 }
                 _remoteModels.clear()
@@ -261,6 +270,39 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateInlineEdit(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(inlineEdit = v)) }
     fun updateBackendUrl(v: String) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(backendUrl = v)) }
     fun updateEnableTtsFeedback(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(enableTtsFeedback = v)) }
+
+    private fun markUpdateAvailability(
+        remoteModels: List<RemoteModelDescriptor>,
+        backendUrl: String,
+        userId: String,
+        userModelsDir: File
+    ): List<RemoteModelDescriptor> {
+        if (backendUrl.isBlank() || userId.isBlank()) return remoteModels
+
+        val mobileModel = remoteModels.firstOrNull { it.name == "mobile" } ?: return remoteModels
+        val localModelFile = File(userModelsDir, "mobile/model.int8.onnx")
+        if (!localModelFile.exists()) return remoteModels
+
+        val localHash = sha256(localModelFile) ?: return remoteModels
+        val remoteUpdate = checkModelUpdate(
+            baseUrl = backendUrl,
+            userId = userId,
+            modelName = mobileModel.name
+        ) ?: return remoteModels
+
+        if (remoteUpdate.serverHash.isBlank()) return remoteModels
+
+        return remoteModels.map { model ->
+            if (model.name == "mobile") {
+                model.copy(
+                    serverHash = remoteUpdate.serverHash,
+                    updateAvailable = !localHash.equals(remoteUpdate.serverHash, ignoreCase = true)
+                )
+            } else {
+                model
+            }
+        }
+    }
 
     override fun onCleared() {
         super.onCleared()

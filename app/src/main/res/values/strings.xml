@@ -52,6 +52,7 @@
     <string name="available_remote_models">Available Remote Models</string>
     <string name="no_remote_models_found">No remote models found.</string>
     <string name="download">Download</string>
+    <string name="update_available">Update available</string>
     <string name="close">Close</string>
     <string name="file_deleted_successfully">File deleted successfully</string>
     <string name="file_deletion_failed">Failed to delete file</string>

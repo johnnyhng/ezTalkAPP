@@ -12,10 +12,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import tw.com.johnnyhng.eztalk.asr.R
@@ -68,6 +70,14 @@ fun RemoteModelsManager(
                                     text = model.name,
                                     modifier = Modifier.padding(start = 16.dp)
                                 )
+                                if (model.updateAvailable) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Icon(
+                                        imageVector = Icons.Default.SystemUpdateAlt,
+                                        contentDescription = stringResource(R.string.update_available),
+                                        tint = Color(0xFF2E7D32)
+                                    )
+                                }
                             }
                         }
                     }
