@@ -17,12 +17,12 @@ class SettingsManagerTest {
         val settings = preferencesToUserSettings(mutablePreferencesOf())
 
         assertEquals("default_user", settings.userId)
-        assertEquals(1000f, settings.lingerMs)
+        assertEquals(5000f, settings.lingerMs)
         assertEquals(500f, settings.partialIntervalMs)
         assertFalse(settings.saveVadSegmentsOnly)
-        assertTrue(settings.inlineEdit)
+        assertFalse(settings.inlineEdit)
         assertEquals("https://120.126.151.159:56432/api/v2", settings.backendUrl)
-        assertFalse(settings.enableTtsFeedback)
+        assertTrue(settings.enableTtsFeedback)
         assertEquals("", settings.selectedModelName)
     }
 

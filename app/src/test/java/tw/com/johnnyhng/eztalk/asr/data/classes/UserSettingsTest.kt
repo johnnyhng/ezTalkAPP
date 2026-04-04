@@ -9,12 +9,12 @@ class UserSettingsTest {
         val settings = UserSettings()
 
         assertEquals("default_user", settings.userId)
-        assertEquals(1000f, settings.lingerMs)
+        assertEquals(5000f, settings.lingerMs)
         assertEquals(500f, settings.partialIntervalMs)
         assertEquals(false, settings.saveVadSegmentsOnly)
-        assertEquals(true, settings.inlineEdit)
+        assertEquals(false, settings.inlineEdit)
         assertEquals("https://120.126.151.159:56432/api/v2", settings.backendUrl)
-        assertEquals(false, settings.enableTtsFeedback)
+        assertEquals(true, settings.enableTtsFeedback)
         assertEquals("", settings.selectedModelName)
     }
 
