@@ -148,6 +148,18 @@ fun SettingsScreen(
             }
         }
 
+        OutlinedTextField(
+            value = backendUrl,
+            onValueChange = {
+                backendUrl = it
+                homeViewModel.updateBackendUrl(it)
+            },
+            label = { Text(stringResource(R.string.backend_url)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !isDownloading
+        )
+
         // Model Selection
         Column(modifier = Modifier.padding(vertical = 16.dp)) {
             Text(stringResource(R.string.asr_model), style = MaterialTheme.typography.titleMedium)
@@ -220,18 +232,6 @@ fun SettingsScreen(
                 }
             }
         }
-
-        OutlinedTextField(
-            value = backendUrl,
-            onValueChange = {
-                backendUrl = it
-                homeViewModel.updateBackendUrl(it)
-            },
-            label = { Text(stringResource(R.string.backend_url)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            enabled = !isDownloading
-        )
 
         // Delay Slider
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
