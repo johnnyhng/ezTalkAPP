@@ -9,7 +9,7 @@ class ApiFeedbackRouteTransferTest {
     fun decideFeedbackRouteChoosesTransferWhenMetadataIsMissing() {
         val result = decideFeedbackRoute(
             metadata = null,
-            recognitionUrl = "https://example.com/api/process_audio"
+            backendUrl = "https://example.com"
         )
 
         assertEquals(FeedbackRoute.POST_TRANSFER, result)
@@ -23,7 +23,7 @@ class ApiFeedbackRouteTransferTest {
 
         val result = decideFeedbackRoute(
             metadata = metadata,
-            recognitionUrl = "https://example.com/api/process_audio"
+            backendUrl = "https://example.com"
         )
 
         assertEquals(FeedbackRoute.POST_TRANSFER, result)

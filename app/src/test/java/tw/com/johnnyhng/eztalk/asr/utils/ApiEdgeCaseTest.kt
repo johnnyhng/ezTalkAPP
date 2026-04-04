@@ -7,14 +7,14 @@ import org.junit.Test
 
 class ApiEdgeCaseTest {
     @Test
-    fun decideFeedbackRouteStillChoosesPutUpdatesWhenRemoteCandidatesExistAndRecognitionUrlIsBlank() {
+    fun decideFeedbackRouteStillChoosesPutUpdatesWhenRemoteCandidatesExistAndBackendUrlIsBlank() {
         val metadata = JSONObject().apply {
             put("remote_candidates", JSONArray(listOf("remote-1")))
         }
 
         val result = decideFeedbackRoute(
             metadata = metadata,
-            recognitionUrl = ""
+            backendUrl = ""
         )
 
         assertEquals(FeedbackRoute.PUT_UPDATES, result)

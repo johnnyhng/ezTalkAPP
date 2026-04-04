@@ -15,7 +15,7 @@ class ApiFeedbackRouteRemoteTest {
 
         val result = decideFeedbackRoute(
             metadata = metadata,
-            recognitionUrl = "https://example.com/api/process_audio"
+            backendUrl = "https://example.com"
         )
 
         assertEquals(FeedbackRoute.PUT_UPDATES, result)

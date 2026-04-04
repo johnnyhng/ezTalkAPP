@@ -220,12 +220,11 @@ class ApiWrapperHelpersTest {
 
         val plan = buildFeedbackDispatchPlan(
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://recognition.example.com/process_audio",
             metadata = metadata
         )
 
         assertEquals(FeedbackRoute.PUT_UPDATES, plan.route)
-        assertEquals("https://backend.example.com/api/updates", plan.endpoint)
+        assertEquals("https://backend.example.com/updates", plan.endpoint)
     }
 
     @Test
@@ -236,24 +235,22 @@ class ApiWrapperHelpersTest {
 
         val plan = buildFeedbackDispatchPlan(
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://recognition.example.com/process_audio",
             metadata = metadata
         )
 
         assertEquals(FeedbackRoute.POST_PROCESS_AUDIO, plan.route)
-        assertEquals("https://recognition.example.com/process_audio", plan.endpoint)
+        assertEquals("https://backend.example.com/process_audio", plan.endpoint)
     }
 
     @Test
     fun buildFeedbackDispatchPlanFallsBackToTransferEndpoint() {
         val plan = buildFeedbackDispatchPlan(
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "",
             metadata = null
         )
 
         assertEquals(FeedbackRoute.POST_TRANSFER, plan.route)
-        assertEquals("https://backend.example.com/api/transfer", plan.endpoint)
+        assertEquals("https://backend.example.com/transfer", plan.endpoint)
     }
 
     @Test

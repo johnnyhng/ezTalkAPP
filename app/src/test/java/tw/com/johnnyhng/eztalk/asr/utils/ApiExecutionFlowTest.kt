@@ -73,7 +73,6 @@ class ApiExecutionFlowTest {
     fun buildFeedbackExecutionReadsJsonlAndPicksUpdatesRoute() {
         val execution = buildFeedbackExecution(
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://recognition.example.com/process_audio",
             filePath = "/tmp/sample.wav",
             metadataReader = {
                 assertEquals("/tmp/sample.jsonl", it)
@@ -83,7 +82,7 @@ class ApiExecutionFlowTest {
 
         assertEquals("/tmp/sample.jsonl", execution.jsonlPath)
         assertEquals(FeedbackRoute.PUT_UPDATES, execution.dispatchPlan.route)
-        assertEquals("https://backend.example.com/api/updates", execution.dispatchPlan.endpoint)
+        assertEquals("https://backend.example.com/updates", execution.dispatchPlan.endpoint)
         assertEquals(1, execution.metadata?.getJSONArray("remote_candidates")?.length())
     }
 
@@ -130,7 +129,6 @@ class ApiExecutionFlowTest {
 
         val execution = buildFeedbackExecution(
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://recognition.example.com/process_audio",
             filePath = "/tmp/sample.wav",
             metadataReader = { null }
         )
@@ -142,7 +140,7 @@ class ApiExecutionFlowTest {
             postProcessAudioBlock = { _, _, _, _ -> false },
             postTransferBlock = { endpoint, path, userId ->
                 transferCalls += 1
-                endpoint == "https://backend.example.com/api/transfer" &&
+                endpoint == "https://backend.example.com/transfer" &&
                     path == "/tmp/sample.wav" &&
                     userId == "tester@example.com"
             }
@@ -158,7 +156,6 @@ class ApiExecutionFlowTest {
 
         val execution = buildFeedbackExecution(
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://recognition.example.com/process_audio",
             filePath = "/tmp/sample.wav",
             metadataReader = {
                 JSONObject().put("local_candidates", JSONArray().put("local"))
@@ -171,7 +168,7 @@ class ApiExecutionFlowTest {
             putUpdates = { _, _, _, _ -> false },
             postProcessAudioBlock = { endpoint, path, userId, metadata ->
                 processCalls += 1
-                endpoint == "https://recognition.example.com/process_audio" &&
+                endpoint == "https://backend.example.com/process_audio" &&
                     path == "/tmp/sample.wav" &&
                     userId == "tester@example.com" &&
                     metadata?.getJSONArray("local_candidates")?.length() == 1
@@ -189,7 +186,6 @@ class ApiExecutionFlowTest {
 
         val execution = buildFeedbackExecution(
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://recognition.example.com/process_audio",
             filePath = "/tmp/sample.wav",
             metadataReader = {
                 JSONObject().put("remote_candidates", JSONArray().put("remote"))
@@ -201,7 +197,7 @@ class ApiExecutionFlowTest {
             userId = "tester@example.com",
             putUpdates = { endpoint, path, userId, metadata ->
                 updateCalls += 1
-                endpoint == "https://backend.example.com/api/updates" &&
+                endpoint == "https://backend.example.com/updates" &&
                     path == "/tmp/sample.wav" &&
                     userId == "tester@example.com" &&
                     metadata?.getJSONArray("remote_candidates")?.length() == 1

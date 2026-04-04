@@ -14,21 +14,21 @@ class ApiFeedbackRouteLocalOnlyTest {
 
         val result = decideFeedbackRoute(
             metadata = metadata,
-            recognitionUrl = "https://example.com/api/process_audio"
+            backendUrl = "https://example.com"
         )
 
         assertEquals(FeedbackRoute.POST_PROCESS_AUDIO, result)
     }
 
     @Test
-    fun decideFeedbackRouteFallsBackToTransferWhenRecognitionUrlIsBlank() {
+    fun decideFeedbackRouteFallsBackToTransferWhenBackendUrlIsBlank() {
         val metadata = JSONObject().apply {
             put("local_candidates", JSONArray(listOf("local-1")))
         }
 
         val result = decideFeedbackRoute(
             metadata = metadata,
-            recognitionUrl = ""
+            backendUrl = ""
         )
 
         assertEquals(FeedbackRoute.POST_TRANSFER, result)

@@ -132,7 +132,6 @@ class ApiOrchestrationHelpersTest {
 
         val execution = buildFeedbackExecution(
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://recognition.example.com/process_audio",
             filePath = "/tmp/sample.wav",
             metadataReader = { path ->
                 requestedPath = path
@@ -145,7 +144,7 @@ class ApiOrchestrationHelpersTest {
         assertEquals("/tmp/sample.jsonl", execution.jsonlPath)
         assertEquals("/tmp/sample.jsonl", requestedPath)
         assertEquals(FeedbackRoute.POST_PROCESS_AUDIO, execution.dispatchPlan.route)
-        assertEquals("https://recognition.example.com/process_audio", execution.dispatchPlan.endpoint)
+        assertEquals("https://backend.example.com/process_audio", execution.dispatchPlan.endpoint)
     }
 
     @Test
@@ -155,7 +154,6 @@ class ApiOrchestrationHelpersTest {
         val result = dispatchFeedbackExecution(
             execution = buildFeedbackExecution(
                 backendUrl = "https://backend.example.com",
-                recognitionUrl = "https://recognition.example.com/process_audio",
                 filePath = "/tmp/sample.wav",
                 metadataReader = {
                     JSONObject().apply {
@@ -174,7 +172,7 @@ class ApiOrchestrationHelpersTest {
         )
 
         assertTrue(result)
-        assertEquals("https://backend.example.com/api/updates", called)
+        assertEquals("https://backend.example.com/updates", called)
     }
 
     @Test
@@ -184,7 +182,6 @@ class ApiOrchestrationHelpersTest {
         val result = dispatchFeedbackExecution(
             execution = buildFeedbackExecution(
                 backendUrl = "https://backend.example.com",
-                recognitionUrl = "https://recognition.example.com/process_audio",
                 filePath = "/tmp/sample.wav",
                 metadataReader = {
                     JSONObject().apply {
@@ -203,7 +200,7 @@ class ApiOrchestrationHelpersTest {
         )
 
         assertTrue(result)
-        assertEquals("https://recognition.example.com/process_audio", called)
+        assertEquals("https://backend.example.com/process_audio", called)
     }
 
     @Test
@@ -213,7 +210,6 @@ class ApiOrchestrationHelpersTest {
         val result = dispatchFeedbackExecution(
             execution = buildFeedbackExecution(
                 backendUrl = "https://backend.example.com",
-                recognitionUrl = "",
                 filePath = "/tmp/sample.wav",
                 metadataReader = { null }
             ),
@@ -228,6 +224,6 @@ class ApiOrchestrationHelpersTest {
         )
 
         assertTrue(result)
-        assertEquals("https://backend.example.com/api/transfer", called)
+        assertEquals("https://backend.example.com/transfer", called)
     }
 }

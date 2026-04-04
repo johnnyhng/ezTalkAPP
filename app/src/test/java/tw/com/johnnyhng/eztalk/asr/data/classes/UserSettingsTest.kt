@@ -5,14 +5,14 @@ import org.junit.Test
 
 class UserSettingsTest {
     @Test
-    fun effectiveRecognitionUrlUsesExplicitRecognitionUrlWhenPresent() {
+    fun effectiveRecognitionUrlAlwaysResolvesFromBackendUrl() {
         val settings = UserSettings(
             backendUrl = "https://backend.example.com",
             recognitionUrl = "https://recognition.example.com/process_audio"
         )
 
         assertEquals(
-            "https://recognition.example.com/process_audio",
+            "https://backend.example.com/process_audio",
             settings.effectiveRecognitionUrl
         )
     }
@@ -24,13 +24,13 @@ class UserSettingsTest {
         )
 
         assertEquals(
-            "https://backend.example.com/api/process_audio",
+            "https://backend.example.com/process_audio",
             settings.effectiveRecognitionUrl
         )
     }
 
     @Test
-    fun effectiveRecognitionUrlReturnsEmptyWhenBackendUrlIsBlankAndRecognitionUrlMissing() {
+    fun effectiveRecognitionUrlReturnsEmptyWhenBackendUrlIsBlank() {
         val settings = UserSettings(
             backendUrl = "   ",
             recognitionUrl = ""
