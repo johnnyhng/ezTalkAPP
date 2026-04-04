@@ -17,13 +17,21 @@ class SettingsManagerTest {
         val settings = preferencesToUserSettings(mutablePreferencesOf())
 
         assertEquals("default_user", settings.userId)
-        assertEquals(5000f, settings.lingerMs)
+        assertEquals(1000f, settings.lingerMs)
         assertEquals(500f, settings.partialIntervalMs)
         assertFalse(settings.saveVadSegmentsOnly)
-        assertFalse(settings.inlineEdit)
+        assertTrue(settings.inlineEdit)
         assertEquals("https://120.126.151.159:56432/api/v2", settings.backendUrl)
-        assertTrue(settings.enableTtsFeedback)
+        assertFalse(settings.enableTtsFeedback)
         assertEquals("", settings.selectedModelName)
+    }
+
+    @Test
+    fun preferencesDefaultsMatchCanonicalUserSettingsDefaults() {
+        val restoredSettings = preferencesToUserSettings(mutablePreferencesOf())
+        val canonicalDefaults = UserSettings()
+
+        assertEquals(canonicalDefaults, restoredSettings)
     }
 
     @Test
