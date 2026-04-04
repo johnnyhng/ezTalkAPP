@@ -24,6 +24,11 @@ class ApiProcessAudioPayloadTest {
             raw = raw
         )
 
+        assertEquals("tester", payload.getJSONObject("account").getString("user_id"))
+        assertEquals(
+            sha256(sha256("password")),
+            payload.getJSONObject("account").getString("password")
+        )
         assertEquals("tester", payload.getString("login_user"))
         assertEquals("sample.wav", payload.getString("filename"))
         assertEquals("confirmed text", payload.getString("label"))
@@ -42,6 +47,11 @@ class ApiProcessAudioPayloadTest {
             userId = "tester@example.com"
         )
 
+        assertEquals("tester", payload.getJSONObject("account").getString("user_id"))
+        assertEquals(
+            sha256(sha256("password")),
+            payload.getJSONObject("account").getString("password")
+        )
         assertEquals("tester", payload.getString("login_user"))
         assertEquals("sample.wav", payload.getString("filename"))
         assertEquals("tmp", payload.getString("label"))
@@ -61,6 +71,7 @@ class ApiProcessAudioPayloadTest {
             metadata = metadata
         )
 
+        assertTrue(payload.has("account"))
         assertTrue(payload.has("login_user"))
         assertTrue(payload.has("filename"))
         assertTrue(payload.has("label"))

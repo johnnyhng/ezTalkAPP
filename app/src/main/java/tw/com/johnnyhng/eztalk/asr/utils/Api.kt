@@ -219,8 +219,13 @@ internal fun buildProcessAudioPayload(
     metadata: JSONObject? = null,
     raw: JSONArray? = null
 ): JSONObject {
+    val account = JSONObject().apply {
+        put("user_id", userId.split("@")[0])
+        put("password", sha256(sha256("password")))
+    }
     val candidates = buildMergedCandidates(metadata)
     return JSONObject().apply {
+        put("account", account)
         put("login_user", userId.split("@")[0])
         put("filename", filePath.substringAfterLast("/"))
         put("label", metadata?.optString("modified") ?: "tmp")
