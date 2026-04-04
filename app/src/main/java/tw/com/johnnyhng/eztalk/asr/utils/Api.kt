@@ -219,11 +219,15 @@ internal fun buildProcessAudioPayload(
     metadata: JSONObject? = null,
     raw: JSONArray? = null
 ): JSONObject {
+    val candidates = buildMergedCandidates(metadata)
     return JSONObject().apply {
         put("login_user", userId.split("@")[0])
         put("filename", filePath.substringAfterLast("/"))
         put("label", metadata?.optString("modified") ?: "tmp")
         put("num_of_stn", 8)
+        if (candidates.length() > 0) {
+            put("candidates", candidates)
+        }
         raw?.let { put("raw", it) }
     }
 }
@@ -275,6 +279,13 @@ internal fun buildUpdatePayload(
 internal fun isSuccessfulResponse(responseCode: Int): Boolean {
     return responseCode == HttpURLConnection.HTTP_OK
 }
+
+internal fun isRedirectResponse(responseCode: Int): Boolean {
+    return responseCode == 307 || responseCode == 308
+}
+
+internal fun resolveRedirectUrl(currentUrl: String, location: String): String =
+    URL(URL(currentUrl), location).toString()
 
 internal fun buildFeedbackDispatchPlan(
     backendUrl: String,
@@ -382,6 +393,63 @@ internal fun writeUploadRequest(
 internal fun readStreamText(inputStream: InputStream?): String? =
     inputStream?.bufferedReader()?.use { it.readText() }
 
+internal fun openApiConnection(
+    url: String,
+    method: String,
+    doOutput: Boolean,
+    connectTimeoutMs: Int,
+    readTimeoutMs: Int
+): HttpURLConnection {
+    val connection = URL(url).openConnection() as HttpURLConnection
+    val hostnameVerifier = HostnameVerifier { _, _ -> true }
+    (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
+    connection.instanceFollowRedirects = false
+    connection.requestMethod = method
+    connection.doOutput = doOutput
+    connection.connectTimeout = connectTimeoutMs
+    connection.readTimeout = readTimeoutMs
+    return connection
+}
+
+internal fun executeRequestWithRedirects(
+    endpoint: String,
+    method: String,
+    plan: UploadRequestPlan? = null,
+    connectTimeoutMs: Int,
+    readTimeoutMs: Int,
+    maxRedirects: Int = 5
+): HttpURLConnection? {
+    var currentUrl = endpoint
+    repeat(maxRedirects + 1) { attempt ->
+        val connection = openApiConnection(
+            url = currentUrl,
+            method = method,
+            doOutput = plan != null,
+            connectTimeoutMs = connectTimeoutMs,
+            readTimeoutMs = readTimeoutMs
+        )
+        if (plan != null) {
+            writeUploadRequest(connection, plan)
+        }
+
+        val responseCode = connection.responseCode
+        if (!isRedirectResponse(responseCode)) {
+            return connection
+        }
+
+        val location = connection.getHeaderField("Location")
+        if (location.isNullOrBlank() || attempt >= maxRedirects) {
+            return connection
+        }
+
+        val nextUrl = resolveRedirectUrl(currentUrl, location)
+        Log.d(TAG, "HTTP redirect: $method $currentUrl -> $nextUrl ($responseCode)")
+        connection.disconnect()
+        currentUrl = nextUrl
+    }
+    return null
+}
+
 internal fun parseRecognitionResponseBody(responseBody: String): JSONObject? =
     JSONObject(responseBody).optJSONObject("response")
 
@@ -432,12 +500,12 @@ internal fun listRemoteModels(
     userId: String
 ): List<String> {
     return try {
-        val connection = URL(buildListModelsUrl(baseUrl, userId)).openConnection() as HttpURLConnection
-        val hostnameVerifier = HostnameVerifier { _, _ -> true }
-        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
+        val connection = executeRequestWithRedirects(
+            endpoint = buildListModelsUrl(baseUrl, userId),
+            method = "GET",
+            connectTimeoutMs = 15000,
+            readTimeoutMs = 15000
+        ) ?: return emptyList()
 
         val responseCode = connection.responseCode
         if (!isSuccessfulResponse(responseCode)) {
@@ -460,12 +528,12 @@ internal fun checkModelUpdate(
     modelName: String
 ): RemoteModelUpdate? {
     return try {
-        val connection = URL(buildCheckUpdateUrl(baseUrl, userId)).openConnection() as HttpURLConnection
-        val hostnameVerifier = HostnameVerifier { _, _ -> true }
-        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
+        val connection = executeRequestWithRedirects(
+            endpoint = buildCheckUpdateUrl(baseUrl, userId),
+            method = "GET",
+            connectTimeoutMs = 15000,
+            readTimeoutMs = 15000
+        ) ?: return null
 
         val responseCode = connection.responseCode
         if (!isSuccessfulResponse(responseCode)) {
@@ -491,13 +559,12 @@ internal fun downloadModelFile(
     onProgress: (Float?) -> Unit = {}
 ): Boolean {
     return try {
-        val connection = URL(buildModelFileUrl(baseUrl, userId, modelName, filename)).openConnection() as HttpURLConnection
-        val hostnameVerifier = HostnameVerifier { _, _ -> true }
-        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
-        connection.connect()
+        val connection = executeRequestWithRedirects(
+            endpoint = buildModelFileUrl(baseUrl, userId, modelName, filename),
+            method = "GET",
+            connectTimeoutMs = 15000,
+            readTimeoutMs = 15000
+        ) ?: return false
 
         val responseCode = connection.responseCode
         if (!isSuccessfulResponse(responseCode)) {
@@ -767,29 +834,27 @@ fun postProcessAudio(
             TAG,
             "postProcessAudio: url=$processAudioUrl, filePath=$filePath, sendFileByJson=$sendFileByJson"
         )
-        val url = URL(processAudioUrl)
-        val connection = url.openConnection() as HttpURLConnection
-        val hostnameVerifier = HostnameVerifier { _, _ -> true }
-        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
-
-        connection.requestMethod = "POST"
-        connection.doOutput = true
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
-
-        when (val plan = buildProcessAudioRequestPlan(
+        val plan = when (val builtPlan = buildProcessAudioRequestPlan(
             filePath = filePath,
             userId = userId,
             metadata = metadata,
             sendFileByJson = sendFileByJson
         )) {
             is UploadRequestPlan.Json,
-            is UploadRequestPlan.Multipart -> writeUploadRequest(connection, plan)
+            is UploadRequestPlan.Multipart -> builtPlan
             null -> {
                 Log.e(TAG, "File not found for upload: $filePath")
                 return false
             }
         }
+
+        val connection = executeRequestWithRedirects(
+            endpoint = processAudioUrl,
+            method = "POST",
+            plan = plan,
+            connectTimeoutMs = 15000,
+            readTimeoutMs = 15000
+        ) ?: return false
 
         val responseCode = connection.responseCode
         if (isSuccessfulResponse(responseCode)) {
@@ -817,23 +882,18 @@ fun putForUpdates(
             TAG,
             "putForUpdates: url=$updateUrl, filePath=$filePath, sentence=${metadata?.optString("modified") ?: ""}"
         )
-        val url = URL(updateUrl)
-        val connection = url.openConnection() as HttpURLConnection
-        val hostnameVerifier = HostnameVerifier { _, _ -> true }
-        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
-
-        connection.requestMethod = "PUT"
-        connection.doOutput = true
-        connection.connectTimeout = 5000 // 5 seconds
-        connection.readTimeout = 5000 // 5 seconds
-
         val jsonPayload = buildUpdatePayload(
             filePath = filePath,
             userId = userId,
             metadata = metadata
         )
-
-        writeUploadRequest(connection, UploadRequestPlan.Json(jsonPayload))
+        val connection = executeRequestWithRedirects(
+            endpoint = updateUrl,
+            method = "PUT",
+            plan = UploadRequestPlan.Json(jsonPayload),
+            connectTimeoutMs = 5000,
+            readTimeoutMs = 5000
+        ) ?: return false
 
         val responseCode = connection.responseCode
         if (isSuccessfulResponse(responseCode)) {
@@ -861,28 +921,26 @@ fun postTransfer(
             TAG,
             "postTransfer: url=$transferUrl, filePath=$filePath, sendFileByJson=$sendFileByJson"
         )
-        val url = URL(transferUrl)
-        val connection = url.openConnection() as HttpURLConnection
-        val hostnameVerifier = HostnameVerifier { _, _ -> true }
-        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
-
-        connection.requestMethod = "POST"
-        connection.doOutput = true
-        connection.connectTimeout = 5000 // 5 seconds
-        connection.readTimeout = 5000 // 5 seconds
-
-        when (val plan = buildTransferRequestPlan(
+        val plan = when (val builtPlan = buildTransferRequestPlan(
             filePath = filePath,
             userId = userId,
             sendFileByJson = sendFileByJson
         )) {
             is UploadRequestPlan.Json,
-            is UploadRequestPlan.Multipart -> writeUploadRequest(connection, plan)
+            is UploadRequestPlan.Multipart -> builtPlan
             null -> {
                 Log.e(TAG, "Failed to create metadata for $filePath")
                 return false
             }
         }
+
+        val connection = executeRequestWithRedirects(
+            endpoint = transferUrl,
+            method = "POST",
+            plan = plan,
+            connectTimeoutMs = 5000,
+            readTimeoutMs = 5000
+        ) ?: return false
 
         val responseCode = connection.responseCode
         if (isSuccessfulResponse(responseCode)) {
@@ -906,28 +964,26 @@ fun postForRecognition(
     sendFileByJson: Boolean = true
 ): JSONObject? {
     return try {
-        val url = URL(recognitionUrl)
-        val connection = url.openConnection() as HttpURLConnection
-        val hostnameVerifier = HostnameVerifier { _, _ -> true }
-        (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
-
-        connection.requestMethod = "POST"
-        connection.doOutput = true
-        connection.connectTimeout = 15000 // 15 seconds
-        connection.readTimeout = 15000 // 15 seconds
-
-        when (val plan = buildRecognitionRequestPlan(
+        val plan = when (val builtPlan = buildRecognitionRequestPlan(
             filePath = filePath,
             userId = userId,
             sendFileByJson = sendFileByJson
         )) {
             is UploadRequestPlan.Json,
-            is UploadRequestPlan.Multipart -> writeUploadRequest(connection, plan)
+            is UploadRequestPlan.Multipart -> builtPlan
             null -> {
                 Log.e(TAG, "File not found for upload: $filePath")
                 return null
             }
         }
+
+        val connection = executeRequestWithRedirects(
+            endpoint = recognitionUrl,
+            method = "POST",
+            plan = plan,
+            connectTimeoutMs = 15000,
+            readTimeoutMs = 15000
+        ) ?: return null
 
         val responseCode = connection.responseCode
         if (isSuccessfulResponse(responseCode)) {

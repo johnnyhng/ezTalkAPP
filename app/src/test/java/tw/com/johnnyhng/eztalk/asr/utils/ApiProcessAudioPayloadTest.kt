@@ -12,6 +12,8 @@ class ApiProcessAudioPayloadTest {
     fun buildProcessAudioPayloadMatchesExpectedShapeWithMetadataAndRaw() {
         val metadata = JSONObject().apply {
             put("modified", "confirmed text")
+            put("local_candidates", JSONArray(listOf("local-1", "shared")))
+            put("remote_candidates", JSONArray(listOf("shared", "remote-1")))
         }
         val raw = JSONArray(listOf(1, 2, 3))
 
@@ -26,6 +28,10 @@ class ApiProcessAudioPayloadTest {
         assertEquals("sample.wav", payload.getString("filename"))
         assertEquals("confirmed text", payload.getString("label"))
         assertEquals(8, payload.getInt("num_of_stn"))
+        assertEquals(
+            listOf("local-1", "shared", "remote-1"),
+            payload.getJSONArray("candidates").toStringList()
+        )
         assertEquals(listOf(1, 2, 3), payload.getJSONArray("raw").toIntList())
     }
 
@@ -59,9 +65,13 @@ class ApiProcessAudioPayloadTest {
         assertTrue(payload.has("filename"))
         assertTrue(payload.has("label"))
         assertTrue(payload.has("num_of_stn"))
+        assertFalse(payload.has("candidates"))
         assertFalse(payload.has("raw"))
     }
 
     private fun JSONArray.toIntList(): List<Int> =
         List(length()) { index -> getInt(index) }
+
+    private fun JSONArray.toStringList(): List<String> =
+        List(length()) { index -> getString(index) }
 }
