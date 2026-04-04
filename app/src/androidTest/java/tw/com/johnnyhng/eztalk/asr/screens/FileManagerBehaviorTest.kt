@@ -212,7 +212,6 @@ class FileManagerBehaviorTest {
             UserSettings(
                 userId = userId,
                 backendUrl = "https://example.com",
-                recognitionUrl = "",
                 inlineEdit = true,
                 enableTtsFeedback = false
             )

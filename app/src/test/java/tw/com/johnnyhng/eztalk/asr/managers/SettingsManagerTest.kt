@@ -17,14 +17,12 @@ class SettingsManagerTest {
         val settings = preferencesToUserSettings(mutablePreferencesOf())
 
         assertEquals("default_user", settings.userId)
-        assertEquals(1000f, settings.lingerMs)
+        assertEquals(5000f, settings.lingerMs)
         assertEquals(500f, settings.partialIntervalMs)
         assertFalse(settings.saveVadSegmentsOnly)
-        assertTrue(settings.inlineEdit)
-        assertEquals("https://120.126.151.159:56432", settings.backendUrl)
-        assertEquals("", settings.recognitionUrl)
-        assertFalse(settings.enableTtsFeedback)
-        assertEquals("", settings.modelUrl)
+        assertFalse(settings.inlineEdit)
+        assertEquals("https://120.126.151.159:56432/api/v2", settings.backendUrl)
+        assertTrue(settings.enableTtsFeedback)
         assertEquals("", settings.selectedModelName)
     }
 
@@ -37,9 +35,7 @@ class SettingsManagerTest {
             booleanPreferencesKey("save_vad_segments_only") to true,
             booleanPreferencesKey("inline_edit") to false,
             stringPreferencesKey("backend_url") to "https://example.com",
-            stringPreferencesKey("recognition_url") to "https://example.com/process_audio",
             booleanPreferencesKey("enable_tts_feedback") to true,
-            stringPreferencesKey("model_url") to "https://models.example.com/default.zip",
             stringPreferencesKey("selected_model_name") to "demo-model"
         )
 
@@ -51,9 +47,7 @@ class SettingsManagerTest {
         assertTrue(settings.saveVadSegmentsOnly)
         assertFalse(settings.inlineEdit)
         assertEquals("https://example.com", settings.backendUrl)
-        assertEquals("https://example.com/process_audio", settings.recognitionUrl)
         assertTrue(settings.enableTtsFeedback)
-        assertEquals("https://models.example.com/default.zip", settings.modelUrl)
         assertEquals("demo-model", settings.selectedModelName)
     }
 
@@ -67,9 +61,7 @@ class SettingsManagerTest {
             saveVadSegmentsOnly = true,
             inlineEdit = false,
             backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://backend.example.com/process_audio",
             enableTtsFeedback = true,
-            modelUrl = "https://models.example.com/model.zip",
             selectedModelName = "model-a"
         )
 
@@ -81,9 +73,7 @@ class SettingsManagerTest {
         assertEquals(true, preferences[booleanPreferencesKey("save_vad_segments_only")])
         assertEquals(false, preferences[booleanPreferencesKey("inline_edit")])
         assertEquals("https://backend.example.com", preferences[stringPreferencesKey("backend_url")])
-        assertEquals("https://backend.example.com/process_audio", preferences[stringPreferencesKey("recognition_url")])
         assertEquals(true, preferences[booleanPreferencesKey("enable_tts_feedback")])
-        assertEquals("https://models.example.com/model.zip", preferences[stringPreferencesKey("model_url")])
         assertEquals("model-a", preferences[stringPreferencesKey("selected_model_name")])
     }
 }

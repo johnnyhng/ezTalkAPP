@@ -8,10 +8,8 @@ data class UserSettings(
     val partialIntervalMs: Float = 500f,
     val saveVadSegmentsOnly: Boolean = false,
     val inlineEdit: Boolean = true,
-    val backendUrl: String = "https://120.126.151.159:56432",
-    val recognitionUrl: String = "",
+    val backendUrl: String = "https://120.126.151.159:56432/api/v2",
     val enableTtsFeedback: Boolean = false,
-    val modelUrl: String = "",
     val selectedModelName: String = ""
 ) {
     val effectiveRecognitionUrl: String

@@ -7,8 +7,7 @@ class UserSettingsTest {
     @Test
     fun effectiveRecognitionUrlAlwaysResolvesFromBackendUrl() {
         val settings = UserSettings(
-            backendUrl = "https://backend.example.com",
-            recognitionUrl = "https://recognition.example.com/process_audio"
+            backendUrl = "https://backend.example.com"
         )
 
         assertEquals(
@@ -32,8 +31,7 @@ class UserSettingsTest {
     @Test
     fun effectiveRecognitionUrlReturnsEmptyWhenBackendUrlIsBlank() {
         val settings = UserSettings(
-            backendUrl = "   ",
-            recognitionUrl = ""
+            backendUrl = "   "
         )
 
         assertEquals("", settings.effectiveRecognitionUrl)

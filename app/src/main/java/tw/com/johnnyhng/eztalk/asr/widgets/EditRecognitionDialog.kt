@@ -31,6 +31,7 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.utils.BackendEndpoints
 import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
 import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +51,7 @@ internal fun EditRecognitionDialog(
     onConfirm: (String) -> Unit,
     onSpeakConfirm: ((String) -> Unit)? = null,
     userId: String,
-    recognitionUrl: String,
+    backendUrl: String,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -63,6 +64,7 @@ internal fun EditRecognitionDialog(
 
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsSpeaking by remember { mutableStateOf(false) }
+    val recognitionUrl = remember(backendUrl) { BackendEndpoints.processAudio(backendUrl) }
 
     // Use the non-streaming (offline) recognizer for whole-file recognition
     val recognizer: OfflineRecognizer = remember { SimulateStreamingAsr.recognizer }

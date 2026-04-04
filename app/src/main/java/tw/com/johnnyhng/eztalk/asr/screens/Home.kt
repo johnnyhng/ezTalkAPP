@@ -483,7 +483,7 @@ fun HomeScreen(
                     handleDialogTtsConfirm(index, newText)
                 },
                 userId = userSettings.userId,
-                recognitionUrl = userSettings.effectiveRecognitionUrl,
+                backendUrl = userSettings.backendUrl,
             )
         }
     }

@@ -213,7 +213,7 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 showEditDialog = false
             },
             userId = userSettings.userId,
-            recognitionUrl = userSettings.recognitionUrl
+            backendUrl = userSettings.backendUrl
         )
     }
 

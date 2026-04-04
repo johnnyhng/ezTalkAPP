@@ -23,9 +23,7 @@ class SettingsManagerInstrumentedTest {
             saveVadSegmentsOnly = true,
             inlineEdit = false,
             backendUrl = "https://example.com",
-            recognitionUrl = "",
             enableTtsFeedback = true,
-            modelUrl = "https://models.example.com/default.zip",
             selectedModelName = "demo-model"
         )
 
@@ -33,6 +31,6 @@ class SettingsManagerInstrumentedTest {
         val restored = settingsManager.userSettings.first()
 
         assertEquals(updated, restored)
-        assertEquals("https://example.com/api/process_audio", restored.effectiveRecognitionUrl)
+        assertEquals("https://example.com/process_audio", restored.effectiveRecognitionUrl)
     }
 }

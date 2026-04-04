@@ -16,9 +16,7 @@ private val partialIntervalMsKey = floatPreferencesKey("partial_interval_ms")
 private val saveVadSegmentsOnlyKey = booleanPreferencesKey("save_vad_segments_only")
 private val inlineEditKey = booleanPreferencesKey("inline_edit")
 private val backendUrlKey = stringPreferencesKey("backend_url")
-private val recognitionUrlKey = stringPreferencesKey("recognition_url")
 private val enableTtsFeedbackKey = booleanPreferencesKey("enable_tts_feedback")
-private val modelUrlKey = stringPreferencesKey("model_url")
 private val selectedModelNameKey = stringPreferencesKey("selected_model_name")
 
 internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
@@ -29,9 +27,7 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         saveVadSegmentsOnly = preferences[saveVadSegmentsOnlyKey] ?: false,
         inlineEdit = preferences[inlineEditKey] ?: false,
         backendUrl = preferences[backendUrlKey] ?: "https://120.126.151.159:56432/api/v2",
-        recognitionUrl = preferences[recognitionUrlKey] ?: "",
         enableTtsFeedback = preferences[enableTtsFeedbackKey] ?: true,
-        modelUrl = preferences[modelUrlKey] ?: "",
         selectedModelName = preferences[selectedModelNameKey] ?: ""
     )
 }
@@ -43,9 +39,7 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[saveVadSegmentsOnlyKey] = settings.saveVadSegmentsOnly
     preferences[inlineEditKey] = settings.inlineEdit
     preferences[backendUrlKey] = settings.backendUrl
-    preferences[recognitionUrlKey] = settings.recognitionUrl
     preferences[enableTtsFeedbackKey] = settings.enableTtsFeedback
-    preferences[modelUrlKey] = settings.modelUrl
     preferences[selectedModelNameKey] = settings.selectedModelName
 }
 
