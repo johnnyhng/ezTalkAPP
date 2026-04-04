@@ -113,6 +113,12 @@ class SettingsScreenBehaviorTest {
         composeRule.onNodeWithText(context.getString(R.string.enable_tts_feedback))
             .performScrollTo()
             .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.sign_in_with_google))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.sign_out))
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
