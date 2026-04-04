@@ -24,13 +24,13 @@ private val selectedModelNameKey = stringPreferencesKey("selected_model_name")
 internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
     return UserSettings(
         userId = preferences[userIdKey] ?: "default_user",
-        lingerMs = preferences[lingerMsKey] ?: 1000f,
+        lingerMs = preferences[lingerMsKey] ?: 5000f,
         partialIntervalMs = preferences[partialIntervalMsKey] ?: 500f,
         saveVadSegmentsOnly = preferences[saveVadSegmentsOnlyKey] ?: false,
-        inlineEdit = preferences[inlineEditKey] ?: true,
-        backendUrl = preferences[backendUrlKey] ?: "https://120.126.151.159:56432",
+        inlineEdit = preferences[inlineEditKey] ?: false,
+        backendUrl = preferences[backendUrlKey] ?: "https://120.126.151.159:56432/api/v2",
         recognitionUrl = preferences[recognitionUrlKey] ?: "",
-        enableTtsFeedback = preferences[enableTtsFeedbackKey] ?: false,
+        enableTtsFeedback = preferences[enableTtsFeedbackKey] ?: true,
         modelUrl = preferences[modelUrlKey] ?: "",
         selectedModelName = preferences[selectedModelNameKey] ?: ""
     )
