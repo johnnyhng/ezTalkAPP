@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.NavigationBar
@@ -25,6 +26,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.core.app.ActivityCompat
@@ -51,6 +55,7 @@ import java.util.Locale
 
 const val TAG = "eztalk"
 private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
+private const val SHOW_HELP_ACTION = false
 
 @Suppress("DEPRECATION")
 class MainActivity : ComponentActivity() {
@@ -131,6 +136,22 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         fontWeight = FontWeight.Bold,
                     )
                 },
+                actions = {
+                    if (SHOW_HELP_ACTION) {
+                        IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Help.route) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                                contentDescription = stringResource(R.string.help)
+                            )
+                        }
+                    }
+                    IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Settings.route) }) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = stringResource(R.string.settings)
+                        )
+                    }
+                },
             )
         },
         content = { padding ->
@@ -183,13 +204,7 @@ fun BottomNavigationBar(navController: NavHostController) {
         NavBarItems.BarItems.forEach { navItem ->
             NavigationBarItem(selected = currentRoute == navItem.route,
                 onClick = {
-                    navController.navigate(navItem.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
+                    navController.navigateSingleTopTo(navItem.route)
                 },
                 icon = {
                     Icon(imageVector = navItem.image, contentDescription = navItem.title)
@@ -197,5 +212,15 @@ fun BottomNavigationBar(navController: NavHostController) {
                     Text(text = navItem.title)
                 })
         }
+    }
+}
+
+private fun NavHostController.navigateSingleTopTo(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
     }
 }
