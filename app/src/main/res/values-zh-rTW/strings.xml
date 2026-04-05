@@ -83,5 +83,13 @@
     <string name="data_collect_queue_status">上一句：%1$d，剩餘：%2$d</string>
     <string name="data_collect_auto_flow">自動流程</string>
     <string name="speaker_placeholder_title">演講者模式</string>
-    <string name="speaker_placeholder_description">Phase 1 佔位畫面。下一步會加入資料夾選擇與文字播放。</string>
+    <string name="speaker_placeholder_description">上下分割畫面原型。下一步會接上資料夾載入與 TTS 播放。</string>
+    <string name="speaker_overview_title">檔案總覽</string>
+    <string name="speaker_overview_subtitle">上半部顯示一層目錄與 txt 檔案</string>
+    <string name="speaker_add_folder">新增資料夾</string>
+    <string name="speaker_refresh_folder">重新整理資料夾</string>
+    <string name="speaker_remove_folder">移除資料夾</string>
+    <string name="speaker_no_document_selected">尚未選擇文字檔</string>
+    <string name="speaker_playback_subtitle">下半部顯示內容與播放控制</string>
+    <string name="speaker_pause">暫停</string>
 </resources>

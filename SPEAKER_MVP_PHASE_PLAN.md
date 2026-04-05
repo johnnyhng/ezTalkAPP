@@ -36,22 +36,36 @@ The MVP starts with button-based playback. ASR integration is deferred until the
 
 ### UI Requirements
 - Add a new tab named `演講者`
-- Show a folder action area with:
-  - `選擇資料夾`
-  - current folder name or empty-state text
-  - `重新整理`
-- Show a document list area with:
-  - file name
-  - short preview text
-  - `播放` button
+- Use a vertically split screen:
+  - upper pane for folder and text-file overview
+  - lower pane for selected text content and playback controls
+- Both upper and lower panes should support vertical scrolling independently
+- Show folder rows with:
+  - expand and collapse action using `+` or `-`
+  - folder name
+  - trailing actions for refresh and remove folder binding
+- Only support one directory level in the overview tree
+- Show expanded `.txt` file rows under each folder
+- Highlight the currently selected text file
 - Show a playback control area with:
-  - current playing file name
-  - `停止` button
+  - selected file name
+  - `播放`
+  - `暫停`
+  - `停止`
+- Show full selected text content in the lower pane
 - Reserve space for a future microphone action, but keep it hidden or disabled in MVP
 
 ### Data Requirements
+Each folder should support at least:
+- `id`
+- `displayName`
+- `uri`
+- `isExpanded`
+- `documents`
+
 Each text item should support at least:
 - `id`
+- `directoryId`
 - `displayName`
 - `uri`
 - `previewText`
@@ -59,12 +73,15 @@ Each text item should support at least:
 - `lastModified` optional
 
 Suggested model names:
+- `SpeakerDirectory`
 - `SpeakerDocument`
 - `SpeakerUiState`
 
 ### Behavior Requirements
 - Only `.txt` files are loaded
 - Files are sorted by file name by default
+- Folder rows can be expanded or collapsed
+- Selecting a file updates the lower content pane
 - Only one file can be played at a time
 - Starting a new playback stops the previous one
 - Empty files should not be played
@@ -93,32 +110,36 @@ Done when:
 - Existing tabs continue to work unchanged
 
 ## Phase 2
-Add folder selection and `.txt` file loading.
+Build the split-screen overview UI and connect folder selection and `.txt` file loading.
 
 Scope:
+- Replace the placeholder with the split-screen layout
+- Add upper-pane folder overview with expand and collapse behavior
+- Add lower-pane content viewer and playback control placeholders
 - Use Android SAF folder picker
 - Persist folder `Uri` permission
 - Scan `.txt` files in selected folder
-- Show file list with file name and preview
+- Show folder rows and expanded text-file rows with file name and preview
 - Add empty-state and read-error handling
 
 Done when:
 - User can select a local folder
-- The app can list `.txt` files from that folder
+- The app can expand and collapse folders in the upper pane
+- The app can select a text file and show its content in the lower pane
 - Re-entering the screen can reload the last selected folder
 
 ## Phase 3
 Add manual TTS playback with buttons.
 
 Scope:
-- Add `播放` button to each text item
-- Add global `停止` action
+- Add `播放 / 暫停 / 停止` controls to the lower pane
 - Ensure only one file plays at a time
 - Stop previous playback before playing a new file
 - Show which file is currently playing
 
 Done when:
 - Tapping `播放` reads the selected text file aloud
+- Tapping `暫停` pauses when supported by the chosen TTS approach, or is kept as a disabled placeholder until implemented
 - Tapping `停止` stops playback immediately
 - Switching to another file behaves correctly
 

@@ -83,5 +83,13 @@
     <string name="data_collect_queue_status">Previous: %1$d, Remaining: %2$d</string>
     <string name="data_collect_auto_flow">Auto-Flow</string>
     <string name="speaker_placeholder_title">Speaker mode</string>
-    <string name="speaker_placeholder_description">Phase 1 placeholder. Folder selection and text playback will be added next.</string>
+    <string name="speaker_placeholder_description">Split layout prototype. Folder loading and TTS will be connected in the next phase.</string>
+    <string name="speaker_overview_title">Folder Overview</string>
+    <string name="speaker_overview_subtitle">Upper pane: one-level folders and txt files</string>
+    <string name="speaker_add_folder">Add folder</string>
+    <string name="speaker_refresh_folder">Refresh folder</string>
+    <string name="speaker_remove_folder">Remove folder</string>
+    <string name="speaker_no_document_selected">No text selected</string>
+    <string name="speaker_playback_subtitle">Lower pane: content and playback controls</string>
+    <string name="speaker_pause">Pause</string>
 </resources>
