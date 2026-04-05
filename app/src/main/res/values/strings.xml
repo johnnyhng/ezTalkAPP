@@ -83,7 +83,7 @@
     <string name="data_collect_queue_status">Previous: %1$d, Remaining: %2$d</string>
     <string name="data_collect_auto_flow">Auto-Flow</string>
     <string name="speaker_placeholder_title">Speaker mode</string>
-    <string name="speaker_placeholder_description">Split layout prototype. Folder loading and TTS will be connected in the next phase.</string>
+    <string name="speaker_placeholder_description">Manage speaker folders under app storage: speech/%1$s/</string>
     <string name="speaker_overview_title">Folder Overview</string>
     <string name="speaker_overview_subtitle">Upper pane: one-level folders and txt files</string>
     <string name="speaker_add_folder">Add folder</string>
@@ -92,4 +92,16 @@
     <string name="speaker_no_document_selected">No text selected</string>
     <string name="speaker_playback_subtitle">Lower pane: content and playback controls</string>
     <string name="speaker_pause">Pause</string>
+    <string name="speaker_loading">Loading folders...</string>
+    <string name="speaker_empty_folders">No speaker folders yet. Create one above under speech/%1$s/.</string>
+    <string name="speaker_empty_documents">No txt files found in this folder.</string>
+    <string name="speaker_folder_name_label">Folder name</string>
+    <string name="speaker_folder_name_placeholder">For example: product-demo</string>
+    <string name="speaker_create_folder">Create Folder</string>
+    <string name="speaker_google_drive">Google Drive</string>
+    <string name="speaker_google_drive_coming_soon">Google Drive import is not connected yet.</string>
+    <string name="speaker_invalid_folder_name">Please enter a valid folder name.</string>
+    <string name="speaker_folder_exists">Folder %1$s already exists.</string>
+    <string name="speaker_create_folder_failed">Failed to create folder.</string>
+    <string name="speaker_empty_text_file">Empty txt file</string>
 </resources>

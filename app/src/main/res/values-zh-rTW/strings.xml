@@ -83,7 +83,7 @@
     <string name="data_collect_queue_status">上一句：%1$d，剩餘：%2$d</string>
     <string name="data_collect_auto_flow">自動流程</string>
     <string name="speaker_placeholder_title">演講者模式</string>
-    <string name="speaker_placeholder_description">上下分割畫面原型。下一步會接上資料夾載入與 TTS 播放。</string>
+    <string name="speaker_placeholder_description">目前使用 app 內部儲存路徑：speech/%1$s/</string>
     <string name="speaker_overview_title">檔案總覽</string>
     <string name="speaker_overview_subtitle">上半部顯示一層目錄與 txt 檔案</string>
     <string name="speaker_add_folder">新增資料夾</string>
@@ -92,4 +92,16 @@
     <string name="speaker_no_document_selected">尚未選擇文字檔</string>
     <string name="speaker_playback_subtitle">下半部顯示內容與播放控制</string>
     <string name="speaker_pause">暫停</string>
+    <string name="speaker_loading">正在載入資料夾...</string>
+    <string name="speaker_empty_folders">目前還沒有演講資料夾，請先在上方建立 `speech/%1$s/` 底下的目錄。</string>
+    <string name="speaker_empty_documents">此資料夾內沒有 txt 檔案。</string>
+    <string name="speaker_folder_name_label">資料夾名稱</string>
+    <string name="speaker_folder_name_placeholder">例如：product-demo</string>
+    <string name="speaker_create_folder">建立資料夾</string>
+    <string name="speaker_google_drive">Google Drive</string>
+    <string name="speaker_google_drive_coming_soon">Google Drive 匯入功能尚未接上。</string>
+    <string name="speaker_invalid_folder_name">請輸入有效的資料夾名稱。</string>
+    <string name="speaker_folder_exists">資料夾 %1$s 已存在。</string>
+    <string name="speaker_create_folder_failed">建立資料夾失敗。</string>
+    <string name="speaker_empty_text_file">空白 txt 檔案</string>
 </resources>
