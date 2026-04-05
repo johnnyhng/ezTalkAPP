@@ -28,6 +28,7 @@
     <string name="translate">翻譯</string>
     <string name="data_collect">資料採集</string>
     <string name="file_manager">檔案管理</string>
+    <string name="speaker">演講者</string>
     <string name="settings">設定</string>
     <string name="help">說明</string>
     <string name="delete_selected">刪除選取</string>
@@ -81,4 +82,6 @@
     <string name="feedback_failed">回饋失敗。</string>
     <string name="data_collect_queue_status">上一句：%1$d，剩餘：%2$d</string>
     <string name="data_collect_auto_flow">自動流程</string>
+    <string name="speaker_placeholder_title">演講者模式</string>
+    <string name="speaker_placeholder_description">Phase 1 佔位畫面。下一步會加入資料夾選擇與文字播放。</string>
 </resources>
