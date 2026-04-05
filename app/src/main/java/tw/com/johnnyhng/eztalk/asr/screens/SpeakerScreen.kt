@@ -1,5 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,12 +20,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -68,6 +72,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var selectedDocumentId by remember(userId) { mutableStateOf<String?>(null) }
     var isLoading by remember(userId) { mutableStateOf(true) }
     var newFolderName by remember(userId) { mutableStateOf("") }
+    var importTargetDirectory by remember(userId) { mutableStateOf<String?>(null) }
 
     val selectedDocument = directories
         .flatMap { it.documents }
@@ -96,6 +101,38 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
 
     LaunchedEffect(userId) {
         reloadDirectories()
+    }
+
+    val txtImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val targetDirectory = importTargetDirectory
+        importTargetDirectory = null
+        if (uri == null || targetDirectory == null) return@rememberLauncherForActivityResult
+
+        scope.launch {
+            val importedFileName = withContext(Dispatchers.IO) {
+                importTextIntoSpeakerFolder(
+                    context = context,
+                    sourceUri = uri,
+                    filesDir = context.filesDir,
+                    userId = userId,
+                    folderName = targetDirectory
+                )
+            }
+            if (importedFileName == null) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.speaker_import_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                reloadDirectories()
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.speaker_import_success, importedFileName),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     Column(
@@ -164,7 +201,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     onGoogleDriveImport = {
                         Toast.makeText(
                             context,
-                            context.getString(R.string.speaker_google_drive_coming_soon),
+                            context.getString(R.string.speaker_select_folder_for_import),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -204,6 +241,10 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                         }
                                     },
                                     onRefresh = { reloadDirectories() },
+                                    onImport = {
+                                        importTargetDirectory = directory.displayName
+                                        txtImportLauncher.launch("text/*")
+                                    },
                                     onRemove = {
                                         scope.launch {
                                             withContext(Dispatchers.IO) {
@@ -357,6 +398,7 @@ private fun SpeakerDirectorySection(
     selectedDocumentId: String?,
     onToggleExpand: () -> Unit,
     onRefresh: () -> Unit,
+    onImport: () -> Unit,
     onRemove: () -> Unit,
     onDocumentSelected: (String) -> Unit
 ) {
@@ -393,6 +435,15 @@ private fun SpeakerDirectorySection(
                 Icon(
                     imageVector = Icons.Filled.Refresh,
                     contentDescription = stringResource(R.string.speaker_refresh_folder)
+                )
+            }
+            IconButton(
+                onClick = onImport,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CloudUpload,
+                    contentDescription = stringResource(R.string.speaker_import_txt)
                 )
             }
             IconButton(
@@ -616,4 +667,57 @@ private fun buildPreviewText(text: String): String {
     } else {
         normalized
     }
+}
+
+private fun importTextIntoSpeakerFolder(
+    context: android.content.Context,
+    sourceUri: Uri,
+    filesDir: File,
+    userId: String,
+    folderName: String
+): String? {
+    val sourceName = queryDisplayName(context, sourceUri)
+        ?.takeIf { it.isNotBlank() }
+        ?: "imported.txt"
+    val safeName = ensureTxtExtension(sourceName)
+    val targetDirectory = File(getSpeakerRootDirectory(filesDir, userId), folderName)
+    if (!targetDirectory.exists() && !targetDirectory.mkdirs()) {
+        return null
+    }
+
+    val targetFile = uniqueTargetFile(targetDirectory, safeName)
+    return try {
+        context.contentResolver.openInputStream(sourceUri)?.use { input ->
+            targetFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        } ?: return null
+        targetFile.name
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun queryDisplayName(context: android.content.Context, uri: Uri): String? {
+    val projection = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
+    return context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+        val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+        if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
+    }
+}
+
+private fun ensureTxtExtension(name: String): String {
+    return if (name.lowercase().endsWith(".txt")) name else "$name.txt"
+}
+
+private fun uniqueTargetFile(directory: File, requestedName: String): File {
+    val baseName = requestedName.substringBeforeLast('.', requestedName)
+    val extension = requestedName.substringAfterLast('.', "txt")
+    var candidate = File(directory, requestedName)
+    var counter = 1
+    while (candidate.exists()) {
+        candidate = File(directory, "${baseName}_$counter.$extension")
+        counter++
+    }
+    return candidate
 }

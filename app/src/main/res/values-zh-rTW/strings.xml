@@ -99,9 +99,12 @@
     <string name="speaker_folder_name_placeholder">例如：product-demo</string>
     <string name="speaker_create_folder">建立資料夾</string>
     <string name="speaker_google_drive">Google Drive</string>
-    <string name="speaker_google_drive_coming_soon">Google Drive 匯入功能尚未接上。</string>
+    <string name="speaker_select_folder_for_import">請使用目錄列上的上傳圖示，將 txt 從 Google Drive 匯入指定資料夾。</string>
     <string name="speaker_invalid_folder_name">請輸入有效的資料夾名稱。</string>
     <string name="speaker_folder_exists">資料夾 %1$s 已存在。</string>
     <string name="speaker_create_folder_failed">建立資料夾失敗。</string>
     <string name="speaker_empty_text_file">空白 txt 檔案</string>
+    <string name="speaker_import_txt">匯入 txt</string>
+    <string name="speaker_import_failed">匯入 txt 檔案失敗。</string>
+    <string name="speaker_import_success">已匯入 %1$s</string>
 </resources>
