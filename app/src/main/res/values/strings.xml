@@ -107,4 +107,5 @@
     <string name="speaker_import_txt">Import txt</string>
     <string name="speaker_import_failed">Failed to import txt file.</string>
     <string name="speaker_import_success">Imported %1$s</string>
+    <string name="speaker_tts_not_ready">TTS is not ready yet.</string>
 </resources>

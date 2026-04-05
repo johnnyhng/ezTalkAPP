@@ -107,4 +107,5 @@
     <string name="speaker_import_txt">匯入 txt</string>
     <string name="speaker_import_failed">匯入 txt 檔案失敗。</string>
     <string name="speaker_import_success">已匯入 %1$s</string>
+    <string name="speaker_tts_not_ready">TTS 尚未初始化完成。</string>
 </resources>

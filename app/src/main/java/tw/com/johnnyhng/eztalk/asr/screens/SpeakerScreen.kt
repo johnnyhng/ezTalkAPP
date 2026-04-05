@@ -1,6 +1,8 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import android.net.Uri
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,6 +40,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,6 +63,7 @@ import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import java.io.File
+import java.util.Locale
 
 @Composable
 fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
@@ -73,10 +77,47 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var isLoading by remember(userId) { mutableStateOf(true) }
     var newFolderName by remember(userId) { mutableStateOf("") }
     var importTargetDirectory by remember(userId) { mutableStateOf<String?>(null) }
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var isTtsReady by remember { mutableStateOf(false) }
+    var currentPlayingDocumentId by remember { mutableStateOf<String?>(null) }
+    var playbackDocumentId by remember { mutableStateOf<String?>(null) }
+    var playbackSegments by remember { mutableStateOf<List<String>>(emptyList()) }
+    var playbackSegmentIndex by remember { mutableStateOf(0) }
+    var isPlaybackPaused by remember { mutableStateOf(false) }
 
     val selectedDocument = directories
         .flatMap { it.documents }
         .firstOrNull { it.id == selectedDocumentId }
+    val isSelectedDocumentPlaying = selectedDocument?.id != null && selectedDocument.id == currentPlayingDocumentId
+    val isSelectedDocumentPaused = selectedDocument?.id != null &&
+        selectedDocument.id == playbackDocumentId &&
+        isPlaybackPaused
+
+    fun resetPlaybackState() {
+        currentPlayingDocumentId = null
+        playbackDocumentId = null
+        playbackSegments = emptyList()
+        playbackSegmentIndex = 0
+        isPlaybackPaused = false
+    }
+
+    fun speakSegment(documentId: String, segmentIndex: Int) {
+        val segment = playbackSegments.getOrNull(segmentIndex)
+        if (segment == null) {
+            resetPlaybackState()
+            return
+        }
+        playbackDocumentId = documentId
+        playbackSegmentIndex = segmentIndex
+        isPlaybackPaused = false
+        currentPlayingDocumentId = documentId
+        tts?.speak(
+            segment,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            buildSpeakerUtteranceId(documentId, segmentIndex)
+        )
+    }
 
     fun setSelectedDocumentIfNeeded(updatedDirectories: List<SpeakerDirectoryUi>) {
         val allDocuments = updatedDirectories.flatMap { it.documents }
@@ -101,6 +142,67 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
 
     LaunchedEffect(userId) {
         reloadDirectories()
+    }
+
+    LaunchedEffect(Unit) {
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = if (
+                    tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE
+                ) {
+                    Locale.TRADITIONAL_CHINESE
+                } else {
+                    Locale.getDefault()
+                }
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
+                        scope.launch {
+                            playbackDocumentId = parsed.documentId
+                            playbackSegmentIndex = parsed.segmentIndex
+                            currentPlayingDocumentId = parsed.documentId
+                        }
+                    }
+
+                    override fun onDone(utteranceId: String?) {
+                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
+                        scope.launch {
+                            if (playbackDocumentId != parsed.documentId || isPlaybackPaused) {
+                                return@launch
+                            }
+
+                            val nextIndex = parsed.segmentIndex + 1
+                            if (nextIndex < playbackSegments.size) {
+                                speakSegment(parsed.documentId, nextIndex)
+                            } else {
+                                resetPlaybackState()
+                            }
+                        }
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
+                        scope.launch {
+                            if (playbackDocumentId == parsed.documentId) {
+                                resetPlaybackState()
+                            }
+                        }
+                    }
+                })
+                isTtsReady = true
+            } else {
+                isTtsReady = false
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            tts?.stop()
+            tts?.shutdown()
+            resetPlaybackState()
+        }
     }
 
     val txtImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -276,7 +378,57 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             tonalElevation = 2.dp
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                SpeakerPlaybackHeader(selectedDocument = selectedDocument)
+                SpeakerPlaybackHeader(
+                    selectedDocument = selectedDocument,
+                    isTtsReady = isTtsReady,
+                    isPlaying = isSelectedDocumentPlaying,
+                    isPaused = isSelectedDocumentPaused,
+                    onPlay = {
+                        if (selectedDocument == null) return@SpeakerPlaybackHeader
+                        if (!isTtsReady) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_tts_not_ready),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@SpeakerPlaybackHeader
+                        }
+                        if (selectedDocument.fullText.isBlank()) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_empty_text_file),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@SpeakerPlaybackHeader
+                        }
+                        tts?.stop()
+                        if (isSelectedDocumentPaused && playbackSegments.isNotEmpty()) {
+                            speakSegment(selectedDocument.id, playbackSegmentIndex)
+                        } else {
+                            val segments = segmentTextForTts(selectedDocument.fullText)
+                            if (segments.isEmpty()) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.speaker_empty_text_file),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@SpeakerPlaybackHeader
+                            }
+                            playbackSegments = segments
+                            speakSegment(selectedDocument.id, 0)
+                        }
+                    },
+                    onPause = {
+                        if (!isSelectedDocumentPlaying) return@SpeakerPlaybackHeader
+                        tts?.stop()
+                        currentPlayingDocumentId = null
+                        isPlaybackPaused = true
+                    },
+                    onStop = {
+                        tts?.stop()
+                        resetPlaybackState()
+                    }
+                )
                 SpeakerDivider()
                 Box(
                     modifier = Modifier
@@ -519,7 +671,15 @@ private fun SpeakerDocumentRow(
 }
 
 @Composable
-private fun SpeakerPlaybackHeader(selectedDocument: SpeakerDocumentUi?) {
+private fun SpeakerPlaybackHeader(
+    selectedDocument: SpeakerDocumentUi?,
+    isTtsReady: Boolean,
+    isPlaying: Boolean,
+    isPaused: Boolean,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+    onStop: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -539,15 +699,21 @@ private fun SpeakerPlaybackHeader(selectedDocument: SpeakerDocumentUi?) {
         }
         SpeakerPlaybackAction(
             icon = Icons.Filled.PlayArrow,
-            contentDescription = stringResource(R.string.play)
+            contentDescription = stringResource(R.string.play),
+            enabled = selectedDocument != null && isTtsReady && !isPlaying,
+            onClick = onPlay
         )
         SpeakerPlaybackAction(
             icon = Icons.Filled.Pause,
-            contentDescription = stringResource(R.string.speaker_pause)
+            contentDescription = stringResource(R.string.speaker_pause),
+            enabled = isPlaying,
+            onClick = onPause
         )
         SpeakerPlaybackAction(
             icon = Icons.Filled.Stop,
-            contentDescription = stringResource(R.string.stop)
+            contentDescription = stringResource(R.string.stop),
+            enabled = isPlaying || isPaused,
+            onClick = onStop
         )
     }
 }
@@ -555,9 +721,14 @@ private fun SpeakerPlaybackHeader(selectedDocument: SpeakerDocumentUi?) {
 @Composable
 private fun SpeakerPlaybackAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit
 ) {
-    IconButton(onClick = { }) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled
+    ) {
         Icon(imageVector = icon, contentDescription = contentDescription)
     }
 }
@@ -720,4 +891,60 @@ private fun uniqueTargetFile(directory: File, requestedName: String): File {
         counter++
     }
     return candidate
+}
+
+private data class SpeakerUtteranceId(
+    val documentId: String,
+    val segmentIndex: Int
+)
+
+private fun buildSpeakerUtteranceId(documentId: String, segmentIndex: Int): String {
+    return "$segmentIndex::$documentId"
+}
+
+private fun parseSpeakerUtteranceId(utteranceId: String): SpeakerUtteranceId? {
+    val separatorIndex = utteranceId.indexOf("::")
+    if (separatorIndex <= 0) return null
+    val segmentIndex = utteranceId.substring(0, separatorIndex).toIntOrNull() ?: return null
+    val documentId = utteranceId.substring(separatorIndex + 2)
+    if (documentId.isBlank()) return null
+    return SpeakerUtteranceId(
+        documentId = documentId,
+        segmentIndex = segmentIndex
+    )
+}
+
+private fun segmentTextForTts(text: String): List<String> {
+    val normalized = text
+        .replace("\r\n", "\n")
+        .trim()
+    if (normalized.isBlank()) return emptyList()
+
+    return normalized
+        .split('\n')
+        .flatMap { paragraph ->
+            paragraph
+                .split(Regex("(?<=[。！？!?；;])"))
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+        }
+        .flatMap { chunkTextForTts(it) }
+}
+
+private fun chunkTextForTts(text: String, maxLength: Int = 180): List<String> {
+    if (text.length <= maxLength) return listOf(text)
+
+    val chunks = mutableListOf<String>()
+    var remaining = text.trim()
+    while (remaining.length > maxLength) {
+        val splitIndex = remaining.lastIndexOf(' ', startIndex = maxLength)
+            .takeIf { it > maxLength / 2 }
+            ?: maxLength
+        chunks += remaining.substring(0, splitIndex).trim()
+        remaining = remaining.substring(splitIndex).trim()
+    }
+    if (remaining.isNotBlank()) {
+        chunks += remaining
+    }
+    return chunks
 }
