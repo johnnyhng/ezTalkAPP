@@ -128,8 +128,8 @@ internal class SpeakerAsrController(
         samplesChannel: Channel<FloatArray>,
         userSettings: UserSettings
     ) {
-        val lingerMs = userSettings.lingerMs
-        val partialIntervalMs = userSettings.partialIntervalMs
+        val lingerMs = userSettings.lingerMs.toLong()
+        val partialIntervalMs = userSettings.partialIntervalMs.toLong()
 
         var buffer = arrayListOf<Float>()
         val keep = (sampleRateInHz / 1000) * 500
@@ -165,7 +165,9 @@ internal class SpeakerAsrController(
                     updateState {
                         it.copy(
                             isRecognizingSpeech = true,
-                            countdownProgress = 0f
+                            countdownProgress = 0f,
+                            partialText = "",
+                            finalText = ""
                         )
                     }
                     startTime = System.currentTimeMillis()
@@ -181,10 +183,8 @@ internal class SpeakerAsrController(
                         stream.acceptWaveform(buffer.subList(startOffset, offset).toFloatArray(), sampleRateInHz)
                         SimulateStreamingAsr.recognizer.decode(stream)
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                        if (result.text.isNotBlank()) {
-                            updateState {
-                                it.copy(partialText = result.text)
-                            }
+                        updateState {
+                            it.copy(partialText = result.text)
                         }
                     } finally {
                         stream.release()
@@ -212,13 +212,11 @@ internal class SpeakerAsrController(
                         stream.acceptWaveform(concatenated, sampleRateInHz)
                         SimulateStreamingAsr.recognizer.decode(stream)
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                        if (result.text.isNotBlank()) {
-                            updateState {
-                                it.copy(
-                                    partialText = result.text,
-                                    finalText = result.text
-                                )
-                            }
+                        updateState {
+                            it.copy(
+                                partialText = result.text,
+                                finalText = result.text
+                            )
                         }
                     } catch (error: Exception) {
                         Log.e(TAG, "Speaker local ASR decode failed", error)

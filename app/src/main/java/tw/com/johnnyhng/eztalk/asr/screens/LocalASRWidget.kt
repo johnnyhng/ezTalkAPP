@@ -45,9 +45,13 @@ internal fun LocalASRWidget(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = recognizedText.ifBlank { stringResource(R.string.local_asr_placeholder) },
+                text = when {
+                    recognizedText.isNotBlank() -> recognizedText
+                    isRecording -> stringResource(R.string.recognizing)
+                    else -> stringResource(R.string.local_asr_placeholder)
+                },
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (recognizedText.isBlank()) {
+                color = if (recognizedText.isBlank() && !isRecording) {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 } else {
                     MaterialTheme.colorScheme.onSurface
@@ -58,10 +62,16 @@ internal fun LocalASRWidget(
             )
             Box(contentAlignment = Alignment.Center) {
                 if (isRecording) {
-                    CircularProgressIndicator(
-                        progress = countdownProgress.coerceIn(0f, 1f),
-                        modifier = Modifier.size(34.dp)
-                    )
+                    if (countdownProgress > 0f) {
+                        CircularProgressIndicator(
+                            progress = countdownProgress.coerceIn(0f, 1f),
+                            modifier = Modifier.size(34.dp)
+                        )
+                    } else {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
                 }
                 IconButton(
                     onClick = onMicClick,
