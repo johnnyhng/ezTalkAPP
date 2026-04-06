@@ -534,6 +534,23 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     setSelectedDocumentIfNeeded(updatedDirectories)
                 }
             },
+            onRemoveDocument = { document ->
+                scope.launch {
+                    if (document.id == selectedDocumentId) {
+                        selectedDocumentId = null
+                        isEditingDocument = false
+                        editingText = ""
+                    }
+                    if (document.id == playbackDocumentId || document.id == currentPlayingDocumentId) {
+                        tts?.stop()
+                        resetPlaybackState()
+                    }
+                    withContext(Dispatchers.IO) {
+                        deleteSpeakerDocument(document.id)
+                    }
+                    reloadDirectories()
+                }
+            },
             onDocumentSelected = { documentId ->
                 selectedDocumentId = documentId
             },
@@ -668,6 +685,11 @@ private fun createSpeakerFolder(filesDir: File, userId: String, folderName: Stri
 private fun deleteSpeakerFolder(filesDir: File, userId: String, folderName: String): Boolean {
     val target = File(getSpeakerRootDirectory(filesDir, userId), folderName)
     return target.deleteRecursively()
+}
+
+private fun deleteSpeakerDocument(filePath: String): Boolean {
+    val target = File(filePath)
+    return target.exists() && target.delete()
 }
 
 private fun loadSpeakerDirectories(

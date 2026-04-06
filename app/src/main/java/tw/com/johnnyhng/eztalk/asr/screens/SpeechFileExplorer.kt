@@ -48,6 +48,7 @@ internal fun SpeechFileExplorer(
     onRefresh: () -> Unit,
     onImportIntoDirectory: (SpeakerDirectoryUi) -> Unit,
     onRemoveDirectory: (SpeakerDirectoryUi) -> Unit,
+    onRemoveDocument: (SpeakerDocumentUi) -> Unit,
     onDocumentSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -92,6 +93,7 @@ internal fun SpeechFileExplorer(
                                 onImport = { onImportIntoDirectory(directory) },
                                 isImportEnabled = isImportEnabled,
                                 onRemove = { onRemoveDirectory(directory) },
+                                onRemoveDocument = onRemoveDocument,
                                 onDocumentSelected = onDocumentSelected
                             )
                         }
@@ -179,6 +181,7 @@ private fun SpeakerDirectorySection(
     onImport: () -> Unit,
     isImportEnabled: Boolean,
     onRemove: () -> Unit,
+    onRemoveDocument: (SpeakerDocumentUi) -> Unit,
     onDocumentSelected: (String) -> Unit
 ) {
     Column(
@@ -255,7 +258,8 @@ private fun SpeakerDirectorySection(
                         SpeakerDocumentRow(
                             document = document,
                             isSelected = document.id == selectedDocumentId,
-                            onClick = { onDocumentSelected(document.id) }
+                            onClick = { onDocumentSelected(document.id) },
+                            onRemove = { onRemoveDocument(document) }
                         )
                     }
                 }
@@ -268,7 +272,8 @@ private fun SpeakerDirectorySection(
 private fun SpeakerDocumentRow(
     document: SpeakerDocumentUi,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onRemove: () -> Unit
 ) {
     val borderColor = if (isSelected) {
         MaterialTheme.colorScheme.primary
@@ -276,18 +281,29 @@ private fun SpeakerDocumentRow(
         MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     }
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, borderColor, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = document.displayName,
-            style = MaterialTheme.typography.bodyLarge
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f)
         )
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.DeleteOutline,
+                contentDescription = stringResource(R.string.delete)
+            )
+        }
     }
 }
