@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -21,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -135,12 +135,12 @@ private fun SpeakerPlaybackHeader(
                 enabled = selectedDocument != null,
                 onClick = onSave
             )
-            TextButton(
+            SpeakerPlaybackAction(
+                icon = Icons.Filled.Close,
+                contentDescription = stringResource(R.string.cancel_edit),
                 onClick = onCancelEdit,
                 enabled = selectedDocument != null
-            ) {
-                Text(text = stringResource(R.string.cancel_edit))
-            }
+            )
             return
         }
         SpeakerPlaybackAction(
