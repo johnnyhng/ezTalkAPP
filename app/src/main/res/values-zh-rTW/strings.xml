@@ -115,4 +115,6 @@
     <string name="speaker_importing_title">匯入中</string>
     <string name="speaker_importing_target">目標目錄：%1$s</string>
     <string name="speaker_importing_progress">%1$d / %2$d</string>
+    <string name="speaker_save_success">已儲存變更</string>
+    <string name="speaker_save_failed">儲存 txt 檔案失敗。</string>
 </resources>

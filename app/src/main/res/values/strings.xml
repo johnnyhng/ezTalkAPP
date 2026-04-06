@@ -115,4 +115,6 @@
     <string name="speaker_importing_title">Importing files</string>
     <string name="speaker_importing_target">Target folder: %1$s</string>
     <string name="speaker_importing_progress">%1$d / %2$d</string>
+    <string name="speaker_save_success">Saved changes</string>
+    <string name="speaker_save_failed">Failed to save txt file.</string>
 </resources>

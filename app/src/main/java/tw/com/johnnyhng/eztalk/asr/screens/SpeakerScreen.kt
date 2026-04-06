@@ -27,9 +27,11 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -90,6 +92,8 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var importProgressCurrent by remember(userId) { mutableStateOf(0) }
     var importProgressTotal by remember(userId) { mutableStateOf(0) }
     var importProgressFolderName by remember(userId) { mutableStateOf("") }
+    var isEditingDocument by remember(userId) { mutableStateOf(false) }
+    var editingText by remember(userId) { mutableStateOf("") }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsReady by remember { mutableStateOf(false) }
     var currentPlayingDocumentId by remember { mutableStateOf<String?>(null) }
@@ -105,6 +109,17 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     val isSelectedDocumentPaused = selectedDocument?.id != null &&
         selectedDocument.id == playbackDocumentId &&
         isPlaybackPaused
+
+    LaunchedEffect(selectedDocument?.id) {
+        isEditingDocument = false
+        editingText = selectedDocument?.fullText.orEmpty()
+    }
+
+    LaunchedEffect(selectedDocument?.fullText) {
+        if (!isEditingDocument) {
+            editingText = selectedDocument?.fullText.orEmpty()
+        }
+    }
 
     fun resetPlaybackState() {
         currentPlayingDocumentId = null
@@ -606,6 +621,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     isTtsReady = isTtsReady,
                     isPlaying = isSelectedDocumentPlaying,
                     isPaused = isSelectedDocumentPaused,
+                    isEditing = isEditingDocument,
                     onPlay = {
                         if (selectedDocument == null) return@SpeakerPlaybackHeader
                         if (!isTtsReady) {
@@ -650,6 +666,43 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     onStop = {
                         tts?.stop()
                         resetPlaybackState()
+                    },
+                    onEdit = {
+                        if (selectedDocument == null) return@SpeakerPlaybackHeader
+                        tts?.stop()
+                        resetPlaybackState()
+                        editingText = selectedDocument.fullText
+                        isEditingDocument = true
+                    },
+                    onSave = {
+                        if (selectedDocument == null) return@SpeakerPlaybackHeader
+                        val updatedText = editingText
+                        scope.launch {
+                            val saved = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    File(selectedDocument.id).writeText(updatedText)
+                                }.isSuccess
+                            }
+                            if (saved) {
+                                isEditingDocument = false
+                                reloadDirectories()
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.speaker_save_success),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.speaker_save_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    },
+                    onCancelEdit = {
+                        editingText = selectedDocument?.fullText.orEmpty()
+                        isEditingDocument = false
                     }
                 )
                 SpeakerDivider()
@@ -664,15 +717,24 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                             style = MaterialTheme.typography.bodyLarge
                         )
                     } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            Text(
-                                text = selectedDocument.fullText,
-                                style = MaterialTheme.typography.bodyLarge,
+                        if (isEditingDocument) {
+                            OutlinedTextField(
+                                value = editingText,
+                                onValueChange = { editingText = it },
+                                modifier = Modifier.fillMaxSize(),
+                                textStyle = MaterialTheme.typography.bodyLarge
                             )
+                        } else {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                Text(
+                                    text = selectedDocument.fullText,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            }
                         }
                     }
                 }
@@ -882,9 +944,13 @@ private fun SpeakerPlaybackHeader(
     isTtsReady: Boolean,
     isPlaying: Boolean,
     isPaused: Boolean,
+    isEditing: Boolean,
     onPlay: () -> Unit,
     onPause: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onEdit: () -> Unit,
+    onSave: () -> Unit,
+    onCancelEdit: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -899,6 +965,27 @@ private fun SpeakerPlaybackHeader(
                 style = MaterialTheme.typography.titleMedium
             )
         }
+        if (isEditing) {
+            SpeakerPlaybackAction(
+                icon = Icons.Filled.Save,
+                contentDescription = stringResource(R.string.confirm_edit),
+                enabled = selectedDocument != null,
+                onClick = onSave
+            )
+            TextButton(
+                onClick = onCancelEdit,
+                enabled = selectedDocument != null
+            ) {
+                Text(text = stringResource(R.string.cancel_edit))
+            }
+            return
+        }
+        SpeakerPlaybackAction(
+            icon = Icons.Filled.Edit,
+            contentDescription = stringResource(R.string.edit),
+            enabled = selectedDocument != null,
+            onClick = onEdit
+        )
         SpeakerPlaybackAction(
             icon = Icons.Filled.PlayArrow,
             contentDescription = stringResource(R.string.play),
