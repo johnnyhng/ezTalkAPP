@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -26,6 +27,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +56,17 @@ internal fun SpeakerContentScreen(
     onCancelEdit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val contentLines = remember(selectedDocument?.id, selectedDocument?.fullText) {
+        selectedDocument?.let { buildSpeakerContentLines(it.fullText) }.orEmpty()
+    }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(selectedDocument?.id, currentPlayingLineIndex, isEditing) {
+        if (!isEditing && currentPlayingLineIndex != null && currentPlayingLineIndex in contentLines.indices) {
+            listState.animateScrollToItem(currentPlayingLineIndex)
+        }
+    }
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
@@ -92,11 +106,12 @@ internal fun SpeakerContentScreen(
                     )
                 } else {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        itemsIndexed(buildSpeakerContentLines(selectedDocument.fullText)) { index, line ->
+                        itemsIndexed(contentLines) { index, line ->
                             SpeakerContentLineRow(
                                 line = line,
                                 lineNumber = index + 1,
