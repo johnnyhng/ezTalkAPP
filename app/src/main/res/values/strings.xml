@@ -107,5 +107,9 @@
     <string name="speaker_import_txt">Import txt</string>
     <string name="speaker_import_failed">Failed to import txt file.</string>
     <string name="speaker_import_success">Imported %1$s</string>
+    <string name="speaker_import_many_success">Imported %2$d txt files into %1$s</string>
+    <string name="speaker_import_no_txt">No txt files were selected.</string>
     <string name="speaker_tts_not_ready">TTS is not ready yet.</string>
+    <string name="speaker_import_target_folder_label">Target folder</string>
+    <string name="speaker_import_target_folder_placeholder">For example: drive-import</string>
 </resources>

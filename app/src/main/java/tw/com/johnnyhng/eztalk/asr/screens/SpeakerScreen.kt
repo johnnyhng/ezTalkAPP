@@ -82,6 +82,9 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var showCreateFolderDialog by remember(userId) { mutableStateOf(false) }
     var createFolderDialogError by remember(userId) { mutableStateOf<String?>(null) }
     var importTargetDirectory by remember(userId) { mutableStateOf<String?>(null) }
+    var driveImportFolderName by remember(userId) { mutableStateOf("") }
+    var showDriveImportDialog by remember(userId) { mutableStateOf(false) }
+    var driveImportDialogError by remember(userId) { mutableStateOf<String?>(null) }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsReady by remember { mutableStateOf(false) }
     var currentPlayingDocumentId by remember { mutableStateOf<String?>(null) }
@@ -242,6 +245,54 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         }
     }
 
+    val driveFilesImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        val targetFolderName = sanitizeFolderName(driveImportFolderName)
+        if (targetFolderName.isBlank()) return@rememberLauncherForActivityResult
+
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                importTextUrisIntoSpeakerFolder(
+                    context = context,
+                    sourceUris = uris,
+                    filesDir = context.filesDir,
+                    userId = userId,
+                    folderName = targetFolderName
+                )
+            }
+            when (result) {
+                is MultiTextImportResult.Success -> {
+                    reloadDirectories()
+                    Toast.makeText(
+                        context,
+                        context.getString(
+                            R.string.speaker_import_many_success,
+                            result.folderName,
+                            result.importedCount
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                MultiTextImportResult.NoFiles -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_import_no_txt),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                MultiTextImportResult.Failed -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_import_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -326,6 +377,68 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             )
         }
 
+        if (showDriveImportDialog) {
+            AlertDialog(
+                onDismissRequest = { showDriveImportDialog = false },
+                title = {
+                    Text(text = stringResource(R.string.speaker_google_drive))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = driveImportFolderName,
+                            onValueChange = {
+                                driveImportFolderName = it
+                                driveImportDialogError = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.speaker_import_target_folder_label)) },
+                            placeholder = { Text(stringResource(R.string.speaker_import_target_folder_placeholder)) },
+                            isError = driveImportDialogError != null
+                        )
+                        if (driveImportDialogError != null) {
+                            Text(
+                                text = driveImportDialogError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val sanitizedName = sanitizeFolderName(driveImportFolderName)
+                            if (sanitizedName.isBlank()) {
+                                driveImportDialogError =
+                                    context.getString(R.string.speaker_invalid_folder_name)
+                                return@TextButton
+                            }
+                            driveImportFolderName = sanitizedName
+                            driveImportDialogError = null
+                            showDriveImportDialog = false
+                            driveFilesImportLauncher.launch(arrayOf("text/plain"))
+                        },
+                        enabled = driveImportFolderName.isNotBlank()
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDriveImportDialog = false
+                            driveImportFolderName = ""
+                            driveImportDialogError = null
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -336,13 +449,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 SpeakerOverviewHeader(
                     onCreateFolder = { showCreateFolderDialog = true },
-                    onGoogleDriveImport = {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_select_folder_for_import),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
+                    onGoogleDriveImport = { showDriveImportDialog = true }
                 )
                 SpeakerDivider()
                 when {
@@ -915,6 +1022,56 @@ private fun uniqueTargetFile(directory: File, requestedName: String): File {
         counter++
     }
     return candidate
+}
+
+private sealed interface MultiTextImportResult {
+    data class Success(val folderName: String, val importedCount: Int) : MultiTextImportResult
+    data object NoFiles : MultiTextImportResult
+    data object Failed : MultiTextImportResult
+}
+
+private fun importTextUrisIntoSpeakerFolder(
+    context: android.content.Context,
+    sourceUris: List<Uri>,
+    filesDir: File,
+    userId: String,
+    folderName: String
+): MultiTextImportResult {
+    return try {
+        val targetRoot = getSpeakerRootDirectory(filesDir, userId)
+        if (!targetRoot.exists() && !targetRoot.mkdirs()) {
+            return MultiTextImportResult.Failed
+        }
+        val targetDirectory = File(targetRoot, folderName)
+        if (!targetDirectory.exists() && !targetDirectory.mkdirs()) {
+            return MultiTextImportResult.Failed
+        }
+
+        var importedCount = 0
+        sourceUris.forEach { uri ->
+            val sourceName = queryDisplayName(context, uri)
+                ?.takeIf { it.isNotBlank() }
+                ?: "imported.txt"
+            val targetFile = uniqueTargetFile(targetDirectory, ensureTxtExtension(sourceName))
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+                importedCount++
+            }
+        }
+
+        when {
+            sourceUris.isEmpty() -> MultiTextImportResult.NoFiles
+            importedCount == 0 -> MultiTextImportResult.Failed
+            else -> MultiTextImportResult.Success(
+                folderName = targetDirectory.name,
+                importedCount = importedCount
+            )
+        }
+    } catch (_: Exception) {
+        MultiTextImportResult.Failed
+    }
 }
 
 private data class SpeakerUtteranceId(
