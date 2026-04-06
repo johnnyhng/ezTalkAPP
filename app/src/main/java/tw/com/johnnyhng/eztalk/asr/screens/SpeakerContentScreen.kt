@@ -59,6 +59,7 @@ internal fun SpeakerContentScreen(
     val contentLines = remember(selectedDocument?.id, selectedDocument?.fullText) {
         selectedDocument?.let { buildSpeakerContentLines(it.fullText) }.orEmpty()
     }
+    val shouldShowLocalAsrWidget = selectedDocument != null && !isEditing
     val listState = rememberLazyListState()
 
     LaunchedEffect(selectedDocument?.id, currentPlayingLineIndex, isEditing) {
@@ -123,10 +124,12 @@ internal fun SpeakerContentScreen(
                     }
                 }
             }
-            SpeakerDivider()
-            LocalASRWidget(
-                modifier = Modifier.padding(12.dp)
-            )
+            if (shouldShowLocalAsrWidget) {
+                SpeakerDivider()
+                LocalASRWidget(
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
         }
     }
 }

@@ -54,6 +54,8 @@ internal fun SpeechFileExplorer(
     onDocumentSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val shouldShowLocalAsrWidget = directories.any { it.isExpanded }
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
@@ -111,10 +113,12 @@ internal fun SpeechFileExplorer(
                     }
                 }
             }
-            SpeakerDivider()
-            LocalASRWidget(
-                modifier = Modifier.padding(12.dp)
-            )
+            if (shouldShowLocalAsrWidget) {
+                SpeakerDivider()
+                LocalASRWidget(
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
         }
     }
 }
