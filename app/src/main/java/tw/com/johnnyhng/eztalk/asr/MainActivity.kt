@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -152,6 +153,12 @@ fun MainScreen(
                                 contentDescription = stringResource(R.string.help)
                             )
                         }
+                    }
+                    IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.FileManager.route) }) {
+                        Icon(
+                            imageVector = Icons.Filled.Folder,
+                            contentDescription = stringResource(R.string.file_manager)
+                        )
                     }
                     IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Settings.route) }) {
                         Icon(

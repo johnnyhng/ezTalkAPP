@@ -1,7 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -24,7 +23,7 @@ object NavBarItems {
                 route = NavRoutes.Translate.route,
             ),
             BarItem(
-                title = stringResource(R.string.data_collect),
+                title = stringResource(R.string.speaker),
                 image = Icons.Filled.RecordVoiceOver,
                 route = NavRoutes.Speaker.route
             ),
@@ -32,11 +31,6 @@ object NavBarItems {
                 title = stringResource(R.string.data_collect),
                 image = Icons.Filled.Mic,
                 route = NavRoutes.DataCollect.route,
-            ),
-            BarItem(
-                title = stringResource(R.string.file_manager),
-                image = Icons.Filled.Folder,
-                route = NavRoutes.FileManager.route
             ),
         )
 }
