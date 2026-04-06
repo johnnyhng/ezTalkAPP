@@ -493,11 +493,12 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                     directory = directory,
                                     selectedDocumentId = selectedDocumentId,
                                     onToggleExpand = {
+                                        val nextExpanded = !directory.isExpanded
                                         directories = directories.map {
-                                            if (it.id == directory.id) {
-                                                it.copy(isExpanded = !it.isExpanded)
-                                            } else {
-                                                it
+                                            when {
+                                                it.id == directory.id -> it.copy(isExpanded = nextExpanded)
+                                                nextExpanded -> it.copy(isExpanded = false)
+                                                else -> it
                                             }
                                         }
                                     },
