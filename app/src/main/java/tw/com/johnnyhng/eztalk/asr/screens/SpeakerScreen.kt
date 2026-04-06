@@ -1,9 +1,9 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import android.net.Uri
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -11,17 +11,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,298 +30,99 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
-import java.io.File
-import java.util.Locale
 
 @Composable
-fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
+fun SpeakerScreen(
+    homeViewModel: HomeViewModel = viewModel()
+) {
+    val speakerViewModel: SpeakerViewModel = viewModel()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val userSettings by homeViewModel.userSettings.collectAsState()
-    val userId = userSettings.userId
+    val uiState = speakerViewModel.uiState
+    val selectedDocument = speakerViewModel.selectedDocument()
+    val (playbackController, playbackState) = rememberSpeakerPlaybackController()
+    var importTargetDirectory by remember { mutableStateOf<String?>(null) }
 
-    var directories by remember(userId) { mutableStateOf<List<SpeakerDirectoryUi>>(emptyList()) }
-    var selectedDocumentId by remember(userId) { mutableStateOf<String?>(null) }
-    var isLoading by remember(userId) { mutableStateOf(true) }
-    var newFolderName by remember(userId) { mutableStateOf("") }
-    var showCreateFolderDialog by remember(userId) { mutableStateOf(false) }
-    var createFolderDialogError by remember(userId) { mutableStateOf<String?>(null) }
-    var importTargetDirectory by remember(userId) { mutableStateOf<String?>(null) }
-    var driveImportFolderName by remember(userId) { mutableStateOf("") }
-    var showDriveImportDialog by remember(userId) { mutableStateOf(false) }
-    var driveImportDialogError by remember(userId) { mutableStateOf<String?>(null) }
-    var isImporting by remember(userId) { mutableStateOf(false) }
-    var importProgressCurrent by remember(userId) { mutableStateOf(0) }
-    var importProgressTotal by remember(userId) { mutableStateOf(0) }
-    var importProgressFolderName by remember(userId) { mutableStateOf("") }
-    var isEditingDocument by remember(userId) { mutableStateOf(false) }
-    var editingText by remember(userId) { mutableStateOf("") }
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    var isTtsReady by remember { mutableStateOf(false) }
-    var currentPlayingDocumentId by remember { mutableStateOf<String?>(null) }
-    var playbackDocumentId by remember { mutableStateOf<String?>(null) }
-    var playbackSegments by remember { mutableStateOf<List<String>>(emptyList()) }
-    var playbackLineIndexes by remember { mutableStateOf<List<Int>>(emptyList()) }
-    var playbackSegmentIndex by remember { mutableStateOf(0) }
-    var currentPlayingLineIndex by remember { mutableStateOf<Int?>(null) }
-    var isPlaybackPaused by remember { mutableStateOf(false) }
-
-    val selectedDocument = directories
-        .flatMap { it.documents }
-        .firstOrNull { it.id == selectedDocumentId }
-    val isSelectedDocumentPlaying = selectedDocument?.id != null && selectedDocument.id == currentPlayingDocumentId
-    val isSelectedDocumentPaused = selectedDocument?.id != null &&
-        selectedDocument.id == playbackDocumentId &&
-        isPlaybackPaused
-
-    LaunchedEffect(selectedDocument?.id) {
-        isEditingDocument = false
-        editingText = selectedDocument?.fullText.orEmpty()
-        currentPlayingLineIndex = null
-    }
-
-    LaunchedEffect(selectedDocument?.fullText) {
-        if (!isEditingDocument) {
-            editingText = selectedDocument?.fullText.orEmpty()
+    val isSelectedDocumentPlaying = playbackController.isPlayingDocument(selectedDocument?.id)
+    val isSelectedDocumentPaused = playbackController.isPausedDocument(selectedDocument?.id)
+    val currentPlayingLineIndex =
+        if (selectedDocument?.id == playbackState.playbackDocumentId || selectedDocument?.id == playbackState.currentPlayingDocumentId) {
+            playbackState.currentPlayingLineIndex
+        } else {
+            null
         }
+
+    LaunchedEffect(userSettings.userId) {
+        speakerViewModel.setUserId(userSettings.userId)
     }
 
-    fun resetPlaybackState() {
-        currentPlayingDocumentId = null
-        playbackDocumentId = null
-        playbackSegments = emptyList()
-        playbackLineIndexes = emptyList()
-        playbackSegmentIndex = 0
-        currentPlayingLineIndex = null
-        isPlaybackPaused = false
-    }
-
-    fun speakSegment(documentId: String, segmentIndex: Int) {
-        val segment = playbackSegments.getOrNull(segmentIndex)
-        if (segment == null) {
-            resetPlaybackState()
-            return
-        }
-        playbackDocumentId = documentId
-        playbackSegmentIndex = segmentIndex
-        currentPlayingLineIndex = playbackLineIndexes.getOrNull(segmentIndex)
-        isPlaybackPaused = false
-        currentPlayingDocumentId = documentId
-        tts?.speak(
-            segment,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            buildSpeakerUtteranceId(documentId, segmentIndex)
-        )
-    }
-
-    fun setSelectedDocumentIfNeeded(updatedDirectories: List<SpeakerDirectoryUi>) {
-        val allDocuments = updatedDirectories.flatMap { it.documents }
-        selectedDocumentId = when {
-            allDocuments.isEmpty() -> null
-            allDocuments.any { it.id == selectedDocumentId } -> selectedDocumentId
-            else -> null
-        }
-    }
-
-    fun reloadDirectories() {
-        scope.launch {
-            isLoading = true
-            val loadedDirectories = withContext(Dispatchers.IO) {
-                loadSpeakerDirectories(context.filesDir, userId, directories)
+    fun showImportResultToast(result: MultiTextImportResult) {
+        when (result) {
+            is MultiTextImportResult.Success -> {
+                Toast.makeText(
+                    context,
+                    context.getString(
+                        R.string.speaker_import_many_success,
+                        result.folderName,
+                        result.importedCount
+                    ),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
-            directories = loadedDirectories
-            setSelectedDocumentIfNeeded(loadedDirectories)
-            isLoading = false
-        }
-    }
 
-    LaunchedEffect(userId) {
-        reloadDirectories()
-    }
-
-    LaunchedEffect(Unit) {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = if (
-                    tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE
-                ) {
-                    Locale.TRADITIONAL_CHINESE
-                } else {
-                    Locale.getDefault()
-                }
-                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
-                        scope.launch {
-                            playbackDocumentId = parsed.documentId
-                            playbackSegmentIndex = parsed.segmentIndex
-                            currentPlayingLineIndex = playbackLineIndexes.getOrNull(parsed.segmentIndex)
-                            currentPlayingDocumentId = parsed.documentId
-                        }
-                    }
-
-                    override fun onDone(utteranceId: String?) {
-                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
-                        scope.launch {
-                            if (playbackDocumentId != parsed.documentId || isPlaybackPaused) {
-                                return@launch
-                            }
-
-                            val nextIndex = parsed.segmentIndex + 1
-                            if (nextIndex < playbackSegments.size) {
-                                speakSegment(parsed.documentId, nextIndex)
-                            } else {
-                                resetPlaybackState()
-                            }
-                        }
-                    }
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
-                        scope.launch {
-                            if (playbackDocumentId == parsed.documentId) {
-                                resetPlaybackState()
-                            }
-                        }
-                    }
-                })
-                isTtsReady = true
-            } else {
-                isTtsReady = false
+            MultiTextImportResult.NoFiles -> {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.speaker_import_no_txt),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
-        }
-    }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            tts?.stop()
-            tts?.shutdown()
-            resetPlaybackState()
+            MultiTextImportResult.Failed -> {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.speaker_import_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
 
     val txtImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris ->
+    ) { uris: List<Uri> ->
         val targetDirectory = importTargetDirectory
         importTargetDirectory = null
         if (uris.isEmpty() || targetDirectory == null) return@rememberLauncherForActivityResult
 
         scope.launch {
-            isImporting = true
-            importProgressCurrent = 0
-            importProgressTotal = uris.size
-            importProgressFolderName = targetDirectory
-            val result = withContext(Dispatchers.IO) {
-                importTextUrisIntoSpeakerFolder(
-                    context = context,
-                    sourceUris = uris,
-                    filesDir = context.filesDir,
-                    userId = userId,
-                    folderName = targetDirectory,
-                    onProgress = { current, total ->
-                        scope.launch {
-                            importProgressCurrent = current
-                            importProgressTotal = total
-                        }
-                    }
-                )
-            }
-            isImporting = false
-            when (result) {
-                is MultiTextImportResult.Success -> {
-                    reloadDirectories()
-                    Toast.makeText(
-                        context,
-                        context.getString(
-                            R.string.speaker_import_many_success,
-                            result.folderName,
-                            result.importedCount
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                MultiTextImportResult.NoFiles -> {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_import_no_txt),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                MultiTextImportResult.Failed -> {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_import_failed),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
+            val result = speakerViewModel.importIntoFolder(
+                context = context,
+                sourceUris = uris,
+                folderName = targetDirectory
+            )
+            showImportResultToast(result)
         }
     }
 
     val driveFilesImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris ->
+    ) { uris: List<Uri> ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        val targetFolderName = sanitizeFolderName(driveImportFolderName)
+        val targetFolderName = sanitizeFolderName(uiState.driveImportFolderName)
         if (targetFolderName.isBlank()) return@rememberLauncherForActivityResult
 
         scope.launch {
-            isImporting = true
-            importProgressCurrent = 0
-            importProgressTotal = uris.size
-            importProgressFolderName = targetFolderName
-            val result = withContext(Dispatchers.IO) {
-                importTextUrisIntoSpeakerFolder(
-                    context = context,
-                    sourceUris = uris,
-                    filesDir = context.filesDir,
-                    userId = userId,
-                    folderName = targetFolderName,
-                    onProgress = { current, total ->
-                        scope.launch {
-                            importProgressCurrent = current
-                            importProgressTotal = total
-                        }
-                    }
-                )
-            }
-            isImporting = false
-            when (result) {
-                is MultiTextImportResult.Success -> {
-                    reloadDirectories()
-                    Toast.makeText(
-                        context,
-                        context.getString(
-                            R.string.speaker_import_many_success,
-                            result.folderName,
-                            result.importedCount
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                MultiTextImportResult.NoFiles -> {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_import_no_txt),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                MultiTextImportResult.Failed -> {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_import_failed),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
+            val result = speakerViewModel.importIntoFolder(
+                context = context,
+                sourceUris = uris,
+                folderName = targetFolderName
+            )
+            showImportResultToast(result)
         }
     }
 
@@ -334,29 +131,26 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        if (showCreateFolderDialog) {
+        if (uiState.showCreateFolderDialog) {
             AlertDialog(
-                onDismissRequest = { showCreateFolderDialog = false },
+                onDismissRequest = { speakerViewModel.dismissCreateFolderDialog() },
                 title = {
                     Text(text = stringResource(R.string.speaker_create_folder))
                 },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
-                            value = newFolderName,
-                            onValueChange = {
-                                newFolderName = it
-                                createFolderDialogError = null
-                            },
+                            value = uiState.newFolderName,
+                            onValueChange = { speakerViewModel.onNewFolderNameChanged(it) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             label = { Text(stringResource(R.string.speaker_folder_name_label)) },
                             placeholder = { Text(stringResource(R.string.speaker_folder_name_placeholder)) },
-                            isError = createFolderDialogError != null
+                            isError = uiState.createFolderDialogError != null
                         )
-                        if (createFolderDialogError != null) {
+                        if (uiState.createFolderDialogError != null) {
                             Text(
-                                text = createFolderDialogError!!,
+                                text = uiState.createFolderDialogError,
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -365,47 +159,15 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 },
                 confirmButton = {
                     TextButton(
-                        onClick = {
-                            val sanitizedName = sanitizeFolderName(newFolderName)
-                            if (sanitizedName.isBlank()) {
-                                createFolderDialogError =
-                                    context.getString(R.string.speaker_invalid_folder_name)
-                                return@TextButton
-                            }
-
-                            scope.launch {
-                                val result = withContext(Dispatchers.IO) {
-                                    createSpeakerFolder(context.filesDir, userId, sanitizedName)
-                                }
-                                when (result) {
-                                    FolderCreationResult.CREATED -> {
-                                        newFolderName = ""
-                                        showCreateFolderDialog = false
-                                        reloadDirectories()
-                                    }
-                                    FolderCreationResult.ALREADY_EXISTS -> {
-                                        createFolderDialogError =
-                                            context.getString(R.string.speaker_folder_exists, sanitizedName)
-                                    }
-                                    FolderCreationResult.FAILED -> {
-                                        createFolderDialogError =
-                                            context.getString(R.string.speaker_create_folder_failed)
-                                    }
-                                }
-                            }
-                        },
-                        enabled = newFolderName.isNotBlank()
+                        onClick = { speakerViewModel.createFolder() },
+                        enabled = uiState.newFolderName.isNotBlank()
                     ) {
                         Text(text = stringResource(R.string.ok))
                     }
                 },
                 dismissButton = {
                     TextButton(
-                        onClick = {
-                            showCreateFolderDialog = false
-                            newFolderName = ""
-                            createFolderDialogError = null
-                        }
+                        onClick = { speakerViewModel.dismissCreateFolderDialog() }
                     ) {
                         Text(text = stringResource(R.string.cancel))
                     }
@@ -413,7 +175,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             )
         }
 
-        if (isImporting) {
+        if (uiState.isImporting) {
             AlertDialog(
                 onDismissRequest = { },
                 title = {
@@ -424,20 +186,20 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         Text(
                             text = stringResource(
                                 R.string.speaker_importing_target,
-                                importProgressFolderName
+                                uiState.importProgressFolderName
                             ),
                             style = MaterialTheme.typography.bodyMedium
                         )
                         LinearProgressIndicator(
-                            progress = if (importProgressTotal == 0) 0f
-                            else importProgressCurrent.toFloat() / importProgressTotal.toFloat(),
+                            progress = if (uiState.importProgressTotal == 0) 0f
+                            else uiState.importProgressCurrent.toFloat() / uiState.importProgressTotal.toFloat(),
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
                             text = stringResource(
                                 R.string.speaker_importing_progress,
-                                importProgressCurrent,
-                                importProgressTotal
+                                uiState.importProgressCurrent,
+                                uiState.importProgressTotal
                             ),
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -447,29 +209,26 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             )
         }
 
-        if (showDriveImportDialog) {
+        if (uiState.showDriveImportDialog) {
             AlertDialog(
-                onDismissRequest = { showDriveImportDialog = false },
+                onDismissRequest = { speakerViewModel.dismissDriveImportDialog() },
                 title = {
                     Text(text = stringResource(R.string.speaker_google_drive))
                 },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
-                            value = driveImportFolderName,
-                            onValueChange = {
-                                driveImportFolderName = it
-                                driveImportDialogError = null
-                            },
+                            value = uiState.driveImportFolderName,
+                            onValueChange = { speakerViewModel.onDriveImportFolderNameChanged(it) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             label = { Text(stringResource(R.string.speaker_import_target_folder_label)) },
                             placeholder = { Text(stringResource(R.string.speaker_import_target_folder_placeholder)) },
-                            isError = driveImportDialogError != null
+                            isError = uiState.driveImportDialogError != null
                         )
-                        if (driveImportDialogError != null) {
+                        if (uiState.driveImportDialogError != null) {
                             Text(
-                                text = driveImportDialogError!!,
+                                text = uiState.driveImportDialogError,
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -479,29 +238,19 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            val sanitizedName = sanitizeFolderName(driveImportFolderName)
-                            if (sanitizedName.isBlank()) {
-                                driveImportDialogError =
-                                    context.getString(R.string.speaker_invalid_folder_name)
-                                return@TextButton
+                            val targetFolder = speakerViewModel.confirmDriveImportFolder()
+                            if (targetFolder != null) {
+                                driveFilesImportLauncher.launch(arrayOf("text/plain"))
                             }
-                            driveImportFolderName = sanitizedName
-                            driveImportDialogError = null
-                            showDriveImportDialog = false
-                            driveFilesImportLauncher.launch(arrayOf("text/plain"))
                         },
-                        enabled = driveImportFolderName.isNotBlank()
+                        enabled = uiState.driveImportFolderName.isNotBlank()
                     ) {
                         Text(text = stringResource(R.string.ok))
                     }
                 },
                 dismissButton = {
                     TextButton(
-                        onClick = {
-                            showDriveImportDialog = false
-                            driveImportFolderName = ""
-                            driveImportDialogError = null
-                        }
+                        onClick = { speakerViewModel.dismissDriveImportDialog() }
                     ) {
                         Text(text = stringResource(R.string.cancel))
                     }
@@ -510,58 +259,29 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         }
 
         SpeechFileExplorer(
-            directories = directories,
-            selectedDocumentId = selectedDocumentId,
-            isLoading = isLoading,
-            isImportEnabled = !isImporting,
+            directories = uiState.directories,
+            selectedDocumentId = uiState.selectedDocumentId,
+            isLoading = uiState.isLoading,
+            isImportEnabled = !uiState.isImporting,
             isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
             isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
-            onCreateFolder = { showCreateFolderDialog = true },
-            onGoogleDriveImport = { showDriveImportDialog = true },
-            onToggleExpand = { directory ->
-                val nextExpanded = !directory.isExpanded
-                directories = directories.map {
-                    when {
-                        it.id == directory.id -> it.copy(isExpanded = nextExpanded)
-                        nextExpanded -> it.copy(isExpanded = false)
-                        else -> it
-                    }
-                }
-            },
-            onRefresh = { reloadDirectories() },
+            onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
+            onGoogleDriveImport = { speakerViewModel.showDriveImportDialog() },
+            onToggleExpand = { directory -> speakerViewModel.toggleDirectory(directory) },
+            onRefresh = { speakerViewModel.refreshDirectories() },
             onImportIntoDirectory = { directory ->
                 importTargetDirectory = directory.displayName
                 txtImportLauncher.launch(arrayOf("text/plain"))
             },
             onRemoveDirectory = { directory ->
-                scope.launch {
-                    withContext(Dispatchers.IO) {
-                        deleteSpeakerFolder(context.filesDir, userId, directory.displayName)
-                    }
-                    val updatedDirectories = directories.filterNot { it.id == directory.id }
-                    directories = updatedDirectories
-                    setSelectedDocumentIfNeeded(updatedDirectories)
-                }
+                speakerViewModel.deleteFolder(directory)
             },
             onRemoveDocument = { document ->
-                scope.launch {
-                    if (document.id == selectedDocumentId) {
-                        selectedDocumentId = null
-                        isEditingDocument = false
-                        editingText = ""
-                    }
-                    if (document.id == playbackDocumentId || document.id == currentPlayingDocumentId) {
-                        tts?.stop()
-                        resetPlaybackState()
-                    }
-                    withContext(Dispatchers.IO) {
-                        deleteSpeakerDocument(document.id)
-                    }
-                    reloadDirectories()
-                }
+                playbackController.stopIfPlaying(document.id)
+                speakerViewModel.deleteDocument(document)
             },
             onDocumentSelected = { documentId ->
-                selectedDocumentId = documentId
+                speakerViewModel.onDocumentSelected(documentId)
             },
             modifier = Modifier
                 .fillMaxSize()
@@ -572,293 +292,84 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
 
         SpeakerContentScreen(
             selectedDocument = selectedDocument,
-            isTtsReady = isTtsReady,
+            isTtsReady = playbackState.isReady,
             isPlaying = isSelectedDocumentPlaying,
             isPaused = isSelectedDocumentPaused,
-            isEditing = isEditingDocument,
+            isEditing = uiState.isEditingDocument,
             currentPlayingLineIndex = currentPlayingLineIndex,
-            editingText = editingText,
-            onEditingTextChange = { editingText = it },
+            editingText = uiState.editingText,
+            onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
             onSpeakLine = { lineIndex, line ->
-                if (selectedDocument == null || line.isBlank()) return@SpeakerContentScreen
-                if (!isTtsReady) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_tts_not_ready),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@SpeakerContentScreen
-                }
-                tts?.stop()
-                playbackSegments = listOf(line)
-                playbackLineIndexes = listOf(lineIndex)
-                speakSegment(selectedDocument.id, 0)
-            },
-            onPlay = {
                 if (selectedDocument == null) return@SpeakerContentScreen
-                if (!isTtsReady) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_tts_not_ready),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@SpeakerContentScreen
-                }
-                if (selectedDocument.fullText.isBlank()) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_empty_text_file),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@SpeakerContentScreen
-                }
-                tts?.stop()
-                if (isSelectedDocumentPaused && playbackSegments.isNotEmpty()) {
-                    speakSegment(selectedDocument.id, playbackSegmentIndex)
-                } else {
-                    val playbackPlan = buildSpeakerPlaybackPlan(selectedDocument.fullText)
-                    if (playbackPlan.segments.isEmpty()) {
+                when (playbackController.playLine(selectedDocument, lineIndex, line)) {
+                    SpeakerPlaybackResult.NOT_READY -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_tts_not_ready),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    SpeakerPlaybackResult.EMPTY_TEXT -> {
                         Toast.makeText(
                             context,
                             context.getString(R.string.speaker_empty_text_file),
                             Toast.LENGTH_SHORT
                         ).show()
-                        return@SpeakerContentScreen
                     }
-                    playbackSegments = playbackPlan.segments
-                    playbackLineIndexes = playbackPlan.lineIndexes
-                    speakSegment(selectedDocument.id, 0)
+
+                    SpeakerPlaybackResult.STARTED -> Unit
+                }
+            },
+            onPlay = {
+                if (selectedDocument == null) return@SpeakerContentScreen
+                when (playbackController.playDocument(selectedDocument)) {
+                    SpeakerPlaybackResult.NOT_READY -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_tts_not_ready),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    SpeakerPlaybackResult.EMPTY_TEXT -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_empty_text_file),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    SpeakerPlaybackResult.STARTED -> Unit
                 }
             },
             onPause = {
-                if (!isSelectedDocumentPlaying) return@SpeakerContentScreen
-                tts?.stop()
-                currentPlayingDocumentId = null
-                isPlaybackPaused = true
+                playbackController.pause(selectedDocument?.id)
             },
             onStop = {
-                tts?.stop()
-                resetPlaybackState()
+                playbackController.stop()
             },
             onEdit = {
-                if (selectedDocument == null) return@SpeakerContentScreen
-                tts?.stop()
-                resetPlaybackState()
-                editingText = selectedDocument.fullText
-                isEditingDocument = true
+                playbackController.stop()
+                speakerViewModel.startEditing()
             },
             onSave = {
-                if (selectedDocument == null) return@SpeakerContentScreen
-                val updatedText = editingText
-                scope.launch {
-                    val saved = withContext(Dispatchers.IO) {
-                        runCatching {
-                            File(selectedDocument.id).writeText(updatedText)
-                        }.isSuccess
-                    }
-                    if (saved) {
-                        isEditingDocument = false
-                        reloadDirectories()
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_save_success),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_save_failed),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
+                speakerViewModel.saveEditing { saved ->
+                    Toast.makeText(
+                        context,
+                        context.getString(
+                            if (saved) R.string.speaker_save_success else R.string.speaker_save_failed
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             },
             onCancelEdit = {
-                editingText = selectedDocument?.fullText.orEmpty()
-                isEditingDocument = false
+                speakerViewModel.cancelEditing()
             },
             modifier = Modifier
                 .fillMaxSize()
                 .weight(0.58f)
         )
     }
-}
-
-private enum class FolderCreationResult {
-    CREATED,
-    ALREADY_EXISTS,
-    FAILED
-}
-
-private fun createSpeakerFolder(filesDir: File, userId: String, folderName: String): FolderCreationResult {
-    val speechRoot = getSpeakerRootDirectory(filesDir, userId)
-    if (!speechRoot.exists() && !speechRoot.mkdirs()) {
-        return FolderCreationResult.FAILED
-    }
-
-    val folder = File(speechRoot, folderName)
-    if (folder.exists()) {
-        return FolderCreationResult.ALREADY_EXISTS
-    }
-
-    return if (folder.mkdirs()) {
-        FolderCreationResult.CREATED
-    } else {
-        FolderCreationResult.FAILED
-    }
-}
-
-private fun deleteSpeakerFolder(filesDir: File, userId: String, folderName: String): Boolean {
-    val target = File(getSpeakerRootDirectory(filesDir, userId), folderName)
-    return target.deleteRecursively()
-}
-
-private fun deleteSpeakerDocument(filePath: String): Boolean {
-    val target = File(filePath)
-    return target.exists() && target.delete()
-}
-
-private fun loadSpeakerDirectories(
-    filesDir: File,
-    userId: String,
-    existingDirectories: List<SpeakerDirectoryUi>
-): List<SpeakerDirectoryUi> {
-    val expansionMap = existingDirectories.associate { it.displayName to it.isExpanded }
-    val speechRoot = getSpeakerRootDirectory(filesDir, userId)
-    if (!speechRoot.exists()) {
-        speechRoot.mkdirs()
-        return emptyList()
-    }
-
-    return speechRoot.listFiles()
-        ?.filter { it.isDirectory }
-        ?.sortedBy { it.name.lowercase() }
-        ?.map { directory ->
-            val documents = directory.listFiles()
-                ?.filter { it.isFile && it.name.lowercase().endsWith(".txt") }
-                ?.sortedBy { it.name.lowercase() }
-                ?.mapNotNull { file ->
-                    val fullText = runCatching { file.readText() }.getOrNull() ?: return@mapNotNull null
-                    SpeakerDocumentUi(
-                        id = file.absolutePath,
-                        displayName = file.name,
-                        previewText = buildPreviewText(fullText),
-                        fullText = fullText
-                    )
-                }
-                .orEmpty()
-
-            SpeakerDirectoryUi(
-                id = directory.absolutePath,
-                displayName = directory.name,
-                isExpanded = expansionMap[directory.name] ?: false,
-                documents = documents
-            )
-        }
-        .orEmpty()
-}
-
-internal fun getSpeakerRootDirectory(filesDir: File, userId: String): File {
-    return File(filesDir, "speech/$userId")
-}
-
-private fun sanitizeFolderName(input: String): String {
-    return input.trim()
-        .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        .replace(Regex("\\s+"), " ")
-}
-
-private fun buildPreviewText(text: String): String {
-    val normalized = text.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
-    if (normalized.isBlank()) {
-        return ""
-    }
-    return if (normalized.length > 80) {
-        normalized.take(80) + "..."
-    } else {
-        normalized
-    }
-}
-
-private data class SpeakerUtteranceId(
-    val documentId: String,
-    val segmentIndex: Int
-)
-
-private data class SpeakerPlaybackPlan(
-    val segments: List<String>,
-    val lineIndexes: List<Int>
-)
-
-private fun buildSpeakerUtteranceId(documentId: String, segmentIndex: Int): String {
-    return "$segmentIndex::$documentId"
-}
-
-private fun parseSpeakerUtteranceId(utteranceId: String): SpeakerUtteranceId? {
-    val separatorIndex = utteranceId.indexOf("::")
-    if (separatorIndex <= 0) return null
-    val segmentIndex = utteranceId.substring(0, separatorIndex).toIntOrNull() ?: return null
-    val documentId = utteranceId.substring(separatorIndex + 2)
-    if (documentId.isBlank()) return null
-    return SpeakerUtteranceId(
-        documentId = documentId,
-        segmentIndex = segmentIndex
-    )
-}
-
-private fun segmentTextForTts(text: String): List<String> {
-    val normalized = text
-        .replace("\r\n", "\n")
-        .trim()
-    if (normalized.isBlank()) return emptyList()
-
-    return normalized
-        .split('\n')
-        .flatMap { paragraph ->
-            paragraph
-                .split(Regex("(?<=[。！？!?；;])"))
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-        }
-        .flatMap { chunkTextForTts(it) }
-}
-
-private fun buildSpeakerPlaybackPlan(text: String): SpeakerPlaybackPlan {
-    val lines = text
-        .replace("\r\n", "\n")
-        .split('\n')
-
-    val segments = mutableListOf<String>()
-    val lineIndexes = mutableListOf<Int>()
-
-    lines.forEachIndexed { lineIndex, line ->
-        val lineSegments = segmentTextForTts(line)
-        lineSegments.forEach { segment ->
-            segments += segment
-            lineIndexes += lineIndex
-        }
-    }
-
-    return SpeakerPlaybackPlan(
-        segments = segments,
-        lineIndexes = lineIndexes
-    )
-}
-
-private fun chunkTextForTts(text: String, maxLength: Int = 180): List<String> {
-    if (text.length <= maxLength) return listOf(text)
-
-    val chunks = mutableListOf<String>()
-    var remaining = text.trim()
-    while (remaining.length > maxLength) {
-        val splitIndex = remaining.lastIndexOf(' ', startIndex = maxLength)
-            .takeIf { it > maxLength / 2 }
-            ?: maxLength
-        chunks += remaining.substring(0, splitIndex).trim()
-        remaining = remaining.substring(splitIndex).trim()
-    }
-    if (remaining.isNotBlank()) {
-        chunks += remaining
-    }
-    return chunks
 }
