@@ -53,13 +53,11 @@ fun SpeakerScreen(
     val activity = context as Activity
     val scope = rememberCoroutineScope()
     val userSettings by homeViewModel.userSettings.collectAsState()
-    val isAsrRecording by homeViewModel.isRecording.collectAsState()
-    val countdownProgress by homeViewModel.countdownProgress.collectAsState()
-    val isRecognizingSpeech by homeViewModel.isRecognizingSpeech.collectAsState()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     val uiState = speakerViewModel.uiState
     val selectedDocument = speakerViewModel.selectedDocument()
     val (playbackController, playbackState) = rememberSpeakerPlaybackController()
+    val (speakerAsrController, speakerAsrState) = rememberSpeakerAsrController()
     var importTargetDirectory by remember { mutableStateOf<String?>(null) }
     var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
@@ -80,40 +78,29 @@ fun SpeakerScreen(
         speakerViewModel.setUserId(userSettings.userId)
     }
 
-    LaunchedEffect(Unit) {
-        homeViewModel.partialText.collect { text ->
-            when (activeAsrTarget) {
-                SpeakerAsrTarget.EXPLORER -> explorerAsrText = text
-                SpeakerAsrTarget.CONTENT -> contentAsrText = text
-                null -> Unit
-            }
+    LaunchedEffect(speakerAsrState.partialText, speakerAsrState.finalText, activeAsrTarget) {
+        val latestText = speakerAsrState.finalText.ifBlank { speakerAsrState.partialText }
+        when (activeAsrTarget) {
+            SpeakerAsrTarget.EXPLORER -> explorerAsrText = latestText
+            SpeakerAsrTarget.CONTENT -> contentAsrText = latestText
+            null -> Unit
         }
     }
 
-    LaunchedEffect(Unit) {
-        homeViewModel.finalTranscript.collect { transcript ->
-            when (activeAsrTarget) {
-                SpeakerAsrTarget.EXPLORER -> explorerAsrText = transcript.recognizedText
-                SpeakerAsrTarget.CONTENT -> contentAsrText = transcript.recognizedText
-                null -> Unit
-            }
-        }
-    }
-
-    LaunchedEffect(isAsrRecording) {
-        if (!isAsrRecording) {
+    LaunchedEffect(speakerAsrState.isRecording) {
+        if (!speakerAsrState.isRecording) {
             activeAsrTarget = null
         }
     }
 
-    LaunchedEffect(isExplorerWidgetVisible, isContentWidgetVisible, activeAsrTarget, isAsrRecording) {
+    LaunchedEffect(isExplorerWidgetVisible, isContentWidgetVisible, activeAsrTarget, speakerAsrState.isRecording) {
         val isTargetStillVisible = when (activeAsrTarget) {
             SpeakerAsrTarget.EXPLORER -> isExplorerWidgetVisible
             SpeakerAsrTarget.CONTENT -> isContentWidgetVisible
             null -> true
         }
-        if (!isTargetStillVisible && isAsrRecording) {
-            homeViewModel.toggleRecording()
+        if (!isTargetStillVisible && speakerAsrState.isRecording) {
+            speakerAsrController.stop()
         }
     }
 
@@ -122,9 +109,9 @@ fun SpeakerScreen(
     }
 
     fun toggleSpeakerAsr(target: SpeakerAsrTarget) {
-        if (isAsrRecording) {
+        if (speakerAsrState.isRecording) {
             if (activeAsrTarget == target) {
-                homeViewModel.toggleRecording()
+                speakerAsrController.stop()
             }
             return
         }
@@ -139,7 +126,7 @@ fun SpeakerScreen(
                 SpeakerAsrTarget.EXPLORER -> explorerAsrText = ""
                 SpeakerAsrTarget.CONTENT -> contentAsrText = ""
             }
-            homeViewModel.startTranslateRecording()
+            speakerAsrController.start(userSettings)
         }
     }
 
@@ -346,9 +333,9 @@ fun SpeakerScreen(
             selectedDocumentId = uiState.selectedDocumentId,
             isLoading = uiState.isLoading,
             localAsrText = explorerAsrText,
-            isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.EXPLORER && isAsrRecording,
-            localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.EXPLORER && isRecognizingSpeech) countdownProgress else 0f,
-            isLocalAsrEnabled = !isAsrModelLoading && (!isAsrRecording || activeAsrTarget == SpeakerAsrTarget.EXPLORER),
+            isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.EXPLORER && speakerAsrState.isRecording,
+            localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.EXPLORER && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
+            isLocalAsrEnabled = !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.EXPLORER),
             isImportEnabled = !uiState.isImporting,
             isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
             isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
@@ -385,9 +372,9 @@ fun SpeakerScreen(
             isPaused = isSelectedDocumentPaused,
             isEditing = uiState.isEditingDocument,
             localAsrText = contentAsrText,
-            isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && isAsrRecording,
-            localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && isRecognizingSpeech) countdownProgress else 0f,
-            isLocalAsrEnabled = !isAsrModelLoading && (!isAsrRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
+            isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecording,
+            localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
+            isLocalAsrEnabled = !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
             currentPlayingLineIndex = currentPlayingLineIndex,
             editingText = uiState.editingText,
             onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
