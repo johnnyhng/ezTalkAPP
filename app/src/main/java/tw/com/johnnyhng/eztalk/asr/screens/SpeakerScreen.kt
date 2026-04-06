@@ -213,34 +213,50 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         }
     }
 
-    val txtImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val txtImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
         val targetDirectory = importTargetDirectory
         importTargetDirectory = null
-        if (uri == null || targetDirectory == null) return@rememberLauncherForActivityResult
+        if (uris.isEmpty() || targetDirectory == null) return@rememberLauncherForActivityResult
 
         scope.launch {
-            val importedFileName = withContext(Dispatchers.IO) {
-                importTextIntoSpeakerFolder(
+            val result = withContext(Dispatchers.IO) {
+                importTextUrisIntoSpeakerFolder(
                     context = context,
-                    sourceUri = uri,
+                    sourceUris = uris,
                     filesDir = context.filesDir,
                     userId = userId,
                     folderName = targetDirectory
                 )
             }
-            if (importedFileName == null) {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.speaker_import_failed),
-                    Toast.LENGTH_SHORT
-                ).show()
-            } else {
-                reloadDirectories()
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.speaker_import_success, importedFileName),
-                    Toast.LENGTH_SHORT
-                ).show()
+            when (result) {
+                is MultiTextImportResult.Success -> {
+                    reloadDirectories()
+                    Toast.makeText(
+                        context,
+                        context.getString(
+                            R.string.speaker_import_many_success,
+                            result.folderName,
+                            result.importedCount
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                MultiTextImportResult.NoFiles -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_import_no_txt),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                MultiTextImportResult.Failed -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_import_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
         }
     }
@@ -488,7 +504,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                     onRefresh = { reloadDirectories() },
                                     onImport = {
                                         importTargetDirectory = directory.displayName
-                                        txtImportLauncher.launch("text/*")
+                                        txtImportLauncher.launch(arrayOf("text/plain"))
                                     },
                                     onRemove = {
                                         scope.launch {
@@ -949,7 +965,7 @@ private fun loadSpeakerDirectories(
         .orEmpty()
 }
 
-private fun getSpeakerRootDirectory(filesDir: File, userId: String): File {
+internal fun getSpeakerRootDirectory(filesDir: File, userId: String): File {
     return File(filesDir, "speech/$userId")
 }
 
@@ -968,109 +984,6 @@ private fun buildPreviewText(text: String): String {
         normalized.take(80) + "..."
     } else {
         normalized
-    }
-}
-
-private fun importTextIntoSpeakerFolder(
-    context: android.content.Context,
-    sourceUri: Uri,
-    filesDir: File,
-    userId: String,
-    folderName: String
-): String? {
-    val sourceName = queryDisplayName(context, sourceUri)
-        ?.takeIf { it.isNotBlank() }
-        ?: "imported.txt"
-    val safeName = ensureTxtExtension(sourceName)
-    val targetDirectory = File(getSpeakerRootDirectory(filesDir, userId), folderName)
-    if (!targetDirectory.exists() && !targetDirectory.mkdirs()) {
-        return null
-    }
-
-    val targetFile = uniqueTargetFile(targetDirectory, safeName)
-    return try {
-        context.contentResolver.openInputStream(sourceUri)?.use { input ->
-            targetFile.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        } ?: return null
-        targetFile.name
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private fun queryDisplayName(context: android.content.Context, uri: Uri): String? {
-    val projection = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
-    return context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-        val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-        if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
-    }
-}
-
-private fun ensureTxtExtension(name: String): String {
-    return if (name.lowercase().endsWith(".txt")) name else "$name.txt"
-}
-
-private fun uniqueTargetFile(directory: File, requestedName: String): File {
-    val baseName = requestedName.substringBeforeLast('.', requestedName)
-    val extension = requestedName.substringAfterLast('.', "txt")
-    var candidate = File(directory, requestedName)
-    var counter = 1
-    while (candidate.exists()) {
-        candidate = File(directory, "${baseName}_$counter.$extension")
-        counter++
-    }
-    return candidate
-}
-
-private sealed interface MultiTextImportResult {
-    data class Success(val folderName: String, val importedCount: Int) : MultiTextImportResult
-    data object NoFiles : MultiTextImportResult
-    data object Failed : MultiTextImportResult
-}
-
-private fun importTextUrisIntoSpeakerFolder(
-    context: android.content.Context,
-    sourceUris: List<Uri>,
-    filesDir: File,
-    userId: String,
-    folderName: String
-): MultiTextImportResult {
-    return try {
-        val targetRoot = getSpeakerRootDirectory(filesDir, userId)
-        if (!targetRoot.exists() && !targetRoot.mkdirs()) {
-            return MultiTextImportResult.Failed
-        }
-        val targetDirectory = File(targetRoot, folderName)
-        if (!targetDirectory.exists() && !targetDirectory.mkdirs()) {
-            return MultiTextImportResult.Failed
-        }
-
-        var importedCount = 0
-        sourceUris.forEach { uri ->
-            val sourceName = queryDisplayName(context, uri)
-                ?.takeIf { it.isNotBlank() }
-                ?: "imported.txt"
-            val targetFile = uniqueTargetFile(targetDirectory, ensureTxtExtension(sourceName))
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                targetFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-                importedCount++
-            }
-        }
-
-        when {
-            sourceUris.isEmpty() -> MultiTextImportResult.NoFiles
-            importedCount == 0 -> MultiTextImportResult.Failed
-            else -> MultiTextImportResult.Success(
-                folderName = targetDirectory.name,
-                importedCount = importedCount
-            )
-        }
-    } catch (_: Exception) {
-        MultiTextImportResult.Failed
     }
 }
 
