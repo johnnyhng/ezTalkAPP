@@ -25,6 +25,11 @@ object NavBarItems {
             ),
             BarItem(
                 title = stringResource(R.string.data_collect),
+                image = Icons.Filled.RecordVoiceOver,
+                route = NavRoutes.Speaker.route
+            ),
+            BarItem(
+                title = stringResource(R.string.data_collect),
                 image = Icons.Filled.Mic,
                 route = NavRoutes.DataCollect.route,
             ),
@@ -32,11 +37,6 @@ object NavBarItems {
                 title = stringResource(R.string.file_manager),
                 image = Icons.Filled.Folder,
                 route = NavRoutes.FileManager.route
-            ),
-            BarItem(
-                title = stringResource(R.string.speaker),
-                image = Icons.Filled.RecordVoiceOver,
-                route = NavRoutes.Speaker.route
             ),
         )
 }
