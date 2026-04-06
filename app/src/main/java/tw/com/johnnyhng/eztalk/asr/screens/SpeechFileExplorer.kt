@@ -301,7 +301,7 @@ private fun SpeakerDocumentRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = document.displayName,
+            text = document.displayName.substringBeforeLast('.', document.displayName),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f)
         )
