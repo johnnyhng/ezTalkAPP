@@ -571,6 +571,20 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             isEditing = isEditingDocument,
             editingText = editingText,
             onEditingTextChange = { editingText = it },
+            onSpeakLine = { line ->
+                if (selectedDocument == null || line.isBlank()) return@SpeakerContentScreen
+                if (!isTtsReady) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_tts_not_ready),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@SpeakerContentScreen
+                }
+                tts?.stop()
+                playbackSegments = listOf(line)
+                speakSegment(selectedDocument.id, 0)
+            },
             onPlay = {
                 if (selectedDocument == null) return@SpeakerContentScreen
                 if (!isTtsReady) {
