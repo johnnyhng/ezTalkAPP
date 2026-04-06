@@ -70,7 +70,9 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var currentPlayingDocumentId by remember { mutableStateOf<String?>(null) }
     var playbackDocumentId by remember { mutableStateOf<String?>(null) }
     var playbackSegments by remember { mutableStateOf<List<String>>(emptyList()) }
+    var playbackLineIndexes by remember { mutableStateOf<List<Int>>(emptyList()) }
     var playbackSegmentIndex by remember { mutableStateOf(0) }
+    var currentPlayingLineIndex by remember { mutableStateOf<Int?>(null) }
     var isPlaybackPaused by remember { mutableStateOf(false) }
 
     val selectedDocument = directories
@@ -84,6 +86,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     LaunchedEffect(selectedDocument?.id) {
         isEditingDocument = false
         editingText = selectedDocument?.fullText.orEmpty()
+        currentPlayingLineIndex = null
     }
 
     LaunchedEffect(selectedDocument?.fullText) {
@@ -96,7 +99,9 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         currentPlayingDocumentId = null
         playbackDocumentId = null
         playbackSegments = emptyList()
+        playbackLineIndexes = emptyList()
         playbackSegmentIndex = 0
+        currentPlayingLineIndex = null
         isPlaybackPaused = false
     }
 
@@ -108,6 +113,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         }
         playbackDocumentId = documentId
         playbackSegmentIndex = segmentIndex
+        currentPlayingLineIndex = playbackLineIndexes.getOrNull(segmentIndex)
         isPlaybackPaused = false
         currentPlayingDocumentId = documentId
         tts?.speak(
@@ -159,6 +165,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         scope.launch {
                             playbackDocumentId = parsed.documentId
                             playbackSegmentIndex = parsed.segmentIndex
+                            currentPlayingLineIndex = playbackLineIndexes.getOrNull(parsed.segmentIndex)
                             currentPlayingDocumentId = parsed.documentId
                         }
                     }
@@ -569,9 +576,10 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             isPlaying = isSelectedDocumentPlaying,
             isPaused = isSelectedDocumentPaused,
             isEditing = isEditingDocument,
+            currentPlayingLineIndex = currentPlayingLineIndex,
             editingText = editingText,
             onEditingTextChange = { editingText = it },
-            onSpeakLine = { line ->
+            onSpeakLine = { lineIndex, line ->
                 if (selectedDocument == null || line.isBlank()) return@SpeakerContentScreen
                 if (!isTtsReady) {
                     Toast.makeText(
@@ -583,6 +591,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 }
                 tts?.stop()
                 playbackSegments = listOf(line)
+                playbackLineIndexes = listOf(lineIndex)
                 speakSegment(selectedDocument.id, 0)
             },
             onPlay = {
@@ -607,8 +616,8 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                 if (isSelectedDocumentPaused && playbackSegments.isNotEmpty()) {
                     speakSegment(selectedDocument.id, playbackSegmentIndex)
                 } else {
-                    val segments = segmentTextForTts(selectedDocument.fullText)
-                    if (segments.isEmpty()) {
+                    val playbackPlan = buildSpeakerPlaybackPlan(selectedDocument.fullText)
+                    if (playbackPlan.segments.isEmpty()) {
                         Toast.makeText(
                             context,
                             context.getString(R.string.speaker_empty_text_file),
@@ -616,7 +625,8 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         ).show()
                         return@SpeakerContentScreen
                     }
-                    playbackSegments = segments
+                    playbackSegments = playbackPlan.segments
+                    playbackLineIndexes = playbackPlan.lineIndexes
                     speakSegment(selectedDocument.id, 0)
                 }
             },
@@ -775,6 +785,11 @@ private data class SpeakerUtteranceId(
     val segmentIndex: Int
 )
 
+private data class SpeakerPlaybackPlan(
+    val segments: List<String>,
+    val lineIndexes: List<Int>
+)
+
 private fun buildSpeakerUtteranceId(documentId: String, segmentIndex: Int): String {
     return "$segmentIndex::$documentId"
 }
@@ -806,6 +821,28 @@ private fun segmentTextForTts(text: String): List<String> {
                 .filter { it.isNotBlank() }
         }
         .flatMap { chunkTextForTts(it) }
+}
+
+private fun buildSpeakerPlaybackPlan(text: String): SpeakerPlaybackPlan {
+    val lines = text
+        .replace("\r\n", "\n")
+        .split('\n')
+
+    val segments = mutableListOf<String>()
+    val lineIndexes = mutableListOf<Int>()
+
+    lines.forEachIndexed { lineIndex, line ->
+        val lineSegments = segmentTextForTts(line)
+        lineSegments.forEach { segment ->
+            segments += segment
+            lineIndexes += lineIndex
+        }
+    }
+
+    return SpeakerPlaybackPlan(
+        segments = segments,
+        lineIndexes = lineIndexes
+    )
 }
 
 private fun chunkTextForTts(text: String, maxLength: Int = 180): List<String> {

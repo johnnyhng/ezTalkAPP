@@ -1,6 +1,7 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,9 +41,10 @@ internal fun SpeakerContentScreen(
     isPlaying: Boolean,
     isPaused: Boolean,
     isEditing: Boolean,
+    currentPlayingLineIndex: Int?,
     editingText: String,
     onEditingTextChange: (String) -> Unit,
-    onSpeakLine: (String) -> Unit,
+    onSpeakLine: (Int, String) -> Unit,
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onStop: () -> Unit,
@@ -98,8 +100,9 @@ internal fun SpeakerContentScreen(
                             SpeakerContentLineRow(
                                 line = line,
                                 lineNumber = index + 1,
+                                isHighlighted = currentPlayingLineIndex == index,
                                 isClickable = line.isNotBlank(),
-                                onClick = { onSpeakLine(line) }
+                                onClick = { onSpeakLine(index, line) }
                             )
                         }
                     }
@@ -113,6 +116,7 @@ internal fun SpeakerContentScreen(
 private fun SpeakerContentLineRow(
     line: String,
     lineNumber: Int,
+    isHighlighted: Boolean,
     isClickable: Boolean,
     onClick: () -> Unit
 ) {
@@ -120,6 +124,13 @@ private fun SpeakerContentLineRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (isHighlighted) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                } else {
+                    MaterialTheme.colorScheme.surface
+                }
+            )
             .clickable(
                 enabled = isClickable,
                 onClick = onClick
