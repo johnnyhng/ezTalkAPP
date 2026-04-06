@@ -80,6 +80,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var isLoading by remember(userId) { mutableStateOf(true) }
     var newFolderName by remember(userId) { mutableStateOf("") }
     var showCreateFolderDialog by remember(userId) { mutableStateOf(false) }
+    var createFolderDialogError by remember(userId) { mutableStateOf<String?>(null) }
     var importTargetDirectory by remember(userId) { mutableStateOf<String?>(null) }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsReady by remember { mutableStateOf(false) }
@@ -253,25 +254,35 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                     Text(text = stringResource(R.string.speaker_create_folder))
                 },
                 text = {
-                    OutlinedTextField(
-                        value = newFolderName,
-                        onValueChange = { newFolderName = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text(stringResource(R.string.speaker_folder_name_label)) },
-                        placeholder = { Text(stringResource(R.string.speaker_folder_name_placeholder)) }
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = newFolderName,
+                            onValueChange = {
+                                newFolderName = it
+                                createFolderDialogError = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.speaker_folder_name_label)) },
+                            placeholder = { Text(stringResource(R.string.speaker_folder_name_placeholder)) },
+                            isError = createFolderDialogError != null
+                        )
+                        if (createFolderDialogError != null) {
+                            Text(
+                                text = createFolderDialogError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             val sanitizedName = sanitizeFolderName(newFolderName)
                             if (sanitizedName.isBlank()) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.speaker_invalid_folder_name),
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                createFolderDialogError =
+                                    context.getString(R.string.speaker_invalid_folder_name)
                                 return@TextButton
                             }
 
@@ -286,18 +297,12 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                         reloadDirectories()
                                     }
                                     FolderCreationResult.ALREADY_EXISTS -> {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.speaker_folder_exists, sanitizedName),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        createFolderDialogError =
+                                            context.getString(R.string.speaker_folder_exists, sanitizedName)
                                     }
                                     FolderCreationResult.FAILED -> {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.speaker_create_folder_failed),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        createFolderDialogError =
+                                            context.getString(R.string.speaker_create_folder_failed)
                                     }
                                 }
                             }
@@ -312,6 +317,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         onClick = {
                             showCreateFolderDialog = false
                             newFolderName = ""
+                            createFolderDialogError = null
                         }
                     ) {
                         Text(text = stringResource(R.string.cancel))
