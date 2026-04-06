@@ -70,20 +70,27 @@ internal fun SpeechFileExplorer(
                 isLoading -> {
                     SpeakerCenteredState(
                         text = stringResource(R.string.speaker_loading),
-                        showProgress = true
+                        showProgress = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
                     )
                 }
 
                 directories.isEmpty() -> {
                     SpeakerCenteredState(
-                        text = stringResource(R.string.speaker_empty_folders)
+                        text = stringResource(R.string.speaker_empty_folders),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
                     )
                 }
 
                 else -> {
                     LazyColumn(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .weight(1f)
+                            .fillMaxWidth()
                             .padding(horizontal = 8.dp, vertical = 8.dp)
                     ) {
                         items(directories, key = { it.id }) { directory ->
@@ -104,6 +111,10 @@ internal fun SpeechFileExplorer(
                     }
                 }
             }
+            SpeakerDivider()
+            LocalASRWidget(
+                modifier = Modifier.padding(12.dp)
+            )
         }
     }
 }
@@ -111,10 +122,11 @@ internal fun SpeechFileExplorer(
 @Composable
 private fun SpeakerCenteredState(
     text: String,
-    showProgress: Boolean = false
+    showProgress: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier,
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

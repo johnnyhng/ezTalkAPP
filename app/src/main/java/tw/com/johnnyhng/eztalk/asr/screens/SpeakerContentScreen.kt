@@ -89,7 +89,8 @@ internal fun SpeakerContentScreen(
             SpeakerDivider()
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .weight(1f)
+                    .fillMaxWidth()
                     .padding(16.dp)
             ) {
                 if (selectedDocument == null) {
@@ -107,8 +108,7 @@ internal fun SpeakerContentScreen(
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier
-                            .fillMaxSize(),
+                        modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         itemsIndexed(contentLines) { index, line ->
@@ -123,6 +123,10 @@ internal fun SpeakerContentScreen(
                     }
                 }
             }
+            SpeakerDivider()
+            LocalASRWidget(
+                modifier = Modifier.padding(12.dp)
+            )
         }
     }
 }

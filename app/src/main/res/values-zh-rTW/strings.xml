@@ -120,4 +120,6 @@
     <string name="speaker_importing_progress">%1$d / %2$d</string>
     <string name="speaker_save_success">已儲存變更</string>
     <string name="speaker_save_failed">儲存 txt 檔案失敗。</string>
+    <string name="local_asr_placeholder">Local ASR 結果會顯示在這裡</string>
+    <string name="local_asr_mic">Local ASR 麥克風</string>
 </resources>
