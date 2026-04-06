@@ -146,7 +146,7 @@ private fun SpeakerPlaybackHeader(
         SpeakerPlaybackAction(
             icon = Icons.Filled.Edit,
             contentDescription = stringResource(R.string.edit),
-            enabled = selectedDocument != null,
+            enabled = selectedDocument != null && !isPlaying && !isPaused,
             onClick = onEdit
         )
         SpeakerPlaybackAction(

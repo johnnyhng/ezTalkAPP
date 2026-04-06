@@ -42,6 +42,8 @@ internal fun SpeechFileExplorer(
     selectedDocumentId: String?,
     isLoading: Boolean,
     isImportEnabled: Boolean,
+    isDirectoryDeleteEnabled: Boolean,
+    isDocumentDeleteEnabled: Boolean,
     onCreateFolder: () -> Unit,
     onGoogleDriveImport: () -> Unit,
     onToggleExpand: (SpeakerDirectoryUi) -> Unit,
@@ -93,7 +95,9 @@ internal fun SpeechFileExplorer(
                                 onImport = { onImportIntoDirectory(directory) },
                                 isImportEnabled = isImportEnabled,
                                 onRemove = { onRemoveDirectory(directory) },
+                                isDirectoryDeleteEnabled = isDirectoryDeleteEnabled,
                                 onRemoveDocument = onRemoveDocument,
+                                isDocumentDeleteEnabled = isDocumentDeleteEnabled,
                                 onDocumentSelected = onDocumentSelected
                             )
                         }
@@ -181,7 +185,9 @@ private fun SpeakerDirectorySection(
     onImport: () -> Unit,
     isImportEnabled: Boolean,
     onRemove: () -> Unit,
+    isDirectoryDeleteEnabled: Boolean,
     onRemoveDocument: (SpeakerDocumentUi) -> Unit,
+    isDocumentDeleteEnabled: Boolean,
     onDocumentSelected: (String) -> Unit
 ) {
     Column(
@@ -231,6 +237,7 @@ private fun SpeakerDirectorySection(
             }
             IconButton(
                 onClick = onRemove,
+                enabled = isDirectoryDeleteEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -259,7 +266,8 @@ private fun SpeakerDirectorySection(
                             document = document,
                             isSelected = document.id == selectedDocumentId,
                             onClick = { onDocumentSelected(document.id) },
-                            onRemove = { onRemoveDocument(document) }
+                            onRemove = { onRemoveDocument(document) },
+                            isDeleteEnabled = isDocumentDeleteEnabled
                         )
                     }
                 }
@@ -273,7 +281,8 @@ private fun SpeakerDocumentRow(
     document: SpeakerDocumentUi,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    isDeleteEnabled: Boolean
 ) {
     val borderColor = if (isSelected) {
         MaterialTheme.colorScheme.primary
@@ -298,6 +307,7 @@ private fun SpeakerDocumentRow(
         )
         IconButton(
             onClick = onRemove,
+            enabled = isDeleteEnabled,
             modifier = Modifier.size(32.dp)
         ) {
             Icon(

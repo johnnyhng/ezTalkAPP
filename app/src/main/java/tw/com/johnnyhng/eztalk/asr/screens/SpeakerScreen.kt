@@ -507,6 +507,8 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             selectedDocumentId = selectedDocumentId,
             isLoading = isLoading,
             isImportEnabled = !isImporting,
+            isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
+            isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
             onCreateFolder = { showCreateFolderDialog = true },
             onGoogleDriveImport = { showDriveImportDialog = true },
             onToggleExpand = { directory ->
