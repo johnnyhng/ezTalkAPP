@@ -1,210 +1,294 @@
 # Speaker MVP Phase Plan
 
 ## Goal
-Add a new `演講者` tab that lets users select a local folder, load multiple `txt` files, and play selected text content through local TTS.
+Build a usable `Speaker` experience that lets the user manage app-owned speech folders, import multiple `txt` files, read and edit content, and play text through local TTS.
 
-The MVP starts with button-based playback. ASR integration is deferred until the playback and file-management flow is stable.
+The MVP starts with manual controls. ASR is explicitly deferred until the manual document-management and playback flow is stable.
 
-## Product Scope
+## Current Product Direction
+
+### Source of Truth
+- Do not use arbitrary Android local folders as the primary runtime source.
+- Store all speaker content under:
+  - `filesDir/speech/<userId>/`
+- Allow external content to be imported into that app-owned structure.
+
+### Current Import Model
+- Create folders inside app storage.
+- Import multiple `txt` files into a target folder.
+- Google Drive is treated as an import source through the system picker.
+- Import is not restricted to the same Google account as the app login.
+
+### Current Reading / Playback Model
+- Show folders and files in the upper pane.
+- Show selected file content in the lower pane.
+- Support:
+  - full-document play
+  - pause
+  - stop
+  - tap a specific line to immediately read that line
+- Highlight the currently playing line.
+- Auto-scroll the highlighted line into view.
+
+## Updated Scope
 
 ### In Scope for MVP
-- Add a new `演講者` tab
-- Let the user choose a local folder
-- Load and display `.txt` files in that folder
-- Play selected file content with local TTS
-- Stop current playback
-- Preserve architecture so ASR can be added later without rewriting the playback flow
+- `Speaker` tab and navigation
+- App-owned speech folder management
+- Multi-file `txt` import
+- Split-screen explorer and content view
+- Manual TTS playback
+- Resumable segmented playback
+- Inline text editing with save / cancel
+- Single-file delete
+- Folder delete
+- Playback safety locks during active or paused playback
+- Behavior tests for key `Speaker` interactions
 
-### Out of Scope for Initial MVP
-- Voice-based file selection
+### Out of Scope for Current MVP
+- Voice-based document selection
 - Gemini API integration
-- Semantic matching of spoken commands to documents
-- Background audio playback controls
-- Sentence-level playback progress
+- Semantic document matching
+- Background media notification controls
+- Full `SpeakerViewModel` / repository modularization
+- Drive-native folder browsing via API
 
-## User Flow
-1. User opens the `演講者` tab.
-2. User taps `選擇資料夾`.
-3. The app opens the Android folder picker.
-4. The app reads `.txt` files from the selected folder.
-5. The app shows a list of available text files.
-6. The user taps `播放` on one file.
-7. The app reads the file content and plays it through local TTS.
-8. The user can stop playback or play another file.
+## Current User Flow
+1. User opens the `Speaker` tab.
+2. User creates a local folder or imports multiple `txt` files into an existing folder.
+3. User expands one folder in the upper pane.
+4. User selects a `txt` file.
+5. The lower pane shows the file content as a clickable line list.
+6. User can:
+   - play the whole document
+   - pause / resume
+   - stop
+   - tap a single line to immediately play that line
+   - edit, save, or cancel edits when playback is inactive
+7. The current playback line is highlighted and auto-scrolled into view.
 
-## MVP Requirements
+## Current MVP Requirements
 
 ### UI Requirements
-- Add a new tab named `演講者`
+- Add a `Speaker` tab.
 - Use a vertically split screen:
-  - upper pane for folder and text-file overview
-  - lower pane for selected text content and playback controls
-- Both upper and lower panes should support vertical scrolling independently
-- Show folder rows with:
-  - expand and collapse action using `+` or `-`
-  - folder name
-  - trailing actions for refresh and remove folder binding
-- Only support one directory level in the overview tree
-- Show expanded `.txt` file rows under each folder
-- Highlight the currently selected text file
-- Show a playback control area with:
-  - selected file name
-  - `播放`
-  - `暫停`
-  - `停止`
-- Show full selected text content in the lower pane
-- Reserve space for a future microphone action, but keep it hidden or disabled in MVP
+  - upper pane: folder and file explorer
+  - lower pane: selected content and playback / edit controls
+- Both panes scroll independently.
+- Upper pane:
+  - one-level folder structure only
+  - accordion behavior
+  - folder row actions:
+    - refresh
+    - import files
+    - remove folder
+  - file row actions:
+    - select file
+    - delete file
+- Lower pane:
+  - selected file name in header
+  - `play / pause / stop`
+  - `edit / save / cancel edit`
+  - reading mode uses clickable line rows instead of one large text block
+  - currently playing line is highlighted
+  - highlighted line auto-scrolls into view
 
 ### Data Requirements
 Each folder should support at least:
 - `id`
 - `displayName`
-- `uri`
 - `isExpanded`
 - `documents`
 
 Each text item should support at least:
 - `id`
-- `directoryId`
 - `displayName`
-- `uri`
-- `previewText`
 - `fullText`
-- `lastModified` optional
 
-Suggested model names:
-- `SpeakerDirectory`
-- `SpeakerDocument`
-- `SpeakerUiState`
+Current UI model files:
+- `SpeakerDirectoryUi`
+- `SpeakerDocumentUi`
 
 ### Behavior Requirements
-- Only `.txt` files are loaded
-- Files are sorted by file name by default
-- Folder rows can be expanded or collapsed
-- Selecting a file updates the lower content pane
-- Only one file can be played at a time
-- Starting a new playback stops the previous one
-- Empty files should not be played
-- Leaving the screen should stop current playback
-- Folder access permission should be persisted when possible
+- Only `.txt` files are loaded.
+- Files are sorted by file name by default.
+- Initially:
+  - all folders are collapsed
+  - no file is selected
+- Only one folder can be expanded at a time.
+- Selecting a file updates the lower content pane.
+- Only one TTS playback target is active at a time.
+- Starting a new playback stops the previous one.
+- Tapping a line stops current TTS and immediately reads that line.
+- Empty files or blank lines are not played.
+- Leaving the screen stops current playback.
+- While playback is active or paused:
+  - edit is disabled
+  - single-file delete is disabled
+  - folder delete is disabled
 
 ### Error Handling
-- If folder permission is lost, ask the user to reselect the folder
-- If file reading fails, show an error message for that file
-- If TTS initialization fails, show an error state
-- If no `.txt` files exist, show an empty state
+- Invalid or duplicate folder names show inline dialog errors.
+- Empty text files show a playback warning instead of speaking.
+- Import failure shows a failure message.
+- TTS-not-ready state shows a warning message.
+- Import progress is shown in a non-cancel import dialog.
 
-## Phase Plan
+## Updated Phase Plan
 
 ## Phase 1
-Build the new `演講者` tab and wire navigation only.
+Create the new `Speaker` tab and basic navigation shell.
 
-Scope:
-- Add `NavRoutes.Speaker`
-- Add bottom-tab item for `演講者`
-- Add `SpeakerScreen` placeholder page
-- Show basic title and placeholder content
+Status:
+- Completed
 
-Done when:
-- User can open the `演講者` page
-- Existing tabs continue to work unchanged
+Delivered:
+- `NavRoutes.Speaker`
+- bottom-tab entry
+- initial `SpeakerScreen` placeholder
 
 ## Phase 2
-Build the split-screen overview UI and connect folder selection and `.txt` file loading.
+Replace the placeholder with the split-screen explorer/content layout.
 
-Scope:
-- Replace the placeholder with the split-screen layout
-- Add upper-pane folder overview with expand and collapse behavior
-- Add lower-pane content viewer and playback control placeholders
-- Use Android SAF folder picker
-- Persist folder `Uri` permission
-- Scan `.txt` files in selected folder
-- Show folder rows and expanded text-file rows with file name and preview
-- Add empty-state and read-error handling
+Status:
+- Completed
 
-Done when:
-- User can select a local folder
-- The app can expand and collapse folders in the upper pane
-- The app can select a text file and show its content in the lower pane
-- Re-entering the screen can reload the last selected folder
+Delivered:
+- upper/lower split layout
+- accordion folder explorer
+- lower-pane content area
+- independent scrolling
 
 ## Phase 3
-Add manual TTS playback with buttons.
+Move from arbitrary local-folder selection to app-owned speech folders.
 
-Scope:
-- Add `播放 / 暫停 / 停止` controls to the lower pane
-- Ensure only one file plays at a time
-- Stop previous playback before playing a new file
-- Show which file is currently playing
+Status:
+- Completed
 
-Done when:
-- Tapping `播放` reads the selected text file aloud
-- Tapping `暫停` pauses when supported by the chosen TTS approach, or is kept as a disabled placeholder until implemented
-- Tapping `停止` stops playback immediately
-- Switching to another file behaves correctly
+Delivered:
+- app-owned root:
+  - `filesDir/speech/<userId>/`
+- create-folder dialog
+- duplicate-name validation
+- folder scanning and file listing
 
 ## Phase 4
-Refactor state and playback flow so ASR can be added later cleanly.
+Implement multi-file import flows.
 
-Scope:
-- Add `SpeakerViewModel`
-- Add `SpeakerDocument`
-- Add repository or file-loader abstraction
-- Centralize playback through `playDocument(document)`
-- Reserve target-resolution interface:
-  - `resolveTargetDocument(commandText: String, documents: List<SpeakerDocument>): SpeakerDocument?`
+Status:
+- Completed
 
-Done when:
-- Manual playback flow is modular
-- File selection logic and playback logic are separated
+Delivered:
+- top cloud action for multi-file import into a target folder
+- per-folder upload action for multi-file import into that folder
+- import progress dialog
+- extracted import helper:
+  - `SpeakerImportManager.kt`
 
 ## Phase 5
-Let ASR and manual playback coexist without Gemini yet.
+Implement manual TTS playback.
 
-Scope:
-- Add microphone entry point
-- Use local ASR to produce text
-- Match ASR text to documents with simple local rules:
-  - file name contains spoken text
-  - basic similarity against file name
-  - preview or title-line matching
-- If matched, reuse `playDocument(document)`
+Status:
+- Completed
 
-Done when:
-- The same screen supports both button playback and voice-triggered playback
-- ASR adds a new entry path without changing the existing playback pipeline
+Delivered:
+- play / pause / stop
+- segmented resumable playback
+- switching playback targets correctly stops previous TTS
 
 ## Phase 6
-Add Gemini as a fallback disambiguation layer.
+Implement lower-pane editing and deletion controls.
 
-Scope:
-- Only call Gemini when local matching is inconclusive
-- Send:
-  - ASR text
-  - candidate file names
-  - preview text
-- Receive:
-  - best target file
-  - or ranked candidates
-- If confidence is low, show a candidate list for user confirmation
+Status:
+- Completed
 
-Done when:
-- ASR control is more resilient to imperfect recognition
-- Gemini acts as fallback rather than the primary control path
+Delivered:
+- edit / save / cancel edit
+- save writes back to local `txt`
+- cancel edit uses close icon
+- single-file delete
+- folder delete
+- playback safety locks for destructive actions
 
-## Recommended Implementation Order
-Start with:
-1. Phase 1
-2. Phase 2
-3. Phase 3
+## Phase 7
+Improve reading UX in the lower pane.
 
-This gets a usable first version into the app quickly. After that, continue with Phase 4 before adding ASR.
+Status:
+- Completed
+
+Delivered:
+- clickable line list
+- tap-to-read current line
+- highlight current playback line
+- auto-scroll highlighted line into view
+
+## Phase 8
+Stabilize with behavior tests and UI decomposition.
+
+Status:
+- Partially completed
+
+Delivered:
+- `SpeakerScreenBehaviorTest`
+- `SpeakerComponentsBehaviorTest`
+- split `SpeakerScreen` into:
+  - `SpeechFileExplorer`
+  - `SpeakerContentScreen`
+  - shared `SpeakerUiModels`
+
+Remaining:
+- add behavior tests for auto-scroll / highlighted line visibility if needed
+- add end-to-end tests for delete locks if they become regression-prone
+
+## Phase 9
+Refactor runtime logic out of `SpeakerScreen`.
+
+Status:
+- Not started
+
+Target:
+- move playback orchestration out of `SpeakerScreen.kt`
+- move file-system operations out of `SpeakerScreen.kt`
+- introduce `SpeakerViewModel` and repository boundaries
+
+## Phase 10
+Add ASR coexistence without Gemini.
+
+Status:
+- Not started
+
+Target:
+- add microphone entry point inside `Speaker`
+- use local ASR to produce text
+- resolve spoken target document with simple local rules
+- reuse the same playback entry point as manual playback
+
+## Phase 11
+Add Gemini fallback for ambiguous ASR results.
+
+Status:
+- Not started
+
+Target:
+- only call Gemini when local matching is inconclusive
+- send ASR text plus candidate file metadata
+- resolve best file or return ranked candidates
+
+## Recommended Next Order
+1. Finish Phase 8 only where tests are missing for recent line-playback behavior.
+2. Start Phase 9 and move playback / file logic out of `SpeakerScreen.kt`.
+3. Only after that, start Phase 10 ASR integration.
 
 ## Architecture Note
-Manual playback and future ASR-triggered playback should use the same playback entry point.
+The manual and future ASR-triggered flows should still converge on a shared playback entry path.
 
-Recommended flow:
-- Manual: user taps `播放` -> `playDocument(document)`
-- Future ASR: microphone -> local ASR text -> `resolveTargetDocument(...)` -> `playDocument(document)`
+Recommended long-term flow:
+- Manual document play:
+  - user taps `play` or taps a line
+- Future ASR document play:
+  - microphone
+  - local ASR text
+  - target resolution
+  - shared playback entry
 
-This separation reduces rework when ASR and Gemini are added later.
+This keeps ASR integration from rewriting the manual playback system that is already working.
