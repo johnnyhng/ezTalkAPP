@@ -112,4 +112,7 @@
     <string name="speaker_tts_not_ready">TTS 尚未初始化完成。</string>
     <string name="speaker_import_target_folder_label">匯入目標目錄</string>
     <string name="speaker_import_target_folder_placeholder">例如：drive-import</string>
+    <string name="speaker_importing_title">匯入中</string>
+    <string name="speaker_importing_target">目標目錄：%1$s</string>
+    <string name="speaker_importing_progress">%1$d / %2$d</string>
 </resources>

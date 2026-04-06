@@ -15,7 +15,8 @@ fun importTextUrisIntoSpeakerFolder(
     sourceUris: List<Uri>,
     filesDir: File,
     userId: String,
-    folderName: String
+    folderName: String,
+    onProgress: ((current: Int, total: Int) -> Unit)? = null
 ): MultiTextImportResult {
     return try {
         val targetRoot = getSpeakerRootDirectory(filesDir, userId)
@@ -28,7 +29,8 @@ fun importTextUrisIntoSpeakerFolder(
         }
 
         var importedCount = 0
-        sourceUris.forEach { uri ->
+        val totalCount = sourceUris.size
+        sourceUris.forEachIndexed { index, uri ->
             val sourceName = queryDisplayName(context, uri)
                 ?.takeIf { it.isNotBlank() }
                 ?: "imported.txt"
@@ -39,6 +41,7 @@ fun importTextUrisIntoSpeakerFolder(
                 }
                 importedCount++
             }
+            onProgress?.invoke(index + 1, totalCount)
         }
 
         when {

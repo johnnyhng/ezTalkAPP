@@ -36,6 +36,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -85,6 +86,10 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var driveImportFolderName by remember(userId) { mutableStateOf("") }
     var showDriveImportDialog by remember(userId) { mutableStateOf(false) }
     var driveImportDialogError by remember(userId) { mutableStateOf<String?>(null) }
+    var isImporting by remember(userId) { mutableStateOf(false) }
+    var importProgressCurrent by remember(userId) { mutableStateOf(0) }
+    var importProgressTotal by remember(userId) { mutableStateOf(0) }
+    var importProgressFolderName by remember(userId) { mutableStateOf("") }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsReady by remember { mutableStateOf(false) }
     var currentPlayingDocumentId by remember { mutableStateOf<String?>(null) }
@@ -221,15 +226,26 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         if (uris.isEmpty() || targetDirectory == null) return@rememberLauncherForActivityResult
 
         scope.launch {
+            isImporting = true
+            importProgressCurrent = 0
+            importProgressTotal = uris.size
+            importProgressFolderName = targetDirectory
             val result = withContext(Dispatchers.IO) {
                 importTextUrisIntoSpeakerFolder(
                     context = context,
                     sourceUris = uris,
                     filesDir = context.filesDir,
                     userId = userId,
-                    folderName = targetDirectory
+                    folderName = targetDirectory,
+                    onProgress = { current, total ->
+                        scope.launch {
+                            importProgressCurrent = current
+                            importProgressTotal = total
+                        }
+                    }
                 )
             }
+            isImporting = false
             when (result) {
                 is MultiTextImportResult.Success -> {
                     reloadDirectories()
@@ -269,15 +285,26 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         if (targetFolderName.isBlank()) return@rememberLauncherForActivityResult
 
         scope.launch {
+            isImporting = true
+            importProgressCurrent = 0
+            importProgressTotal = uris.size
+            importProgressFolderName = targetFolderName
             val result = withContext(Dispatchers.IO) {
                 importTextUrisIntoSpeakerFolder(
                     context = context,
                     sourceUris = uris,
                     filesDir = context.filesDir,
                     userId = userId,
-                    folderName = targetFolderName
+                    folderName = targetFolderName,
+                    onProgress = { current, total ->
+                        scope.launch {
+                            importProgressCurrent = current
+                            importProgressTotal = total
+                        }
+                    }
                 )
             }
+            isImporting = false
             when (result) {
                 is MultiTextImportResult.Success -> {
                     reloadDirectories()
@@ -393,6 +420,40 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             )
         }
 
+        if (isImporting) {
+            AlertDialog(
+                onDismissRequest = { },
+                title = {
+                    Text(text = stringResource(R.string.speaker_importing_title))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = stringResource(
+                                R.string.speaker_importing_target,
+                                importProgressFolderName
+                            ),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        LinearProgressIndicator(
+                            progress = if (importProgressTotal == 0) 0f
+                            else importProgressCurrent.toFloat() / importProgressTotal.toFloat(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.speaker_importing_progress,
+                                importProgressCurrent,
+                                importProgressTotal
+                            ),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                },
+                confirmButton = {}
+            )
+        }
+
         if (showDriveImportDialog) {
             AlertDialog(
                 onDismissRequest = { showDriveImportDialog = false },
@@ -465,7 +526,8 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 SpeakerOverviewHeader(
                     onCreateFolder = { showCreateFolderDialog = true },
-                    onGoogleDriveImport = { showDriveImportDialog = true }
+                    onGoogleDriveImport = { showDriveImportDialog = true },
+                    isImportEnabled = !isImporting
                 )
                 SpeakerDivider()
                 when {
@@ -507,6 +569,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                         importTargetDirectory = directory.displayName
                                         txtImportLauncher.launch(arrayOf("text/plain"))
                                     },
+                                    isImportEnabled = !isImporting,
                                     onRemove = {
                                         scope.launch {
                                             withContext(Dispatchers.IO) {
@@ -652,7 +715,8 @@ private fun SpeakerDivider() {
 @Composable
 private fun SpeakerOverviewHeader(
     onCreateFolder: () -> Unit,
-    onGoogleDriveImport: () -> Unit
+    onGoogleDriveImport: () -> Unit,
+    isImportEnabled: Boolean
 ) {
     Row(
         modifier = Modifier
@@ -677,7 +741,10 @@ private fun SpeakerOverviewHeader(
                     contentDescription = stringResource(R.string.speaker_create_folder)
                 )
             }
-            IconButton(onClick = onGoogleDriveImport) {
+            IconButton(
+                onClick = onGoogleDriveImport,
+                enabled = isImportEnabled
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Cloud,
                     contentDescription = stringResource(R.string.speaker_google_drive)
@@ -694,6 +761,7 @@ private fun SpeakerDirectorySection(
     onToggleExpand: () -> Unit,
     onRefresh: () -> Unit,
     onImport: () -> Unit,
+    isImportEnabled: Boolean,
     onRemove: () -> Unit,
     onDocumentSelected: (String) -> Unit
 ) {
@@ -734,6 +802,7 @@ private fun SpeakerDirectorySection(
             }
             IconButton(
                 onClick = onImport,
+                enabled = isImportEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(

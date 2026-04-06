@@ -112,4 +112,7 @@
     <string name="speaker_tts_not_ready">TTS is not ready yet.</string>
     <string name="speaker_import_target_folder_label">Target folder</string>
     <string name="speaker_import_target_folder_placeholder">For example: drive-import</string>
+    <string name="speaker_importing_title">Importing files</string>
+    <string name="speaker_importing_target">Target folder: %1$s</string>
+    <string name="speaker_importing_progress">%1$d / %2$d</string>
 </resources>
