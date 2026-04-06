@@ -808,12 +808,6 @@ private fun SpeakerDocumentRow(
             text = document.displayName,
             style = MaterialTheme.typography.bodyLarge
         )
-        Text(
-            text = document.previewText.ifBlank { stringResource(R.string.speaker_empty_text_file) },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp)
-        )
     }
 }
 
