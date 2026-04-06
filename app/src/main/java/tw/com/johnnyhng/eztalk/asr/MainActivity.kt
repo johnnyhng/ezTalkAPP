@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,8 +24,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
@@ -32,6 +36,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -44,6 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 import tw.com.johnnyhng.eztalk.asr.screens.DataCollectScreen
 import tw.com.johnnyhng.eztalk.asr.screens.FileManagerScreen
@@ -57,7 +63,6 @@ import java.util.Locale
 
 const val TAG = "eztalk"
 private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
-private const val SHOW_HELP_ACTION = false
 
 @Suppress("DEPRECATION")
 class MainActivity : ComponentActivity() {
@@ -131,6 +136,27 @@ fun MainScreen(
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
+    val homeViewModel: HomeViewModel = viewModel()
+    val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
+
+    if (isAsrModelLoading) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = {
+                Text(text = stringResource(R.string.asr_loading_title))
+            },
+            text = {
+                Column {
+                    CircularProgressIndicator()
+                    Text(
+                        text = stringResource(R.string.asr_loading_message),
+                        modifier = Modifier.padding(top = 16.dp)
+                    )
+                }
+            },
+            confirmButton = {}
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -139,6 +165,14 @@ fun MainScreen(
                     containerColor = colorScheme.primaryContainer,
                     titleContentColor = colorScheme.primary,
                 ),
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Help.route) }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                            contentDescription = stringResource(R.string.help)
+                        )
+                    }
+                },
                 title = {
                     Text(
                         stringResource(R.string.app_top_title),
@@ -146,14 +180,6 @@ fun MainScreen(
                     )
                 },
                 actions = {
-                    if (SHOW_HELP_ACTION) {
-                        IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Help.route) }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                                contentDescription = stringResource(R.string.help)
-                            )
-                        }
-                    }
                     IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.FileManager.route) }) {
                         Icon(
                             imageVector = Icons.Filled.Folder,
@@ -173,7 +199,8 @@ fun MainScreen(
             Column(Modifier.padding(padding)) {
                 NavigationHost(
                     navController = navController,
-                    startDestination = sanitizeEntryScreenRoute(initialEntryRoute)
+                    startDestination = sanitizeEntryScreenRoute(initialEntryRoute),
+                    homeViewModel = homeViewModel
                 )
 
             }
@@ -185,30 +212,34 @@ fun MainScreen(
 }
 
 @Composable
-fun NavigationHost(navController: NavHostController, startDestination: String) {
+fun NavigationHost(
+    navController: NavHostController,
+    startDestination: String,
+    homeViewModel: HomeViewModel
+) {
     NavHost(navController = navController, startDestination = startDestination) {
         composable(NavRoutes.Home.route) {
-            HomeScreen()
+            HomeScreen(homeViewModel = homeViewModel)
         }
 
         composable(NavRoutes.Translate.route) {
-            TranslateScreen()
+            TranslateScreen(homeViewModel = homeViewModel)
         }
 
         composable(NavRoutes.DataCollect.route) {
-            DataCollectScreen()
+            DataCollectScreen(homeViewModel = homeViewModel)
         }
 
         composable(NavRoutes.FileManager.route) {
-            FileManagerScreen()
+            FileManagerScreen(homeViewModel = homeViewModel)
         }
 
         composable(NavRoutes.Speaker.route) {
-            SpeakerScreen()
+            SpeakerScreen(homeViewModel = homeViewModel)
         }
 
         composable(NavRoutes.Settings.route) {
-            SettingsScreen()
+            SettingsScreen(homeViewModel = homeViewModel)
         }
 
         composable(NavRoutes.Help.route) {

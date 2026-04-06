@@ -11,6 +11,8 @@
     <string name="sign_in_with_google">使用 Google 登入</string>
     <string name="sign_out">登出</string>
     <string name="asr_model">ASR 模型</string>
+    <string name="asr_loading_title">ASR 載入中</string>
+    <string name="asr_loading_message">正在載入 ASR 模型，請稍候。</string>
     <string name="no_model_selected">未選取模型</string>
     <string name="selected_model">選取的模型</string>
     <string name="no_models_found">找不到模型</string>

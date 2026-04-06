@@ -11,6 +11,8 @@
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="sign_out">Sign Out</string>
     <string name="asr_model">ASR Model</string>
+    <string name="asr_loading_title">ASR loading</string>
+    <string name="asr_loading_message">Loading ASR model, please wait.</string>
     <string name="no_model_selected">No model selected</string>
     <string name="selected_model">Selected Model</string>
     <string name="no_models_found">No models found</string>
