@@ -22,8 +22,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -31,7 +33,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +40,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -76,6 +79,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
     var selectedDocumentId by remember(userId) { mutableStateOf<String?>(null) }
     var isLoading by remember(userId) { mutableStateOf(true) }
     var newFolderName by remember(userId) { mutableStateOf("") }
+    var showCreateFolderDialog by remember(userId) { mutableStateOf(false) }
     var importTargetDirectory by remember(userId) { mutableStateOf<String?>(null) }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var isTtsReady by remember { mutableStateOf(false) }
@@ -242,6 +246,80 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+        if (showCreateFolderDialog) {
+            AlertDialog(
+                onDismissRequest = { showCreateFolderDialog = false },
+                title = {
+                    Text(text = stringResource(R.string.speaker_create_folder))
+                },
+                text = {
+                    OutlinedTextField(
+                        value = newFolderName,
+                        onValueChange = { newFolderName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.speaker_folder_name_label)) },
+                        placeholder = { Text(stringResource(R.string.speaker_folder_name_placeholder)) }
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val sanitizedName = sanitizeFolderName(newFolderName)
+                            if (sanitizedName.isBlank()) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.speaker_invalid_folder_name),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@TextButton
+                            }
+
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    createSpeakerFolder(context.filesDir, userId, sanitizedName)
+                                }
+                                when (result) {
+                                    FolderCreationResult.CREATED -> {
+                                        newFolderName = ""
+                                        showCreateFolderDialog = false
+                                        reloadDirectories()
+                                    }
+                                    FolderCreationResult.ALREADY_EXISTS -> {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.speaker_folder_exists, sanitizedName),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    FolderCreationResult.FAILED -> {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.speaker_create_folder_failed),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            }
+                        },
+                        enabled = newFolderName.isNotBlank()
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showCreateFolderDialog = false
+                            newFolderName = ""
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -251,45 +329,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 SpeakerOverviewHeader(
-                    folderName = newFolderName,
-                    onFolderNameChange = { newFolderName = it },
-                    onCreateFolder = {
-                        val sanitizedName = sanitizeFolderName(newFolderName)
-                        if (sanitizedName.isBlank()) {
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.speaker_invalid_folder_name),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            return@SpeakerOverviewHeader
-                        }
-
-                        scope.launch {
-                            val result = withContext(Dispatchers.IO) {
-                                createSpeakerFolder(context.filesDir, userId, sanitizedName)
-                            }
-                            when (result) {
-                                FolderCreationResult.CREATED -> {
-                                    newFolderName = ""
-                                    reloadDirectories()
-                                }
-                                FolderCreationResult.ALREADY_EXISTS -> {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.speaker_folder_exists, sanitizedName),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                                FolderCreationResult.FAILED -> {
-                                    Toast.makeText(
-                                        context,
-                                        context.getString(R.string.speaker_create_folder_failed),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        }
-                    },
+                    onCreateFolder = { showCreateFolderDialog = true },
                     onGoogleDriveImport = {
                         Toast.makeText(
                             context,
@@ -486,49 +526,37 @@ private fun SpeakerDivider() {
 
 @Composable
 private fun SpeakerOverviewHeader(
-    folderName: String,
-    onFolderNameChange: (String) -> Unit,
     onCreateFolder: () -> Unit,
     onGoogleDriveImport: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = stringResource(R.string.speaker_overview_title),
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = stringResource(R.string.speaker_overview_subtitle),
-            style = MaterialTheme.typography.bodySmall
-        )
-        OutlinedTextField(
-            value = folderName,
-            onValueChange = onFolderNameChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(stringResource(R.string.speaker_folder_name_label)) },
-            placeholder = { Text(stringResource(R.string.speaker_folder_name_placeholder)) }
-        )
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(
-                onClick = onCreateFolder,
-                enabled = folderName.isNotBlank(),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(stringResource(R.string.speaker_create_folder))
+            Text(
+                text = stringResource(R.string.speaker_overview_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            IconButton(onClick = onCreateFolder) {
+                Icon(
+                    imageVector = Icons.Filled.CreateNewFolder,
+                    contentDescription = stringResource(R.string.speaker_create_folder)
+                )
             }
-            Button(
-                onClick = onGoogleDriveImport,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(stringResource(R.string.speaker_google_drive))
+            IconButton(onClick = onGoogleDriveImport) {
+                Icon(
+                    imageVector = Icons.Filled.Cloud,
+                    contentDescription = stringResource(R.string.speaker_google_drive)
+                )
             }
         }
     }
@@ -584,7 +612,7 @@ private fun SpeakerDirectorySection(
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.CloudUpload,
+                    imageVector = Icons.Filled.ArrowUpward,
                     contentDescription = stringResource(R.string.speaker_import_txt)
                 )
             }
