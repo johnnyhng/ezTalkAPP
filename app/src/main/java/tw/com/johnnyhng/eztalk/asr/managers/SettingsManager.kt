@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import tw.com.johnnyhng.eztalk.asr.sanitizeEntryScreenRoute
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -18,6 +19,7 @@ private val inlineEditKey = booleanPreferencesKey("inline_edit")
 private val backendUrlKey = stringPreferencesKey("backend_url")
 private val enableTtsFeedbackKey = booleanPreferencesKey("enable_tts_feedback")
 private val selectedModelNameKey = stringPreferencesKey("selected_model_name")
+private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
 private val defaultUserSettings = UserSettings()
 
 internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
@@ -29,7 +31,10 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         inlineEdit = preferences[inlineEditKey] ?: defaultUserSettings.inlineEdit,
         backendUrl = preferences[backendUrlKey] ?: defaultUserSettings.backendUrl,
         enableTtsFeedback = preferences[enableTtsFeedbackKey] ?: defaultUserSettings.enableTtsFeedback,
-        selectedModelName = preferences[selectedModelNameKey] ?: defaultUserSettings.selectedModelName
+        selectedModelName = preferences[selectedModelNameKey] ?: defaultUserSettings.selectedModelName,
+        entryScreenRoute = sanitizeEntryScreenRoute(
+            preferences[entryScreenRouteKey] ?: defaultUserSettings.entryScreenRoute
+        )
     )
 }
 
@@ -42,6 +47,7 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[backendUrlKey] = settings.backendUrl
     preferences[enableTtsFeedbackKey] = settings.enableTtsFeedback
     preferences[selectedModelNameKey] = settings.selectedModelName
+    preferences[entryScreenRouteKey] = sanitizeEntryScreenRoute(settings.entryScreenRoute)
 }
 
 class SettingsManager(context: Context) {

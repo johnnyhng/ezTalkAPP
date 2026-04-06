@@ -9,3 +9,18 @@ sealed class NavRoutes(val route: String) {
     object Help : NavRoutes("help")
     object Settings : NavRoutes("settings")
 }
+
+val supportedEntryScreenRoutes = setOf(
+    NavRoutes.Home.route,
+    NavRoutes.Translate.route,
+    NavRoutes.Speaker.route,
+    NavRoutes.DataCollect.route
+)
+
+fun sanitizeEntryScreenRoute(route: String): String {
+    return if (route in supportedEntryScreenRoutes) {
+        route
+    } else {
+        NavRoutes.Home.route
+    }
+}

@@ -71,6 +71,10 @@ class MainActivity : ComponentActivity() {
         val config = resources.configuration
         config.setLocale(locale)
         resources.updateConfiguration(config, resources.displayMetrics)
+        val initialEntryRoute = runBlocking {
+            val settingsManager = SettingsManager(this@MainActivity)
+            sanitizeEntryScreenRoute(settingsManager.userSettings.first().entryScreenRoute)
+        }
 
         setContent {
             SimulateStreamingAsrTheme {
@@ -78,7 +82,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = colorScheme.background
                 ) {
-                    MainScreen()
+                    MainScreen(initialEntryRoute = initialEntryRoute)
                 }
             }
         }
@@ -121,7 +125,10 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(modifier: Modifier = Modifier) {
+fun MainScreen(
+    initialEntryRoute: String = NavRoutes.Home.route,
+    modifier: Modifier = Modifier
+) {
     val navController = rememberNavController()
 
     Scaffold(
@@ -157,7 +164,10 @@ fun MainScreen(modifier: Modifier = Modifier) {
         },
         content = { padding ->
             Column(Modifier.padding(padding)) {
-                NavigationHost(navController = navController)
+                NavigationHost(
+                    navController = navController,
+                    startDestination = sanitizeEntryScreenRoute(initialEntryRoute)
+                )
 
             }
         },
@@ -168,8 +178,8 @@ fun MainScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun NavigationHost(navController: NavHostController) {
-    NavHost(navController = navController, startDestination = NavRoutes.Home.route) {
+fun NavigationHost(navController: NavHostController, startDestination: String) {
+    NavHost(navController = navController, startDestination = startDestination) {
         composable(NavRoutes.Home.route) {
             HomeScreen()
         }

@@ -50,6 +50,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import tw.com.johnnyhng.eztalk.asr.NavRoutes
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
@@ -70,10 +71,21 @@ fun SettingsScreen(
     val models = homeViewModel.models
     val selectedModel = homeViewModel.selectedModel
     var modelMenuExpanded by remember { mutableStateOf(false) }
+    var entryScreenMenuExpanded by remember { mutableStateOf(false) }
     var backendUrl by remember(userSettings.backendUrl) { mutableStateOf(userSettings.backendUrl) }
     val isDownloading by homeViewModel.isDownloadingFlow.collectAsState()
     val downloadProgress by homeViewModel.downloadProgressFlow.collectAsState()
     val canDeleteModel = homeViewModel.canDeleteModel
+    val entryScreenOptions = listOf(
+        NavRoutes.Home.route to context.getString(R.string.home),
+        NavRoutes.Translate.route to context.getString(R.string.translate),
+        NavRoutes.Speaker.route to context.getString(R.string.speaker),
+        NavRoutes.DataCollect.route to context.getString(R.string.data_collect)
+    )
+    val selectedEntryScreenLabel = entryScreenOptions
+        .firstOrNull { it.first == userSettings.entryScreenRoute }
+        ?.second
+        ?: context.getString(R.string.home)
 
     val gso = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -151,6 +163,49 @@ fun SettingsScreen(
             singleLine = true,
             enabled = !isDownloading
         )
+
+        Column(modifier = Modifier.padding(vertical = 16.dp)) {
+            Text(stringResource(R.string.entry_screen), style = MaterialTheme.typography.titleMedium)
+            ExposedDropdownMenuBox(
+                expanded = entryScreenMenuExpanded,
+                onExpandedChange = {
+                    if (!isDownloading) {
+                        entryScreenMenuExpanded = !entryScreenMenuExpanded
+                    }
+                },
+            ) {
+                OutlinedTextField(
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    readOnly = true,
+                    value = selectedEntryScreenLabel,
+                    onValueChange = {},
+                    label = { Text(stringResource(R.string.entry_screen)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = entryScreenMenuExpanded) },
+                    enabled = !isDownloading
+                )
+                ExposedDropdownMenu(
+                    expanded = entryScreenMenuExpanded,
+                    onDismissRequest = { entryScreenMenuExpanded = false },
+                    modifier = Modifier.exposedDropdownSize()
+                ) {
+                    entryScreenOptions.forEach { (route, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                homeViewModel.updateEntryScreenRoute(route)
+                                entryScreenMenuExpanded = false
+                            },
+                            leadingIcon = {
+                                RadioButton(
+                                    selected = route == userSettings.entryScreenRoute,
+                                    onClick = null
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
 
         // Model Selection
         Column(modifier = Modifier.padding(vertical = 16.dp)) {

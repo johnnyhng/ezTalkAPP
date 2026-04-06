@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
+import tw.com.johnnyhng.eztalk.asr.sanitizeEntryScreenRoute
 import tw.com.johnnyhng.eztalk.asr.data.classes.Model
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
@@ -270,6 +271,9 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateInlineEdit(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(inlineEdit = v)) }
     fun updateBackendUrl(v: String) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(backendUrl = v)) }
     fun updateEnableTtsFeedback(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(enableTtsFeedback = v)) }
+    fun updateEntryScreenRoute(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(entryScreenRoute = sanitizeEntryScreenRoute(v)))
+    }
 
     private fun markUpdateAvailability(
         remoteModels: List<RemoteModelDescriptor>,

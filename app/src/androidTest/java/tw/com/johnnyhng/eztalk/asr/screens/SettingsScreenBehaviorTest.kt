@@ -1,8 +1,8 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import android.app.Application
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.isToggleable
@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
@@ -175,6 +176,35 @@ class SettingsScreenBehaviorTest {
         composeRule.onNodeWithText("https://new-backend.example.com")
             .performScrollTo()
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun settingsScreenAllowsSelectingSupportedEntryScreenOnly() {
+        seedSettings(
+            UserSettings(
+                userId = "screen-user-entry",
+                entryScreenRoute = "home"
+            )
+        )
+        val viewModel = HomeViewModel(application)
+
+        composeRule.setContent {
+            SettingsScreen(homeViewModel = viewModel)
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.entry_screen))
+            .performScrollTo()
+            .performClick()
+
+        composeRule.onNodeWithText(context.getString(R.string.speaker)).performClick()
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runBlocking {
+                SettingsManager(application).userSettings.first().entryScreenRoute == "speaker"
+            }
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.speaker)).assertIsDisplayed()
     }
 
     private fun seedSettings(settings: UserSettings) = runBlocking {

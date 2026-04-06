@@ -10,7 +10,8 @@ data class UserSettings(
     val inlineEdit: Boolean = false,
     val backendUrl: String = "https://120.126.151.159:56432/api/v2",
     val enableTtsFeedback: Boolean = true,
-    val selectedModelName: String = ""
+    val selectedModelName: String = "",
+    val entryScreenRoute: String = "home"
 ) {
     val effectiveRecognitionUrl: String
         get() = BackendEndpoints.processAudio(backendUrl)
