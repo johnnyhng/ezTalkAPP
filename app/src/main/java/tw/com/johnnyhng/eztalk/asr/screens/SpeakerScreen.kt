@@ -242,16 +242,6 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Text(
-            text = stringResource(R.string.speaker_placeholder_title),
-            style = MaterialTheme.typography.headlineSmall
-        )
-        Text(
-            text = stringResource(R.string.speaker_placeholder_description, userId),
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(top = 6.dp, bottom = 12.dp)
-        )
-
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
