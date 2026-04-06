@@ -132,7 +132,7 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
         selectedDocumentId = when {
             allDocuments.isEmpty() -> null
             allDocuments.any { it.id == selectedDocumentId } -> selectedDocumentId
-            else -> allDocuments.first().id
+            else -> null
         }
     }
 
@@ -607,13 +607,8 @@ fun SpeakerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                 .verticalScroll(rememberScrollState())
                         ) {
                             Text(
-                                text = selectedDocument.displayName,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
                                 text = selectedDocument.fullText,
                                 style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(top = 12.dp)
                             )
                         }
                     }
@@ -834,10 +829,6 @@ private fun SpeakerPlaybackHeader(
                     ?: stringResource(R.string.speaker_no_document_selected),
                 style = MaterialTheme.typography.titleMedium
             )
-            Text(
-                text = stringResource(R.string.speaker_playback_subtitle),
-                style = MaterialTheme.typography.bodySmall
-            )
         }
         SpeakerPlaybackAction(
             icon = Icons.Filled.PlayArrow,
@@ -953,7 +944,7 @@ private fun loadSpeakerDirectories(
             SpeakerDirectoryUi(
                 id = directory.absolutePath,
                 displayName = directory.name,
-                isExpanded = expansionMap[directory.name] ?: true,
+                isExpanded = expansionMap[directory.name] ?: false,
                 documents = documents
             )
         }
