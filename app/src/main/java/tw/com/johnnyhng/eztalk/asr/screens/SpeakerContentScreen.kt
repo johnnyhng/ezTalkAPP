@@ -44,9 +44,14 @@ internal fun SpeakerContentScreen(
     isPlaying: Boolean,
     isPaused: Boolean,
     isEditing: Boolean,
+    localAsrText: String = "",
+    isLocalAsrRecording: Boolean = false,
+    localAsrCountdownProgress: Float = 0f,
+    isLocalAsrEnabled: Boolean = true,
     currentPlayingLineIndex: Int?,
     editingText: String,
     onEditingTextChange: (String) -> Unit,
+    onLocalAsrClick: () -> Unit = {},
     onSpeakLine: (Int, String) -> Unit,
     onPlay: () -> Unit,
     onPause: () -> Unit,
@@ -127,6 +132,11 @@ internal fun SpeakerContentScreen(
             if (shouldShowLocalAsrWidget) {
                 SpeakerDivider()
                 LocalASRWidget(
+                    recognizedText = localAsrText,
+                    isRecording = isLocalAsrRecording,
+                    countdownProgress = localAsrCountdownProgress,
+                    isEnabled = isLocalAsrEnabled,
+                    onMicClick = onLocalAsrClick,
                     modifier = Modifier.padding(12.dp)
                 )
             }

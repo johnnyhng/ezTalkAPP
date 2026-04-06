@@ -1,5 +1,8 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -25,14 +28,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
+
+private enum class SpeakerAsrTarget {
+    EXPLORER,
+    CONTENT
+}
 
 @Composable
 fun SpeakerScreen(
@@ -40,15 +50,25 @@ fun SpeakerScreen(
 ) {
     val speakerViewModel: SpeakerViewModel = viewModel()
     val context = LocalContext.current
+    val activity = context as Activity
     val scope = rememberCoroutineScope()
     val userSettings by homeViewModel.userSettings.collectAsState()
+    val isAsrRecording by homeViewModel.isRecording.collectAsState()
+    val countdownProgress by homeViewModel.countdownProgress.collectAsState()
+    val isRecognizingSpeech by homeViewModel.isRecognizingSpeech.collectAsState()
+    val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     val uiState = speakerViewModel.uiState
     val selectedDocument = speakerViewModel.selectedDocument()
     val (playbackController, playbackState) = rememberSpeakerPlaybackController()
     var importTargetDirectory by remember { mutableStateOf<String?>(null) }
+    var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
+    var explorerAsrText by rememberSaveable { mutableStateOf("") }
+    var contentAsrText by rememberSaveable { mutableStateOf("") }
 
     val isSelectedDocumentPlaying = playbackController.isPlayingDocument(selectedDocument?.id)
     val isSelectedDocumentPaused = playbackController.isPausedDocument(selectedDocument?.id)
+    val isExplorerWidgetVisible = uiState.directories.any { it.isExpanded }
+    val isContentWidgetVisible = selectedDocument != null && !uiState.isEditingDocument
     val currentPlayingLineIndex =
         if (selectedDocument?.id == playbackState.playbackDocumentId || selectedDocument?.id == playbackState.currentPlayingDocumentId) {
             playbackState.currentPlayingLineIndex
@@ -58,6 +78,69 @@ fun SpeakerScreen(
 
     LaunchedEffect(userSettings.userId) {
         speakerViewModel.setUserId(userSettings.userId)
+    }
+
+    LaunchedEffect(Unit) {
+        homeViewModel.partialText.collect { text ->
+            when (activeAsrTarget) {
+                SpeakerAsrTarget.EXPLORER -> explorerAsrText = text
+                SpeakerAsrTarget.CONTENT -> contentAsrText = text
+                null -> Unit
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        homeViewModel.finalTranscript.collect { transcript ->
+            when (activeAsrTarget) {
+                SpeakerAsrTarget.EXPLORER -> explorerAsrText = transcript.recognizedText
+                SpeakerAsrTarget.CONTENT -> contentAsrText = transcript.recognizedText
+                null -> Unit
+            }
+        }
+    }
+
+    LaunchedEffect(isAsrRecording) {
+        if (!isAsrRecording) {
+            activeAsrTarget = null
+        }
+    }
+
+    LaunchedEffect(isExplorerWidgetVisible, isContentWidgetVisible, activeAsrTarget, isAsrRecording) {
+        val isTargetStillVisible = when (activeAsrTarget) {
+            SpeakerAsrTarget.EXPLORER -> isExplorerWidgetVisible
+            SpeakerAsrTarget.CONTENT -> isContentWidgetVisible
+            null -> true
+        }
+        if (!isTargetStillVisible && isAsrRecording) {
+            homeViewModel.toggleRecording()
+        }
+    }
+
+    LaunchedEffect(selectedDocument?.id) {
+        contentAsrText = ""
+    }
+
+    fun toggleSpeakerAsr(target: SpeakerAsrTarget) {
+        if (isAsrRecording) {
+            if (activeAsrTarget == target) {
+                homeViewModel.toggleRecording()
+            }
+            return
+        }
+        if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
+            return
+        }
+        scope.launch {
+            homeViewModel.ensureSelectedModelInitialized()
+            activeAsrTarget = target
+            when (target) {
+                SpeakerAsrTarget.EXPLORER -> explorerAsrText = ""
+                SpeakerAsrTarget.CONTENT -> contentAsrText = ""
+            }
+            homeViewModel.startTranslateRecording()
+        }
     }
 
     fun showImportResultToast(result: MultiTextImportResult) {
@@ -262,9 +345,14 @@ fun SpeakerScreen(
             directories = uiState.directories,
             selectedDocumentId = uiState.selectedDocumentId,
             isLoading = uiState.isLoading,
+            localAsrText = explorerAsrText,
+            isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.EXPLORER && isAsrRecording,
+            localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.EXPLORER && isRecognizingSpeech) countdownProgress else 0f,
+            isLocalAsrEnabled = !isAsrModelLoading && (!isAsrRecording || activeAsrTarget == SpeakerAsrTarget.EXPLORER),
             isImportEnabled = !uiState.isImporting,
             isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
             isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
+            onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.EXPLORER) },
             onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
             onGoogleDriveImport = { speakerViewModel.showDriveImportDialog() },
             onToggleExpand = { directory -> speakerViewModel.toggleDirectory(directory) },
@@ -296,9 +384,14 @@ fun SpeakerScreen(
             isPlaying = isSelectedDocumentPlaying,
             isPaused = isSelectedDocumentPaused,
             isEditing = uiState.isEditingDocument,
+            localAsrText = contentAsrText,
+            isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && isAsrRecording,
+            localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && isRecognizingSpeech) countdownProgress else 0f,
+            isLocalAsrEnabled = !isAsrModelLoading && (!isAsrRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
             currentPlayingLineIndex = currentPlayingLineIndex,
             editingText = uiState.editingText,
             onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
+            onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
             onSpeakLine = { lineIndex, line ->
                 if (selectedDocument == null) return@SpeakerContentScreen
                 when (playbackController.playLine(selectedDocument, lineIndex, line)) {

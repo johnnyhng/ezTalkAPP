@@ -1,11 +1,15 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +26,9 @@ import tw.com.johnnyhng.eztalk.asr.R
 @Composable
 internal fun LocalASRWidget(
     recognizedText: String = "",
+    isRecording: Boolean = false,
+    countdownProgress: Float = 0f,
+    isEnabled: Boolean = true,
     onMicClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -49,11 +56,24 @@ internal fun LocalASRWidget(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = onMicClick) {
-                Icon(
-                    imageVector = Icons.Filled.Mic,
-                    contentDescription = stringResource(R.string.local_asr_mic)
-                )
+            Box(contentAlignment = Alignment.Center) {
+                if (isRecording) {
+                    CircularProgressIndicator(
+                        progress = countdownProgress.coerceIn(0f, 1f),
+                        modifier = Modifier.size(34.dp)
+                    )
+                }
+                IconButton(
+                    onClick = onMicClick,
+                    enabled = isEnabled
+                ) {
+                    Icon(
+                        imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
+                        contentDescription = stringResource(
+                            if (isRecording) R.string.stop else R.string.local_asr_mic
+                        )
+                    )
+                }
             }
         }
     }
