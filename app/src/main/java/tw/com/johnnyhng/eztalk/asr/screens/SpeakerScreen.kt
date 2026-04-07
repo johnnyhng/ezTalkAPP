@@ -86,6 +86,7 @@ fun SpeakerScreen(
 
     val isSelectedDocumentPlaying = playbackController.isPlayingDocument(selectedDocument?.id)
     val isSelectedDocumentPaused = playbackController.isPausedDocument(selectedDocument?.id)
+    val isAnyTtsPlaying = playbackState.currentPlayingDocumentId != null
     val isExplorerWidgetVisible = uiState.directories.any { it.isExpanded }
     val isContentWidgetVisible = selectedDocument != null && !uiState.isEditingDocument
     val currentPlayingLineIndex =
@@ -93,6 +94,19 @@ fun SpeakerScreen(
             playbackState.currentPlayingLineIndex
         } else {
             null
+        }
+    val playDocumentWithAsrStop: (SpeakerDocumentUi) -> SpeakerPlaybackResult = { document ->
+        if (speakerAsrState.isRecording) {
+            speakerAsrController.stop()
+        }
+        playbackController.playDocument(document)
+    }
+    val playLineWithAsrStop: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult =
+        { document, lineIndex, line ->
+            if (speakerAsrState.isRecording) {
+                speakerAsrController.stop()
+            }
+            playbackController.playLine(document, lineIndex, line)
         }
 
     LaunchedEffect(userSettings.userId) {
@@ -125,6 +139,12 @@ fun SpeakerScreen(
         }
     }
 
+    LaunchedEffect(isAnyTtsPlaying, speakerAsrState.isRecording) {
+        if (isAnyTtsPlaying && speakerAsrState.isRecording) {
+            speakerAsrController.stop()
+        }
+    }
+
     LaunchedEffect(selectedDocument?.id) {
         contentAsrText = ""
     }
@@ -152,7 +172,7 @@ fun SpeakerScreen(
         val contentLines = document.fullText.replace("\r\n", "\n").split('\n')
         when (val command = resolveSpeakerContentCommand(speakerAsrState.finalText, contentLines)) {
             SpeakerContentCommand.Play -> {
-                when (playbackController.playDocument(document)) {
+                when (playDocumentWithAsrStop(document)) {
                     SpeakerPlaybackResult.NOT_READY -> {
                         Toast.makeText(
                             context,
@@ -187,7 +207,7 @@ fun SpeakerScreen(
 
             is SpeakerContentCommand.PlayLine -> {
                 val lineText = contentLines.getOrNull(command.lineIndex).orEmpty()
-                when (playbackController.playLine(document, command.lineIndex, lineText)) {
+                when (playLineWithAsrStop(document, command.lineIndex, lineText)) {
                     SpeakerPlaybackResult.NOT_READY -> {
                         Toast.makeText(
                             context,
@@ -219,6 +239,7 @@ fun SpeakerScreen(
             }
             return
         }
+        if (isAnyTtsPlaying) return
         if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
             return
@@ -446,7 +467,7 @@ fun SpeakerScreen(
                 localAsrText = explorerAsrText,
                 isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.EXPLORER && speakerAsrState.isRecording,
                 localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.EXPLORER && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
-                isLocalAsrEnabled = !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.EXPLORER),
+                isLocalAsrEnabled = !isAnyTtsPlaying && !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.EXPLORER),
                 isImportEnabled = !uiState.isImporting,
                 isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
@@ -496,13 +517,13 @@ fun SpeakerScreen(
                 localAsrText = contentAsrText,
                 isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecording,
                 localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
-                isLocalAsrEnabled = !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
+                isLocalAsrEnabled = !isAnyTtsPlaying && !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
                 currentPlayingLineIndex = currentPlayingLineIndex,
                 editingText = uiState.editingText,
                 onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
                 onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
                 onSpeakLine = { lineIndex, line ->
-                    when (playbackController.playLine(selectedDocument, lineIndex, line)) {
+                    when (playLineWithAsrStop(selectedDocument, lineIndex, line)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
                                 context,
@@ -523,7 +544,7 @@ fun SpeakerScreen(
                     }
                 },
                 onPlay = {
-                    when (playbackController.playDocument(selectedDocument)) {
+                    when (playDocumentWithAsrStop(selectedDocument)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
                                 context,
