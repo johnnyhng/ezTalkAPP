@@ -9,15 +9,22 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -40,6 +48,11 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 
 private enum class SpeakerAsrTarget {
+    EXPLORER,
+    CONTENT
+}
+
+private enum class SpeakerExpandedPane {
     EXPLORER,
     CONTENT
 }
@@ -63,6 +76,7 @@ fun SpeakerScreen(
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
     var contentAsrText by rememberSaveable { mutableStateOf("") }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
+    var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
 
     val isSelectedDocumentPlaying = playbackController.isPlayingDocument(selectedDocument?.id)
     val isSelectedDocumentPaused = playbackController.isPausedDocument(selectedDocument?.id)
@@ -406,128 +420,175 @@ fun SpeakerScreen(
             )
         }
 
-        SpeechFileExplorer(
-            directories = uiState.directories,
-            selectedDocumentId = uiState.selectedDocumentId,
-            isLoading = uiState.isLoading,
-            localAsrText = explorerAsrText,
-            isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.EXPLORER && speakerAsrState.isRecording,
-            localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.EXPLORER && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
-            isLocalAsrEnabled = !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.EXPLORER),
-            isImportEnabled = !uiState.isImporting,
-            isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
-            isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
-            onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.EXPLORER) },
-            onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
-            onGoogleDriveImport = { speakerViewModel.showDriveImportDialog() },
-            onToggleExpand = { directory -> speakerViewModel.toggleDirectory(directory) },
-            onRefresh = { speakerViewModel.refreshDirectories() },
-            onImportIntoDirectory = { directory ->
-                importTargetDirectory = directory.displayName
-                txtImportLauncher.launch(arrayOf("text/plain"))
-            },
-            onRemoveDirectory = { directory ->
-                speakerViewModel.deleteFolder(directory)
-            },
-            onRemoveDocument = { document ->
-                playbackController.stopIfPlaying(document.id)
-                speakerViewModel.deleteDocument(document)
-            },
-            onDocumentSelected = { documentId ->
-                speakerViewModel.onDocumentSelected(documentId)
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(0.42f)
+        SpeakerPaneHeader(
+            title = stringResource(R.string.speaker_overview_title),
+            isExpanded = expandedPane == SpeakerExpandedPane.EXPLORER,
+            onClick = { expandedPane = SpeakerExpandedPane.EXPLORER }
         )
+
+        if (expandedPane == SpeakerExpandedPane.EXPLORER) {
+            SpeechFileExplorer(
+                directories = uiState.directories,
+                selectedDocumentId = uiState.selectedDocumentId,
+                isLoading = uiState.isLoading,
+                localAsrText = explorerAsrText,
+                isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.EXPLORER && speakerAsrState.isRecording,
+                localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.EXPLORER && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
+                isLocalAsrEnabled = !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.EXPLORER),
+                isImportEnabled = !uiState.isImporting,
+                isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
+                isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
+                onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.EXPLORER) },
+                onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
+                onGoogleDriveImport = { speakerViewModel.showDriveImportDialog() },
+                onToggleExpand = { directory -> speakerViewModel.toggleDirectory(directory) },
+                onRefresh = { speakerViewModel.refreshDirectories() },
+                onImportIntoDirectory = { directory ->
+                    importTargetDirectory = directory.displayName
+                    txtImportLauncher.launch(arrayOf("text/plain"))
+                },
+                onRemoveDirectory = { directory ->
+                    speakerViewModel.deleteFolder(directory)
+                },
+                onRemoveDocument = { document ->
+                    playbackController.stopIfPlaying(document.id)
+                    speakerViewModel.deleteDocument(document)
+                },
+                onDocumentSelected = { documentId ->
+                    speakerViewModel.onDocumentSelected(documentId)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        SpeakerContentScreen(
-            selectedDocument = selectedDocument,
-            isTtsReady = playbackState.isReady,
-            isPlaying = isSelectedDocumentPlaying,
-            isPaused = isSelectedDocumentPaused,
-            isEditing = uiState.isEditingDocument,
-            localAsrText = contentAsrText,
-            isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecording,
-            localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
-            isLocalAsrEnabled = !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
-            currentPlayingLineIndex = currentPlayingLineIndex,
-            editingText = uiState.editingText,
-            onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
-            onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
-            onSpeakLine = { lineIndex, line ->
-                if (selectedDocument == null) return@SpeakerContentScreen
-                when (playbackController.playLine(selectedDocument, lineIndex, line)) {
-                    SpeakerPlaybackResult.NOT_READY -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_tts_not_ready),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-
-                    SpeakerPlaybackResult.EMPTY_TEXT -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_empty_text_file),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-
-                    SpeakerPlaybackResult.STARTED -> Unit
-                }
-            },
-            onPlay = {
-                if (selectedDocument == null) return@SpeakerContentScreen
-                when (playbackController.playDocument(selectedDocument)) {
-                    SpeakerPlaybackResult.NOT_READY -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_tts_not_ready),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-
-                    SpeakerPlaybackResult.EMPTY_TEXT -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_empty_text_file),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-
-                    SpeakerPlaybackResult.STARTED -> Unit
-                }
-            },
-            onPause = {
-                playbackController.pause(selectedDocument?.id)
-            },
-            onStop = {
-                playbackController.stop()
-            },
-            onEdit = {
-                playbackController.stop()
-                speakerViewModel.startEditing()
-            },
-            onSave = {
-                speakerViewModel.saveEditing { saved ->
-                    Toast.makeText(
-                        context,
-                        context.getString(
-                            if (saved) R.string.speaker_save_success else R.string.speaker_save_failed
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            },
-            onCancelEdit = {
-                speakerViewModel.cancelEditing()
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(0.58f)
+        SpeakerPaneHeader(
+            title = selectedDocument?.displayName ?: stringResource(R.string.speaker_no_document_selected),
+            isExpanded = expandedPane == SpeakerExpandedPane.CONTENT,
+            onClick = { expandedPane = SpeakerExpandedPane.CONTENT }
         )
+
+        if (expandedPane == SpeakerExpandedPane.CONTENT) {
+            SpeakerContentScreen(
+                selectedDocument = selectedDocument,
+                isTtsReady = playbackState.isReady,
+                isPlaying = isSelectedDocumentPlaying,
+                isPaused = isSelectedDocumentPaused,
+                isEditing = uiState.isEditingDocument,
+                localAsrText = contentAsrText,
+                isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecording,
+                localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
+                isLocalAsrEnabled = !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
+                currentPlayingLineIndex = currentPlayingLineIndex,
+                editingText = uiState.editingText,
+                onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
+                onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
+                onSpeakLine = { lineIndex, line ->
+                    if (selectedDocument == null) return@SpeakerContentScreen
+                    when (playbackController.playLine(selectedDocument, lineIndex, line)) {
+                        SpeakerPlaybackResult.NOT_READY -> {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_tts_not_ready),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        SpeakerPlaybackResult.EMPTY_TEXT -> {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_empty_text_file),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        SpeakerPlaybackResult.STARTED -> Unit
+                    }
+                },
+                onPlay = {
+                    if (selectedDocument == null) return@SpeakerContentScreen
+                    when (playbackController.playDocument(selectedDocument)) {
+                        SpeakerPlaybackResult.NOT_READY -> {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_tts_not_ready),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        SpeakerPlaybackResult.EMPTY_TEXT -> {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_empty_text_file),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        SpeakerPlaybackResult.STARTED -> Unit
+                    }
+                },
+                onPause = {
+                    playbackController.pause(selectedDocument?.id)
+                },
+                onStop = {
+                    playbackController.stop()
+                },
+                onEdit = {
+                    playbackController.stop()
+                    speakerViewModel.startEditing()
+                },
+                onSave = {
+                    speakerViewModel.saveEditing { saved ->
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                if (saved) R.string.speaker_save_success else R.string.speaker_save_failed
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onCancelEdit = {
+                    speakerViewModel.cancelEditing()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpeakerPaneHeader(
+    title: String,
+    isExpanded: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = null
+            )
+        }
     }
 }
