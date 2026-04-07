@@ -54,6 +54,11 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            // Force extraction of native libs on device. This is a runtime workaround
+            // for native components that do not load correctly directly from the APK.
+            useLegacyPackaging = true
+        }
     }
 }
 
