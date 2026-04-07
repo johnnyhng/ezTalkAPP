@@ -28,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,6 +43,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
@@ -64,6 +68,7 @@ fun SpeakerScreen(
     val speakerViewModel: SpeakerViewModel = viewModel()
     val context = LocalContext.current
     val activity = context as Activity
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val userSettings by homeViewModel.userSettings.collectAsState()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
@@ -146,12 +151,29 @@ fun SpeakerScreen(
     }
 
     LaunchedEffect(selectedDocument?.id) {
+        speakerAsrController.stop()
+        playbackController.stop()
         contentAsrText = ""
     }
 
     LaunchedEffect(selectedDocument?.id, expandedPane) {
         if (selectedDocument == null && expandedPane == SpeakerExpandedPane.CONTENT) {
             expandedPane = SpeakerExpandedPane.EXPLORER
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, playbackController, speakerAsrController) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                speakerAsrController.stop()
+                playbackController.stop()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            speakerAsrController.stop()
+            playbackController.stop()
         }
     }
 
