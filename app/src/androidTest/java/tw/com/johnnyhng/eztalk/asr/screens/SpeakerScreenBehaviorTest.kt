@@ -150,6 +150,58 @@ class SpeakerScreenBehaviorTest {
         composeRule.onNodeWithText("saved body").assertIsDisplayed()
     }
 
+    @Test
+    fun speakerScreenSelectingFileAutoOpensContentPane() {
+        val userId = "speaker-auto-open-content"
+        clearSpeakerFiles(userId)
+        seedSettings(userId)
+        seedSpeakerDocument(userId, "alpha", "draft.txt", "original body")
+
+        val viewModel = HomeViewModel(application)
+        composeRule.setContent {
+            SpeakerScreen(homeViewModel = viewModel)
+        }
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("alpha").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onAllNodesWithText(context.getString(R.string.speaker_content_title)).assertCountEquals(0)
+        composeRule.onNodeWithText("alpha").performClick()
+        composeRule.onNodeWithText("draft.txt").performClick()
+
+        composeRule.onNodeWithText(context.getString(R.string.speaker_content_title)).assertIsDisplayed()
+        composeRule.onNodeWithText("original body").assertIsDisplayed()
+    }
+
+    @Test
+    fun speakerScreenCollapsingSelectedFolderClearsAndHidesContent() {
+        val userId = "speaker-collapse-clears-content"
+        clearSpeakerFiles(userId)
+        seedSettings(userId)
+        seedSpeakerDocument(userId, "alpha", "draft.txt", "original body")
+
+        val viewModel = HomeViewModel(application)
+        composeRule.setContent {
+            SpeakerScreen(homeViewModel = viewModel)
+        }
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("alpha").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("alpha").performClick()
+        composeRule.onNodeWithText("draft.txt").performClick()
+        composeRule.onNodeWithText("original body").assertIsDisplayed()
+
+        composeRule.onNodeWithText(context.getString(R.string.speaker_explorer_pane_title)).performClick()
+        composeRule.onNodeWithText("alpha").performClick()
+
+        composeRule.onAllNodesWithText(context.getString(R.string.speaker_content_title)).assertCountEquals(0)
+        composeRule.onAllNodesWithText("original body").assertCountEquals(0)
+        composeRule.onAllNodesWithText(context.getString(R.string.speaker_no_document_selected)).assertCountEquals(0)
+    }
+
     private fun seedSettings(userId: String) = runBlocking {
         SettingsManager(application).updateSettings(
             UserSettings(
