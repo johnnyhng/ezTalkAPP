@@ -98,6 +98,8 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
 
     fun toggleDirectory(directory: SpeakerDirectoryUi) {
         val nextExpanded = !directory.isExpanded
+        val shouldClearSelection = nextExpanded ||
+            directory.documents.any { it.id == uiState.selectedDocumentId }
         uiState = uiState.copy(
             directories = uiState.directories.map {
                 when {
@@ -106,9 +108,9 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
                     else -> it
                 }
             },
-            selectedDocumentId = if (nextExpanded) null else uiState.selectedDocumentId,
-            isEditingDocument = if (nextExpanded) false else uiState.isEditingDocument,
-            editingText = if (nextExpanded) "" else uiState.editingText
+            selectedDocumentId = if (shouldClearSelection) null else uiState.selectedDocumentId,
+            isEditingDocument = if (shouldClearSelection) false else uiState.isEditingDocument,
+            editingText = if (shouldClearSelection) "" else uiState.editingText
         )
     }
 
