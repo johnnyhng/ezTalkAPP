@@ -30,7 +30,8 @@ internal data class SpeakerAsrState(
     val isRecognizingSpeech: Boolean = false,
     val countdownProgress: Float = 0f,
     val partialText: String = "",
-    val finalText: String = ""
+    val finalText: String = "",
+    val finalTextVersion: Int = 0
 )
 
 internal class SpeakerAsrController(
@@ -215,7 +216,8 @@ internal class SpeakerAsrController(
                         updateState {
                             it.copy(
                                 partialText = result.text,
-                                finalText = result.text
+                                finalText = result.text,
+                                finalTextVersion = it.finalTextVersion + 1
                             )
                         }
                     } catch (error: Exception) {

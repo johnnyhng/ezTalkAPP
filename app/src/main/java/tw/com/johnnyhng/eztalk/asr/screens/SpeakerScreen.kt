@@ -62,6 +62,7 @@ fun SpeakerScreen(
     var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
     var contentAsrText by rememberSaveable { mutableStateOf("") }
+    var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
 
     val isSelectedDocumentPlaying = playbackController.isPlayingDocument(selectedDocument?.id)
     val isSelectedDocumentPaused = playbackController.isPausedDocument(selectedDocument?.id)
@@ -106,6 +107,83 @@ fun SpeakerScreen(
 
     LaunchedEffect(selectedDocument?.id) {
         contentAsrText = ""
+    }
+
+    LaunchedEffect(
+        speakerAsrState.finalTextVersion,
+        activeAsrTarget,
+        selectedDocument?.id,
+        isSelectedDocumentPlaying,
+        isSelectedDocumentPaused
+    ) {
+        if (activeAsrTarget != SpeakerAsrTarget.CONTENT) return@LaunchedEffect
+        if (speakerAsrState.finalTextVersion == 0 || speakerAsrState.finalTextVersion == lastHandledContentFinalVersion) {
+            return@LaunchedEffect
+        }
+        lastHandledContentFinalVersion = speakerAsrState.finalTextVersion
+
+        val document = selectedDocument ?: return@LaunchedEffect
+        val contentLines = document.fullText.replace("\r\n", "\n").split('\n')
+        when (val command = resolveSpeakerContentCommand(speakerAsrState.finalText, contentLines)) {
+            SpeakerContentCommand.Play -> {
+                when (playbackController.playDocument(document)) {
+                    SpeakerPlaybackResult.NOT_READY -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_tts_not_ready),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    SpeakerPlaybackResult.EMPTY_TEXT -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_empty_text_file),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    SpeakerPlaybackResult.STARTED -> Unit
+                }
+            }
+
+            SpeakerContentCommand.Pause -> {
+                if (isSelectedDocumentPlaying) {
+                    playbackController.pause(document.id)
+                }
+            }
+
+            SpeakerContentCommand.Stop -> {
+                if (isSelectedDocumentPlaying || isSelectedDocumentPaused) {
+                    playbackController.stop()
+                }
+            }
+
+            is SpeakerContentCommand.PlayLine -> {
+                val lineText = contentLines.getOrNull(command.lineIndex).orEmpty()
+                when (playbackController.playLine(document, command.lineIndex, lineText)) {
+                    SpeakerPlaybackResult.NOT_READY -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_tts_not_ready),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    SpeakerPlaybackResult.EMPTY_TEXT -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_empty_text_file),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    SpeakerPlaybackResult.STARTED -> Unit
+                }
+            }
+
+            null -> Unit
+        }
     }
 
     fun toggleSpeakerAsr(target: SpeakerAsrTarget) {
