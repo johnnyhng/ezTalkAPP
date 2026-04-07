@@ -51,6 +51,7 @@ internal fun SpeakerContentScreen(
     localAsrCountdownProgress: Float = 0f,
     isLocalAsrEnabled: Boolean = true,
     currentPlayingLineIndex: Int?,
+    candidateLineIndex: Int? = null,
     editingText: String,
     onEditingTextChange: (String) -> Unit,
     onLocalAsrClick: () -> Unit = {},
@@ -73,9 +74,10 @@ internal fun SpeakerContentScreen(
     val shouldShowLocalAsrWidget = selectedDocument != null && !isEditing
     val listState = rememberLazyListState()
 
-    LaunchedEffect(selectedDocument?.id, currentPlayingLineIndex, isEditing) {
-        if (!isEditing && currentPlayingLineIndex != null && currentPlayingLineIndex in contentLines.indices) {
-            listState.animateScrollToItem(currentPlayingLineIndex)
+    LaunchedEffect(selectedDocument?.id, currentPlayingLineIndex, candidateLineIndex, isEditing) {
+        val targetIndex = currentPlayingLineIndex ?: candidateLineIndex
+        if (!isEditing && targetIndex != null && targetIndex in contentLines.indices) {
+            listState.animateScrollToItem(targetIndex)
         }
     }
 
@@ -131,7 +133,8 @@ internal fun SpeakerContentScreen(
                             SpeakerContentLineRow(
                                 line = line,
                                 lineNumber = index + 1,
-                                isHighlighted = currentPlayingLineIndex == index,
+                                isPlayingHighlighted = currentPlayingLineIndex == index,
+                                isCandidateHighlighted = currentPlayingLineIndex != index && candidateLineIndex == index,
                                 isClickable = line.isNotBlank(),
                                 onClick = { onSpeakLine(index, line) }
                             )
@@ -158,7 +161,8 @@ internal fun SpeakerContentScreen(
 private fun SpeakerContentLineRow(
     line: String,
     lineNumber: Int,
-    isHighlighted: Boolean,
+    isPlayingHighlighted: Boolean,
+    isCandidateHighlighted: Boolean,
     isClickable: Boolean,
     onClick: () -> Unit
 ) {
@@ -167,10 +171,10 @@ private fun SpeakerContentLineRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(
-                if (isHighlighted) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-                } else {
-                    MaterialTheme.colorScheme.surface
+                when {
+                    isPlayingHighlighted -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    isCandidateHighlighted -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
+                    else -> MaterialTheme.colorScheme.surface
                 }
             )
             .clickable(
