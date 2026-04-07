@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +58,10 @@ internal fun SpeakerContentScreen(
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onStop: () -> Unit,
+    onPreviousDocument: () -> Unit,
+    onNextDocument: () -> Unit,
+    isPreviousDocumentEnabled: Boolean,
+    isNextDocumentEnabled: Boolean,
     onEdit: () -> Unit,
     onSave: () -> Unit,
     onCancelEdit: () -> Unit,
@@ -85,9 +91,13 @@ internal fun SpeakerContentScreen(
                 isPlaying = isPlaying,
                 isPaused = isPaused,
                 isEditing = isEditing,
+                isPreviousDocumentEnabled = isPreviousDocumentEnabled,
+                isNextDocumentEnabled = isNextDocumentEnabled,
                 onPlay = onPlay,
                 onPause = onPause,
                 onStop = onStop,
+                onPreviousDocument = onPreviousDocument,
+                onNextDocument = onNextDocument,
                 onEdit = onEdit,
                 onSave = onSave,
                 onCancelEdit = onCancelEdit
@@ -188,9 +198,13 @@ private fun SpeakerPlaybackHeader(
     isPlaying: Boolean,
     isPaused: Boolean,
     isEditing: Boolean,
+    isPreviousDocumentEnabled: Boolean,
+    isNextDocumentEnabled: Boolean,
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onStop: () -> Unit,
+    onPreviousDocument: () -> Unit,
+    onNextDocument: () -> Unit,
     onEdit: () -> Unit,
     onSave: () -> Unit,
     onCancelEdit: () -> Unit
@@ -223,6 +237,18 @@ private fun SpeakerPlaybackHeader(
             )
             return
         }
+        SpeakerPlaybackAction(
+            icon = Icons.Filled.SkipPrevious,
+            contentDescription = stringResource(R.string.previous),
+            enabled = isPreviousDocumentEnabled && !isPlaying && !isPaused,
+            onClick = onPreviousDocument
+        )
+        SpeakerPlaybackAction(
+            icon = Icons.Filled.SkipNext,
+            contentDescription = stringResource(R.string.next),
+            enabled = isNextDocumentEnabled && !isPlaying && !isPaused,
+            onClick = onNextDocument
+        )
         SpeakerPlaybackAction(
             icon = Icons.Filled.Edit,
             contentDescription = stringResource(R.string.edit),

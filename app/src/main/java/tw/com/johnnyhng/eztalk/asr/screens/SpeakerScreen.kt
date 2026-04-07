@@ -77,6 +77,12 @@ fun SpeakerScreen(
     var contentAsrText by rememberSaveable { mutableStateOf("") }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
+    val orderedDocuments = remember(uiState.directories) {
+        uiState.directories.flatMap { it.documents }
+    }
+    val selectedDocumentIndex = orderedDocuments.indexOfFirst { it.id == selectedDocument?.id }
+    val previousDocument = orderedDocuments.getOrNull(selectedDocumentIndex - 1)
+    val nextDocument = orderedDocuments.getOrNull(selectedDocumentIndex + 1)
 
     val isSelectedDocumentPlaying = playbackController.isPlayingDocument(selectedDocument?.id)
     val isSelectedDocumentPaused = playbackController.isPausedDocument(selectedDocument?.id)
@@ -543,6 +549,18 @@ fun SpeakerScreen(
                 onStop = {
                     playbackController.stop()
                 },
+                onPreviousDocument = {
+                    val targetDocument = previousDocument ?: return@SpeakerContentScreen
+                    playbackController.stop()
+                    speakerViewModel.onDocumentSelected(targetDocument.id)
+                },
+                onNextDocument = {
+                    val targetDocument = nextDocument ?: return@SpeakerContentScreen
+                    playbackController.stop()
+                    speakerViewModel.onDocumentSelected(targetDocument.id)
+                },
+                isPreviousDocumentEnabled = previousDocument != null,
+                isNextDocumentEnabled = nextDocument != null,
                 onEdit = {
                     playbackController.stop()
                     speakerViewModel.startEditing()

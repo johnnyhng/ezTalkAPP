@@ -105,7 +105,10 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
                     nextExpanded -> it.copy(isExpanded = false)
                     else -> it
                 }
-            }
+            },
+            selectedDocumentId = if (nextExpanded) null else uiState.selectedDocumentId,
+            isEditingDocument = if (nextExpanded) false else uiState.isEditingDocument,
+            editingText = if (nextExpanded) "" else uiState.editingText
         )
     }
 
