@@ -1,130 +1,249 @@
 # Speaker Current Status
 
-## Current UI
-- The `Speaker` screen uses a vertical split layout.
-- The upper pane is now a dedicated `SpeechFileExplorer`.
-- The lower pane is now a dedicated `SpeakerContentScreen`.
-- Both panes scroll independently.
+## Overview
+- `Speaker` is now an app-owned text explorer and local TTS / local ASR workspace.
+- Runtime content lives under:
+  - `filesDir/speech/<userId>/`
+- The screen is split into:
+  - `SpeechFileExplorer`
+  - `SpeakerContentScreen`
 
-## Current Folder Behavior
-- All folders are collapsed initially when entering the screen.
-- No file is selected initially.
-- The folder list uses accordion behavior:
-  - only one folder can be expanded at a time
-  - opening one folder collapses the others
-  - tapping an expanded folder collapses it
+## Current Screen Layout
+- The screen uses accordion-style pane layout.
+- Only one major pane is expanded at a time:
+  - `explorer`
+  - `content`
+- At least one pane is always shown.
+- Initially:
+  - `explorer` is shown
+  - `content` is hidden
+  - no file is selected
 
-## Current File List Behavior
-- The upper pane shows only file names.
-- File preview text is not shown in the list.
-- Each file row supports:
+## Explorer Behavior
+
+### Folder Behavior
+- All folders are collapsed initially.
+- Only one folder can be expanded at a time.
+- Expanding one folder collapses the others.
+- If a selected file exists and:
+  - a different folder is expanded, or
+  - the selected file's folder is collapsed
+  then the lower content is cleared and hidden.
+
+### File List Behavior
+- Explorer shows file names only.
+- File extensions are hidden in the list.
+- No preview text is shown in the file list.
+- File rows support:
   - select file
   - delete single file
-- The lower pane shows the selected file content only after the user selects a file.
 
-## Current Folder Management
-- New folders are created under:
-  - `filesDir/speech/<userId>/`
-- Folder creation uses a popup dialog.
-- If the folder name is invalid or duplicated, the dialog shows the error inline.
-- Folder rows support:
+### File Selection Behavior
+- Selecting a file immediately:
+  - clears previous content playback context
+  - sets the selected file
+  - auto-expands the `content` pane
+
+## Content Behavior
+
+### Visibility
+- `content` is hidden until a file is selected.
+- `content` is cleared and hidden when:
+  - a different folder is expanded
+  - the selected file's folder is collapsed
+  - the selected file disappears
+
+### Content Display
+- Reading mode uses clickable line rows.
+- Each line is individually tappable.
+- Blank lines are not playable.
+- The current playing line is highlighted.
+- The highlighted line auto-scrolls into view during playback.
+
+### File Navigation
+- `content` header supports:
+  - previous file
+  - next file
+- Switching to previous / next file:
+  - stops current TTS first
+  - updates selection
+  - keeps the user in `content`
+
+### Editing
+- `content` supports:
+  - edit
+  - save
+  - cancel edit
+- Save writes directly back to the selected local `txt`.
+- Cancel edit restores the current file content.
+- Cancel edit uses a close icon.
+
+## Folder Management
+- New folders are created with a popup dialog.
+- Folder names are validated inline.
+- Duplicate folder names are rejected inline in the dialog.
+- Folder row actions support:
   - refresh
   - import files
   - remove folder
 
-## Current Import Behavior
+## Import Behavior
 
-### Header Cloud Button
-- The top-right cloud button opens a dialog asking for the target local folder name.
-- After confirmation, it opens a multi-file picker.
-- The user can select multiple `txt` files at once.
-- All selected files are imported into the specified local folder.
-- The import source can be Google Drive or any provider shown by the system picker.
-- The import is not restricted to the same Google account as the app login.
+### Cloud Import
+- Top cloud action opens a target-folder dialog.
+- After confirmation, it opens multi-file selection.
+- Multiple `txt` files can be imported at once.
+- Google Drive or any system picker provider can be used.
+- Import is not restricted to the same Google account as app login.
 
-### Folder Row Import Button
-- The folder-row upload button uses `arrow up`.
-- It opens a multi-file picker.
-- The user can select multiple `txt` files at once.
-- All selected files are imported into that specific local folder.
+### Per-Folder Import
+- Folder row upload action uses the `arrow up` icon.
+- It supports multi-file `txt` import into that folder.
 
 ### Import Progress
-- Multi-file import shows a modal progress dialog.
+- Import shows a modal progress dialog.
 - The dialog shows:
   - target folder
   - current count / total count
   - linear progress bar
-- Import triggers are disabled while import is in progress.
+- Import actions are disabled while importing.
 
 ### Import Implementation
-- Multi-file import logic has been extracted from `SpeakerScreen.kt`.
-- Current import helper file:
+- Multi-file import logic lives in:
   - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerImportManager.kt`
 
-## Current Playback Behavior
+## TTS Behavior
+
+### Playback
 - Playback uses local Android `TextToSpeech`.
-- The lower pane supports:
+- Supports:
   - play full document
   - pause
   - stop
-  - tap a specific line to immediately read that line
-- Playback is resumable:
-  - text is segmented into chunks
-  - pause stops at the current segment
-  - play resumes from the paused segment
-  - stop clears playback state
-- Reading mode shows the document as a clickable line list.
-- The currently playing line is highlighted.
-- The highlighted line auto-scrolls into view while playback advances.
+  - tap a specific line to play only that line
 
-## Current Editing Behavior
-- The lower pane supports:
-  - edit
-  - save
-  - cancel edit
-- Cancel edit uses a `close` icon.
-- Save writes directly back to the selected local `txt` file.
-- Cancel edit discards the current draft and restores the file content view.
+### Playback Model
+- Full-document playback is segmented.
+- Pause is resumable from the current segment.
+- Stop clears the playback state.
+- Starting a different playback target stops the current one first.
 
-## Current Playback Safety Rules
+### Playback Safety
 - While playback is active or paused:
   - edit is disabled
   - single-file delete is disabled
   - folder delete is disabled
-- Tapping a line to read it stops the current TTS first, then starts reading that line.
+- Tapping a line stops the current TTS first, then starts line playback.
+
+## Local ASR Behavior
+
+### Widget Placement
+- `LocalASRWidget` exists in both panes.
+- Explorer widget is shown only when at least one folder is expanded.
+- Content widget is shown only when:
+  - a file is selected
+  - not in edit mode
+
+### Local ASR Runtime
+- `Speaker` now uses a dedicated local-only ASR flow.
+- It no longer depends on `Home` transcript persistence behavior.
+- It does not write:
+  - `wav`
+  - `jsonl`
+- It does not call remote recognition.
+
+### Recording Rules
+- Only one `Speaker` ASR widget can record at a time.
+- If one widget records, the other is disabled.
+- If the active widget disappears, ASR stops immediately.
+
+### ASR and TTS Mutual Exclusion
+- If TTS starts, ASR is stopped immediately.
+- While TTS is playing, both ASR widgets are disabled.
+- ASR becomes available again after:
+  - pause
+  - stop
+  - playback completion
+
+### ASR Result Display
+- Recording state is visible even without waveform.
+- The widget shows:
+  - recognizing state while waiting for text
+  - live partial/final recognized text when available
+
+### Local ASR Command Routing
+- Lower-pane ASR final text supports local command routing for:
+  - `播放`
+  - `暫停`
+  - `停止`
+  - `播放第 N 行`
+  - simple Chinese-number variants such as `播放第三行`
+- This is local rule-based only.
+- Gemini is not yet involved.
+
+## Global Stop Rules
+- TTS and ASR are stopped when:
+  - selected content changes
+  - selected content disappears
+  - the screen is disposed
+  - app goes to background (`ON_STOP`)
 
 ## Current Technical Structure
-- Main orchestration screen:
+- Main orchestration:
   - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerScreen.kt`
-- Upper pane component:
+- Explorer pane:
   - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeechFileExplorer.kt`
-- Lower pane component:
+- Content pane:
   - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerContentScreen.kt`
 - Shared UI models:
   - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerUiModels.kt`
 - Import helper:
   - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerImportManager.kt`
+- TTS controller:
+  - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerPlaybackController.kt`
+- Local-only ASR controller:
+  - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerAsrController.kt`
+- Voice command resolver:
+  - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerCommandResolver.kt`
+- ViewModel:
+  - `app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SpeakerViewModel.kt`
+
+## Current Tests
+- `SpeakerScreenBehaviorTest`
+  - initial collapsed / no selection
+  - accordion folder behavior
+  - save / cancel edit behavior
+- `SpeakerComponentsBehaviorTest`
+  - clickable line behavior
+  - edit disabled while playing / paused
+  - delete disabled flags
+- `SpeakerCommandResolverTest`
+  - play / pause / stop resolution
+  - numeric and Chinese-number line resolution
 
 ## Recent Speaker Commits
-- `c15d4566` Auto-scroll highlighted speaker line
-- `02983b6e` Highlight current speaker playback line
-- `cd9f09e2` Add clickable line playback in speaker content
-- `18018c39` Use close icon for speaker edit cancel
-- `6cd7cce1` Lock speaker edits and deletes during playback
-- `a83d5793` Add single-file deletion in speaker explorer
-- `12ae0e5b` Split speaker explorer and content screens
-- `0bcb463a` Add speaker document editing
+- `566fbfc5` Clear speaker content when folder collapses
+- `b5a8b594` Stop speaker playback and ASR on context changes
+- `47cf6cf9` Lock speaker ASR during TTS playback
+- `8b1a9dd0` Add speaker document navigation
+- `6e436298` Auto-open speaker content on selection
+- `dd86b661` Use accordion layout for speaker panes
+- `61606536` Add speaker voice command routing
+- `1b0fdc45` Tune speaker local ASR responsiveness
+- `16e35a96` Use local-only ASR flow in speaker
+- `fb716b0b` Integrate local ASR into speaker widgets
 
 ## Known Notes
-- There is an unused untracked file in the repo:
+- Untracked file still present:
   - `app/src/main/res/drawable/ic_google_drive.xml`
-- The current header uses built-in icons:
+- Current header icon usage:
   - create folder: folder icon
   - cloud import: pure cloud icon
   - folder import: arrow up icon
 
 ## Next Likely Improvements
-- Add behavior tests for single-file delete and clickable line playback.
-- Move playback logic out of `SpeakerScreen.kt`.
-- Move file-system folder management out of `SpeakerScreen.kt`.
-- Add ASR-driven document resolution after the current manual flow is stable.
+- Add voice-based document selection from the explorer side.
+- Add behavior tests for pane auto-open / auto-hide rules.
+- Add behavior tests for TTS and ASR mutual exclusion.
+- Decide whether command routing should support file navigation and folder actions.
+- Keep Gemini as a later fallback phase, not as the primary routing path.
