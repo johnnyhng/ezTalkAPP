@@ -27,12 +27,35 @@ internal class SpeakerSemanticSearch(
     ): SpeakerSearchResult? {
         if (query.text.isBlank() || chunks.isEmpty()) return null
 
+        return rank(query, chunks)
+            .maxByOrNull { it.finalScore }
+            ?.takeIf { it.finalScore >= config.minimumScoreThreshold }
+    }
+
+    fun rank(
+        queryText: String,
+        chunks: List<SpeakerIndexedChunk>
+    ): List<SpeakerSearchResult> {
+        val query = buildQuery(queryText)
+        return rank(query, chunks)
+    }
+
+    fun rank(
+        query: SpeakerSemanticQuery,
+        chunks: List<SpeakerIndexedChunk>
+    ): List<SpeakerSearchResult> {
+        if (query.text.isBlank() || chunks.isEmpty()) return emptyList()
+
         return chunks
             .map { chunk ->
                 val semanticScore = cosineSimilarity(query.embedding, chunk.embedding)
                 val lexicalScore = lexicalSimilarity(query.text, chunk.text)
-                val finalScore = (semanticScore * config.semanticWeight) +
-                    (lexicalScore * config.lexicalWeight)
+                val finalScore = computeFinalScore(
+                    queryEmbedding = query.embedding,
+                    chunkEmbedding = chunk.embedding,
+                    semanticScore = semanticScore,
+                    lexicalScore = lexicalScore
+                )
 
                 SpeakerSearchResult(
                     documentId = chunk.documentId,
@@ -44,8 +67,26 @@ internal class SpeakerSemanticSearch(
                     finalScore = finalScore
                 )
             }
-            .maxByOrNull { it.finalScore }
-            ?.takeIf { it.finalScore >= config.minimumScoreThreshold }
+            .sortedByDescending { it.finalScore }
+    }
+
+    private fun computeFinalScore(
+        queryEmbedding: FloatArray,
+        chunkEmbedding: FloatArray,
+        semanticScore: Float,
+        lexicalScore: Float
+    ): Float {
+        val hasEmbeddings =
+            queryEmbedding.isNotEmpty() &&
+                chunkEmbedding.isNotEmpty() &&
+                queryEmbedding.size == chunkEmbedding.size
+
+        return if (hasEmbeddings) {
+            (semanticScore * config.semanticWeight) +
+                (lexicalScore * config.lexicalWeight)
+        } else {
+            lexicalScore
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 
 private enum class SpeakerAsrTarget {
@@ -76,14 +78,15 @@ fun SpeakerScreen(
     val selectedDocument = speakerViewModel.selectedDocument()
     val (playbackController, playbackState) = rememberSpeakerPlaybackController()
     val (speakerAsrController, speakerAsrState) = rememberSpeakerAsrController()
+    val embeddingEngine = remember(context) { MediaPipeSpeakerEmbeddingEngine(context) }
     var importTargetDirectory by remember { mutableStateOf<String?>(null) }
     var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
     var contentAsrText by rememberSaveable { mutableStateOf("") }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
-    val semanticIndexer = remember { SpeakerSemanticIndexer() }
-    val semanticSearch = remember { SpeakerSemanticSearch() }
+    val semanticIndexer = remember(embeddingEngine) { SpeakerSemanticIndexer(embeddingEngine) }
+    val semanticSearch = remember(embeddingEngine) { SpeakerSemanticSearch(embeddingEngine) }
     val orderedDocuments = remember(uiState.directories) {
         uiState.directories.flatMap { it.documents }
     }
@@ -182,6 +185,12 @@ fun SpeakerScreen(
         }
     }
 
+    DisposableEffect(embeddingEngine) {
+        onDispose {
+            embeddingEngine.close()
+        }
+    }
+
     LaunchedEffect(
         speakerAsrState.finalTextVersion,
         activeAsrTarget,
@@ -197,8 +206,12 @@ fun SpeakerScreen(
 
         val document = selectedDocument ?: return@LaunchedEffect
         val contentLines = document.fullText.replace("\r\n", "\n").split('\n')
-        when (val command = resolveSpeakerContentCommand(speakerAsrState.finalText, contentLines)) {
+        val finalText = speakerAsrState.finalText
+        Log.i(TAG, "Speaker content ASR text: $finalText")
+
+        when (val command = resolveSpeakerContentCommand(finalText, contentLines)) {
             SpeakerContentCommand.Play -> {
+                Log.i(TAG, "Speaker content command matched: Play")
                 when (playDocumentWithAsrStop(document)) {
                     SpeakerPlaybackResult.NOT_READY -> {
                         Toast.makeText(
@@ -221,18 +234,21 @@ fun SpeakerScreen(
             }
 
             SpeakerContentCommand.Pause -> {
+                Log.i(TAG, "Speaker content command matched: Pause")
                 if (isSelectedDocumentPlaying) {
                     playbackController.pause(document.id)
                 }
             }
 
             SpeakerContentCommand.Stop -> {
+                Log.i(TAG, "Speaker content command matched: Stop")
                 if (isSelectedDocumentPlaying || isSelectedDocumentPaused) {
                     playbackController.stop()
                 }
             }
 
             is SpeakerContentCommand.PlayLine -> {
+                Log.i(TAG, "Speaker content command matched: PlayLine(${command.lineIndex})")
                 val lineText = contentLines.getOrNull(command.lineIndex).orEmpty()
                 when (playLineWithAsrStop(document, command.lineIndex, lineText)) {
                     SpeakerPlaybackResult.NOT_READY -> {
@@ -256,10 +272,29 @@ fun SpeakerScreen(
             }
 
             null -> {
-                val result = semanticSearch.search(
-                    queryText = speakerAsrState.finalText,
+                val query = semanticSearch.buildQuery(finalText)
+                Log.i(
+                    TAG,
+                    "Speaker semantic query embedding length=${query.embedding.size} preview=${query.embedding.previewForLog()}"
+                )
+                val rankedResults = semanticSearch.rank(
+                    query = query,
                     chunks = indexedSelectedDocumentChunks
-                ) ?: return@LaunchedEffect
+                )
+                Log.i(
+                    TAG,
+                    "Speaker semantic top3 cosine=${rankedResults.take(3).formatTop3CosineForLog()}"
+                )
+                val result = rankedResults
+                    .firstOrNull { it.finalScore >= SpeakerSemanticSearchConfig().minimumScoreThreshold }
+                if (result == null) {
+                    Log.i(TAG, "Speaker semantic no matched content")
+                    return@LaunchedEffect
+                }
+                Log.i(
+                    TAG,
+                    "Speaker semantic matched content score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
+                )
                 val matchedLineIndex = resolveMatchedLineIndex(
                     lines = contentLines,
                     result = result
@@ -671,6 +706,35 @@ private fun resolveMatchedLineIndex(
             lexicalSimilarity(result.matchedText, lines[index])
         }
         ?: candidateIndices.first()
+}
+
+private fun FloatArray.previewForLog(maxSize: Int = 8): String {
+    if (isEmpty()) return "[]"
+    return take(maxSize).joinToString(
+        prefix = "[",
+        postfix = if (size > maxSize) ", ...]" else "]"
+    ) { value ->
+        "%.4f".format(value)
+    }
+}
+
+private fun List<SpeakerSearchResult>.formatTop3CosineForLog(): String {
+    if (isEmpty()) return "[]"
+    return take(3).joinToString(
+        prefix = "[",
+        postfix = "]"
+    ) { result ->
+        "{cos=${"%.4f".format(result.semanticScore)}, hybrid=${"%.4f".format(result.finalScore)}, lines=${result.lineStart}-${result.lineEnd}, text=${result.matchedText.oneLineForLog()}}"
+    }
+}
+
+private fun String.oneLineForLog(maxLength: Int = 60): String {
+    val normalized = replace('\n', ' ').trim()
+    return if (normalized.length <= maxLength) {
+        normalized
+    } else {
+        normalized.take(maxLength) + "..."
+    }
 }
 
 @Composable

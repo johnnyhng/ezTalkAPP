@@ -213,6 +213,7 @@ internal class SpeakerAsrController(
                         stream.acceptWaveform(concatenated, sampleRateInHz)
                         SimulateStreamingAsr.recognizer.decode(stream)
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                        Log.i(TAG, "Speaker ASR final result: ${result.text}")
                         updateState {
                             it.copy(
                                 partialText = result.text,
