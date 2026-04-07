@@ -123,6 +123,12 @@ fun SpeakerScreen(
         contentAsrText = ""
     }
 
+    LaunchedEffect(selectedDocument?.id, expandedPane) {
+        if (selectedDocument == null && expandedPane == SpeakerExpandedPane.CONTENT) {
+            expandedPane = SpeakerExpandedPane.EXPLORER
+        }
+    }
+
     LaunchedEffect(
         speakerAsrState.finalTextVersion,
         activeAsrTarget,
@@ -456,6 +462,7 @@ fun SpeakerScreen(
                 },
                 onDocumentSelected = { documentId ->
                     speakerViewModel.onDocumentSelected(documentId)
+                    expandedPane = SpeakerExpandedPane.CONTENT
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -463,15 +470,17 @@ fun SpeakerScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        if (selectedDocument != null) {
+            Spacer(modifier = Modifier.height(12.dp))
 
-        SpeakerPaneHeader(
-            title = selectedDocument?.displayName ?: stringResource(R.string.speaker_no_document_selected),
-            isExpanded = expandedPane == SpeakerExpandedPane.CONTENT,
-            onClick = { expandedPane = SpeakerExpandedPane.CONTENT }
-        )
+            SpeakerPaneHeader(
+                title = selectedDocument.displayName,
+                isExpanded = expandedPane == SpeakerExpandedPane.CONTENT,
+                onClick = { expandedPane = SpeakerExpandedPane.CONTENT }
+            )
+        }
 
-        if (expandedPane == SpeakerExpandedPane.CONTENT) {
+        if (selectedDocument != null && expandedPane == SpeakerExpandedPane.CONTENT) {
             SpeakerContentScreen(
                 selectedDocument = selectedDocument,
                 isTtsReady = playbackState.isReady,
@@ -487,7 +496,6 @@ fun SpeakerScreen(
                 onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
                 onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
                 onSpeakLine = { lineIndex, line ->
-                    if (selectedDocument == null) return@SpeakerContentScreen
                     when (playbackController.playLine(selectedDocument, lineIndex, line)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -509,7 +517,6 @@ fun SpeakerScreen(
                     }
                 },
                 onPlay = {
-                    if (selectedDocument == null) return@SpeakerContentScreen
                     when (playbackController.playDocument(selectedDocument)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -531,7 +538,7 @@ fun SpeakerScreen(
                     }
                 },
                 onPause = {
-                    playbackController.pause(selectedDocument?.id)
+                    playbackController.pause(selectedDocument.id)
                 },
                 onStop = {
                     playbackController.stop()
