@@ -78,7 +78,6 @@ fun SpeakerScreen(
     val selectedDocument = speakerViewModel.selectedDocument()
     val (playbackController, playbackState) = rememberSpeakerPlaybackController()
     val (speakerAsrController, speakerAsrState) = rememberSpeakerAsrController()
-    val embeddingEngine = remember(context) { MediaPipeSpeakerEmbeddingEngine(context) }
     var importTargetDirectory by remember { mutableStateOf<String?>(null) }
     var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
@@ -86,8 +85,8 @@ fun SpeakerScreen(
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var contentSemanticCandidateLineIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-    val semanticIndexer = remember(embeddingEngine) { SpeakerSemanticIndexer(embeddingEngine) }
-    val semanticSearch = remember(embeddingEngine) { SpeakerSemanticSearch(embeddingEngine) }
+    val semanticIndexer = remember { SpeakerSemanticIndexer() }
+    val semanticSearch = remember { SpeakerSemanticSearch() }
     val semanticConfig = remember { SpeakerSemanticSearchConfig() }
     val orderedDocuments = remember(uiState.directories) {
         uiState.directories.flatMap { it.documents }
@@ -185,12 +184,6 @@ fun SpeakerScreen(
             lifecycleOwner.lifecycle.removeObserver(observer)
             speakerAsrController.stop()
             playbackController.stop()
-        }
-    }
-
-    DisposableEffect(embeddingEngine) {
-        onDispose {
-            embeddingEngine.close()
         }
     }
 
