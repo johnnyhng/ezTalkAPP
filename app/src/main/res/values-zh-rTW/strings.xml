@@ -87,7 +87,8 @@
     <string name="data_collect_auto_flow">自動流程</string>
     <string name="speaker_placeholder_title">演講者模式</string>
     <string name="speaker_placeholder_description">目前使用 app 內部儲存路徑：speech/%1$s/</string>
-    <string name="speaker_overview_title">檔案總覽</string>
+    <string name="speaker_overview_title">演講稿總覽</string>
+    <string name="speaker_content_title">內容</string>
     <string name="speaker_overview_subtitle">上半部顯示一層目錄與 txt 檔案</string>
     <string name="speaker_add_folder">新增資料夾</string>
     <string name="speaker_refresh_folder">重新整理資料夾</string>

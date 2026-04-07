@@ -523,7 +523,7 @@ fun SpeakerScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             SpeakerPaneHeader(
-                title = selectedDocument.displayName,
+                title = stringResource(R.string.speaker_content_title),
                 isExpanded = expandedPane == SpeakerExpandedPane.CONTENT,
                 onClick = { expandedPane = SpeakerExpandedPane.CONTENT }
             )
