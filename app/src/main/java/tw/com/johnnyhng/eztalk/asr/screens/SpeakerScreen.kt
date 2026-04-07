@@ -476,7 +476,7 @@ fun SpeakerScreen(
         }
 
         SpeakerPaneHeader(
-            title = stringResource(R.string.speaker_overview_title),
+            title = stringResource(R.string.speaker_explorer_pane_title),
             isExpanded = expandedPane == SpeakerExpandedPane.EXPLORER,
             onClick = { expandedPane = SpeakerExpandedPane.EXPLORER }
         )

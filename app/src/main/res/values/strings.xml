@@ -87,7 +87,8 @@
     <string name="data_collect_auto_flow">Auto-Flow</string>
     <string name="speaker_placeholder_title">Speaker mode</string>
     <string name="speaker_placeholder_description">Manage speaker folders under app storage: speech/%1$s/</string>
-    <string name="speaker_overview_title">Speech Script Overview</string>
+    <string name="speaker_overview_title">Folder Overview</string>
+    <string name="speaker_explorer_pane_title">Speech Script Overview</string>
     <string name="speaker_content_title">Content</string>
     <string name="speaker_overview_subtitle">Upper pane: one-level folders and txt files</string>
     <string name="speaker_add_folder">Add folder</string>
