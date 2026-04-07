@@ -82,12 +82,17 @@ fun SpeakerScreen(
     var contentAsrText by rememberSaveable { mutableStateOf("") }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
+    val semanticIndexer = remember { SpeakerSemanticIndexer() }
+    val semanticSearch = remember { SpeakerSemanticSearch() }
     val orderedDocuments = remember(uiState.directories) {
         uiState.directories.flatMap { it.documents }
     }
     val selectedDocumentIndex = orderedDocuments.indexOfFirst { it.id == selectedDocument?.id }
     val previousDocument = orderedDocuments.getOrNull(selectedDocumentIndex - 1)
     val nextDocument = orderedDocuments.getOrNull(selectedDocumentIndex + 1)
+    val indexedSelectedDocumentChunks = remember(selectedDocument?.id, selectedDocument?.fullText) {
+        selectedDocument?.let(semanticIndexer::indexDocument).orEmpty()
+    }
 
     val isSelectedDocumentPlaying = playbackController.isPlayingDocument(selectedDocument?.id)
     val isSelectedDocumentPaused = playbackController.isPausedDocument(selectedDocument?.id)
@@ -250,7 +255,29 @@ fun SpeakerScreen(
                 }
             }
 
-            null -> Unit
+            null -> {
+                val result = semanticSearch.search(
+                    queryText = speakerAsrState.finalText,
+                    chunks = indexedSelectedDocumentChunks
+                ) ?: return@LaunchedEffect
+                val matchedLineIndex = resolveMatchedLineIndex(
+                    lines = contentLines,
+                    result = result
+                )
+                val lineText = contentLines.getOrNull(matchedLineIndex).orEmpty()
+                when (playLineWithAsrStop(document, matchedLineIndex, lineText)) {
+                    SpeakerPlaybackResult.NOT_READY -> {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_tts_not_ready),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    SpeakerPlaybackResult.EMPTY_TEXT -> Unit
+                    SpeakerPlaybackResult.STARTED -> Unit
+                }
+            }
         }
     }
 
@@ -628,6 +655,22 @@ fun SpeakerScreen(
             )
         }
     }
+}
+
+private fun resolveMatchedLineIndex(
+    lines: List<String>,
+    result: SpeakerSearchResult
+): Int {
+    val candidateIndices = (result.lineStart..result.lineEnd)
+        .filter { index -> index in lines.indices }
+
+    if (candidateIndices.isEmpty()) return result.lineStart.coerceAtLeast(0)
+
+    return candidateIndices
+        .maxByOrNull { index ->
+            lexicalSimilarity(result.matchedText, lines[index])
+        }
+        ?: candidateIndices.first()
 }
 
 @Composable
