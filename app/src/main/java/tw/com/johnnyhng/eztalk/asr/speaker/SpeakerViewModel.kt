@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 import android.app.Application
 import android.content.Context
@@ -11,6 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.screens.SpeakerDirectoryUi
+import tw.com.johnnyhng.eztalk.asr.screens.SpeakerDocumentUi
 
 internal data class SpeakerScreenUiState(
     val directories: List<SpeakerDirectoryUi> = emptyList(),

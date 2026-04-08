@@ -1,9 +1,10 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import tw.com.johnnyhng.eztalk.asr.screens.SpeakerDocumentUi
 
 class SpeakerSemanticSearchTest {
     @Test

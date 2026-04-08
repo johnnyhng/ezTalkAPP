@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

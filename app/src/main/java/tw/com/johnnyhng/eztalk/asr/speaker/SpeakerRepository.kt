@@ -1,7 +1,9 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 import android.content.Context
 import java.io.File
+import tw.com.johnnyhng.eztalk.asr.screens.SpeakerDirectoryUi
+import tw.com.johnnyhng.eztalk.asr.screens.SpeakerDocumentUi
 
 internal class SpeakerRepository(private val context: Context) {
     fun loadDirectories(

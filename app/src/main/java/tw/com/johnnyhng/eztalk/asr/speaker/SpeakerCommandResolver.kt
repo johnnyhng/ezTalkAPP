@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 internal sealed interface SpeakerContentCommand {
     data object Play : SpeakerContentCommand

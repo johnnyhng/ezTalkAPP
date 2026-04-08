@@ -1,4 +1,6 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.speaker
+
+import tw.com.johnnyhng.eztalk.asr.screens.SpeakerDocumentUi
 
 internal fun interface SpeakerEmbeddingEngine {
     fun embed(text: String): FloatArray

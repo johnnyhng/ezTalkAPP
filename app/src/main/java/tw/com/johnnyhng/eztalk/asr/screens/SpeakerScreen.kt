@@ -52,6 +52,20 @@ import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
+import tw.com.johnnyhng.eztalk.asr.speaker.MultiTextImportResult
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerContentCommand
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSearchResult
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticIndexer
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticSearch
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticSearchConfig
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerViewModel
+import tw.com.johnnyhng.eztalk.asr.speaker.importTextUrisIntoSpeakerFolder
+import tw.com.johnnyhng.eztalk.asr.speaker.lexicalSimilarity
+import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerAsrController
+import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerPlaybackController
+import tw.com.johnnyhng.eztalk.asr.speaker.resolveSpeakerContentCommand
+import tw.com.johnnyhng.eztalk.asr.speaker.sanitizeFolderName
 
 private enum class SpeakerAsrTarget {
     EXPLORER,
