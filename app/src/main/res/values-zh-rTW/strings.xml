@@ -124,6 +124,10 @@
     <string name="speaker_save_failed">儲存 txt 檔案失敗。</string>
     <string name="speaker_semantic_candidate_selected">已定位到第 %1$d 行，請點播放或再說一次確認。</string>
     <string name="speaker_semantic_no_match">找不到足夠接近的內容</string>
+    <string name="speaker_semantic_no_match_llm_preview">找不到足夠接近的 lexical 結果，已準備 LLM fallback 預覽。</string>
+    <string name="speaker_llm_fallback">LLM 備援</string>
+    <string name="speaker_llm_preview_status">LLM 預覽已建立：model=%1$s，candidates=%2$d</string>
+    <string name="speaker_llm_preview_unavailable">LLM 備援已啟用，但目前無法建立預覽 request。</string>
     <string name="local_asr_placeholder">Local ASR 結果會顯示在這裡</string>
     <string name="local_asr_mic">Local ASR 麥克風</string>
 </resources>

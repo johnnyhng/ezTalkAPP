@@ -95,6 +95,8 @@ fun SpeakerScreen(
     var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
     var contentAsrText by rememberSaveable { mutableStateOf("") }
+    var contentSemanticStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    var isLlmFallbackEnabled by rememberSaveable { mutableStateOf(false) }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var contentSemanticCandidateLineIndex by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -301,15 +303,36 @@ fun SpeakerScreen(
                     SpeakerSemanticDecision.NoMatch -> {
                         contentSemanticCandidateLineIndex = null
                         Log.i(TAG, "Speaker semantic no matched content")
+                        val llmRequest = if (isLlmFallbackEnabled) {
+                            semanticModule.buildLlmRequest(
+                                queryText = finalText,
+                                rankedResults = resolution.rankedResults
+                            )
+                        } else {
+                            null
+                        }
+                        contentSemanticStatus = when {
+                            llmRequest != null -> context.getString(
+                                R.string.speaker_llm_preview_status,
+                                llmRequest.model,
+                                resolution.rankedResults.take(5).size
+                            )
+                            isLlmFallbackEnabled -> context.getString(R.string.speaker_llm_preview_unavailable)
+                            else -> null
+                        }
                         Toast.makeText(
                             context,
-                            context.getString(R.string.speaker_semantic_no_match),
+                            context.getString(
+                                if (llmRequest != null) R.string.speaker_semantic_no_match_llm_preview
+                                else R.string.speaker_semantic_no_match
+                            ),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
 
                     is SpeakerSemanticDecision.Candidate -> {
                         contentSemanticCandidateLineIndex = decision.lineIndex
+                        contentSemanticStatus = null
                         val result = decision.result
                         Log.i(
                             TAG,
@@ -327,6 +350,7 @@ fun SpeakerScreen(
 
                     is SpeakerSemanticDecision.AutoPlay -> {
                         val result = decision.result
+                        contentSemanticStatus = null
                         Log.i(
                             TAG,
                             "Speaker semantic autoplay line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
@@ -638,16 +662,25 @@ fun SpeakerScreen(
                 isPaused = isSelectedDocumentPaused,
                 isEditing = uiState.isEditingDocument,
                 localAsrText = contentAsrText,
+                localAsrSecondaryText = contentSemanticStatus,
                 isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecording,
                 localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
                 isLocalAsrEnabled = !isAnyTtsPlaying && !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
+                isLlmFallbackEnabled = isLlmFallbackEnabled,
                 currentPlayingLineIndex = currentPlayingLineIndex,
                 candidateLineIndex = contentSemanticCandidateLineIndex,
                 editingText = uiState.editingText,
                 onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
+                onLlmFallbackToggle = {
+                    isLlmFallbackEnabled = it
+                    if (!it) {
+                        contentSemanticStatus = null
+                    }
+                },
                 onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
                 onSpeakLine = { lineIndex, line ->
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     when (playLineWithAsrStop(selectedDocument, lineIndex, line)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -670,6 +703,7 @@ fun SpeakerScreen(
                 },
                 onPlay = {
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     when (playDocumentWithAsrStop(selectedDocument)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -692,21 +726,25 @@ fun SpeakerScreen(
                 },
                 onPause = {
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     playbackController.pause(selectedDocument.id)
                 },
                 onStop = {
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     playbackController.stop()
                 },
                 onPreviousDocument = {
                     val targetDocument = previousDocument ?: return@SpeakerContentScreen
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
                 onNextDocument = {
                     val targetDocument = nextDocument ?: return@SpeakerContentScreen
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
@@ -714,11 +752,13 @@ fun SpeakerScreen(
                 isNextDocumentEnabled = nextDocument != null,
                 onEdit = {
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     playbackController.stop()
                     speakerViewModel.startEditing()
                 },
                 onSave = {
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     speakerViewModel.saveEditing { saved ->
                         Toast.makeText(
                             context,
@@ -731,6 +771,7 @@ fun SpeakerScreen(
                 },
                 onCancelEdit = {
                     contentSemanticCandidateLineIndex = null
+                    contentSemanticStatus = null
                     speakerViewModel.cancelEditing()
                 },
                 modifier = Modifier
