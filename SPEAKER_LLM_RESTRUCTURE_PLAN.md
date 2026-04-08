@@ -9,16 +9,18 @@ Overall status:
 - Phase 1: Completed
 - Phase 2: Completed
 - Phase 3: Completed
-- Phase 4: Partially Completed
-- Phase 5: Not Started
+- Phase 4: Completed
+- Phase 5: Partially Completed
 
 Repo state snapshot:
 
 - `speaker/` runtime/domain package exists and is in active use.
 - `ui/speaker/` UI package exists and is in active use.
 - `llm/` shared abstraction package exists with base request/response types and a Gemini placeholder provider.
-- `prompt/` package now exists with prompt skeletons, but is not wired into provider execution yet.
-- `Speaker` semantic behavior is still lexical-only.
+- `prompt/` package exists and is already used by `SpeakerSemanticModule.buildLlmRequest(...)`.
+- `SpeakerSemanticModule` exists and acts as the semantic entry point.
+- `Speaker` semantic behavior is still lexical-first, with an LLM fallback preview path but no real provider execution.
+- LLM fallback toggle/status has started moving out of `SpeakerScreen` and into `SpeakerViewModel`.
 - `MediaPipe` runtime has already been removed for 16 KB page-size safety.
 
 Files already present in repo:
@@ -54,8 +56,9 @@ Files already present in repo:
 Files not yet present:
 
 - provider-backed Gemini request execution
-- `SpeakerSemanticModule` integration with `LlmProvider`
+- parsed Gemini response to `SpeakerSemanticDecision` mapping
 - structured Gemini semantic decision mapping in runtime
+- config/settings-backed Gemini credential management
 
 ## Goal
 
@@ -289,7 +292,7 @@ No behavior change.
 
 ### Phase 3
 
-Status: Partially Completed
+Status: Completed
 
 Introduce shared LLM module:
 
@@ -309,7 +312,7 @@ No `Speaker` integration yet.
 
 ### Phase 4
 
-Status: Partially Completed
+Status: Completed
 
 Introduce prompt package:
 
@@ -321,13 +324,13 @@ Current repo state:
 - `prompt/` package exists
 - `PromptTemplate.kt` exists
 - `SpeakerSemanticPromptBuilder.kt` exists
-- prompt output is not yet used by a real provider-backed semantic flow
+- prompt output is already wired into `SpeakerSemanticModule.buildLlmRequest(...)`
 
 Still keep lexical-only runtime behavior.
 
 ### Phase 5
 
-Status: Not Started
+Status: Partially Completed
 
 Add Gemini-backed semantic resolution to `SpeakerSemanticModule`:
 
@@ -338,8 +341,12 @@ Add Gemini-backed semantic resolution to `SpeakerSemanticModule`:
 Current repo state:
 
 - `SpeakerSemanticModule` exists as the semantic entry point
-- lexical-only semantic search remains the active implementation
-- no Gemini runtime/provider integration is wired into `Speaker`
+- `SpeakerSemanticDecision` and `SpeakerSemanticResolution` exist
+- lexical semantic search remains the active implementation
+- `SpeakerSemanticModule` can already build an LLM fallback request from ranked lexical candidates
+- `SpeakerScreen` has an LLM fallback preview toggle and preview status
+- fallback preview state has started moving into `SpeakerViewModel`
+- no real Gemini provider execution or response parsing is wired into `Speaker` yet
 
 ## Gemini-Specific Rules
 
@@ -374,8 +381,9 @@ It also prevents `screens/` from becoming the default dumping ground for:
 Before adding Gemini:
 
 1. Finish Phase 3 by deciding whether `LlmModels.kt` should stay grouped or be split into `LlmRequest.kt` and `LlmResponse.kt`, and add `GeminiLlmProvider.kt`
-2. Finish Phase 4 by wiring prompt output into the future provider path, not just keeping prompt skeleton files on disk
-3. Start Phase 5 by teaching `SpeakerSemanticModule` to optionally call `LlmProvider` after lexical pass while keeping lexical fallback as the default behavior
+2. Finish the remaining Phase 5 runtime work by having `SpeakerSemanticModule` optionally execute `LlmProvider.generate(...)` instead of only building a preview request
+3. Parse provider output back into `SpeakerSemanticDecision` rather than showing only preview status text
 4. Add runtime/config selection for Gemini model and API credentials outside the UI layer
+5. Continue shrinking screen-local orchestration so fallback behavior lives in runtime/viewmodel instead of `SpeakerScreen`
 
 Only after that should Gemini integration begin.
