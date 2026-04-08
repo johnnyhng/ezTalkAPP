@@ -27,5 +27,7 @@ internal data class SpeakerSemanticSearchConfig(
     val chunkLineWindow: Int = 3,
     val semanticWeight: Float = 0.7f,
     val lexicalWeight: Float = 0.3f,
-    val minimumScoreThreshold: Float = 0.35f
+    val minimumScoreThreshold: Float = 0.35f,
+    val candidateScoreThreshold: Float = 0.45f,
+    val autoPlayScoreThreshold: Float = 0.62f
 )

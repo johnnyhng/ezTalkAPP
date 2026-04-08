@@ -78,15 +78,16 @@ fun SpeakerScreen(
     val selectedDocument = speakerViewModel.selectedDocument()
     val (playbackController, playbackState) = rememberSpeakerPlaybackController()
     val (speakerAsrController, speakerAsrState) = rememberSpeakerAsrController()
-    val embeddingEngine = remember(context) { MediaPipeSpeakerEmbeddingEngine(context) }
     var importTargetDirectory by remember { mutableStateOf<String?>(null) }
     var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
     var contentAsrText by rememberSaveable { mutableStateOf("") }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
-    val semanticIndexer = remember(embeddingEngine) { SpeakerSemanticIndexer(embeddingEngine) }
-    val semanticSearch = remember(embeddingEngine) { SpeakerSemanticSearch(embeddingEngine) }
+    var contentSemanticCandidateLineIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    val semanticIndexer = remember { SpeakerSemanticIndexer() }
+    val semanticSearch = remember { SpeakerSemanticSearch() }
+    val semanticConfig = remember { SpeakerSemanticSearchConfig() }
     val orderedDocuments = remember(uiState.directories) {
         uiState.directories.flatMap { it.documents }
     }
@@ -162,6 +163,7 @@ fun SpeakerScreen(
         speakerAsrController.stop()
         playbackController.stop()
         contentAsrText = ""
+        contentSemanticCandidateLineIndex = null
     }
 
     LaunchedEffect(selectedDocument?.id, expandedPane) {
@@ -185,12 +187,6 @@ fun SpeakerScreen(
         }
     }
 
-    DisposableEffect(embeddingEngine) {
-        onDispose {
-            embeddingEngine.close()
-        }
-    }
-
     LaunchedEffect(
         speakerAsrState.finalTextVersion,
         activeAsrTarget,
@@ -211,6 +207,7 @@ fun SpeakerScreen(
 
         when (val command = resolveSpeakerContentCommand(finalText, contentLines)) {
             SpeakerContentCommand.Play -> {
+                contentSemanticCandidateLineIndex = null
                 Log.i(TAG, "Speaker content command matched: Play")
                 when (playDocumentWithAsrStop(document)) {
                     SpeakerPlaybackResult.NOT_READY -> {
@@ -234,6 +231,7 @@ fun SpeakerScreen(
             }
 
             SpeakerContentCommand.Pause -> {
+                contentSemanticCandidateLineIndex = null
                 Log.i(TAG, "Speaker content command matched: Pause")
                 if (isSelectedDocumentPlaying) {
                     playbackController.pause(document.id)
@@ -241,6 +239,7 @@ fun SpeakerScreen(
             }
 
             SpeakerContentCommand.Stop -> {
+                contentSemanticCandidateLineIndex = null
                 Log.i(TAG, "Speaker content command matched: Stop")
                 if (isSelectedDocumentPlaying || isSelectedDocumentPaused) {
                     playbackController.stop()
@@ -248,6 +247,7 @@ fun SpeakerScreen(
             }
 
             is SpeakerContentCommand.PlayLine -> {
+                contentSemanticCandidateLineIndex = null
                 Log.i(TAG, "Speaker content command matched: PlayLine(${command.lineIndex})")
                 val lineText = contentLines.getOrNull(command.lineIndex).orEmpty()
                 when (playLineWithAsrStop(document, command.lineIndex, lineText)) {
@@ -286,9 +286,15 @@ fun SpeakerScreen(
                     "Speaker semantic top3 cosine=${rankedResults.take(3).formatTop3CosineForLog()}"
                 )
                 val result = rankedResults
-                    .firstOrNull { it.finalScore >= SpeakerSemanticSearchConfig().minimumScoreThreshold }
+                    .firstOrNull { it.finalScore >= semanticConfig.minimumScoreThreshold }
                 if (result == null) {
+                    contentSemanticCandidateLineIndex = null
                     Log.i(TAG, "Speaker semantic no matched content")
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_semantic_no_match),
+                        Toast.LENGTH_SHORT
+                    ).show()
                     return@LaunchedEffect
                 }
                 Log.i(
@@ -299,6 +305,22 @@ fun SpeakerScreen(
                     lines = contentLines,
                     result = result
                 )
+                contentSemanticCandidateLineIndex = matchedLineIndex
+                if (result.finalScore < semanticConfig.autoPlayScoreThreshold) {
+                    Log.i(
+                        TAG,
+                        "Speaker semantic candidate only line=$matchedLineIndex score=${"%.4f".format(result.finalScore)}"
+                    )
+                    Toast.makeText(
+                        context,
+                        context.getString(
+                            R.string.speaker_semantic_candidate_selected,
+                            matchedLineIndex + 1
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@LaunchedEffect
+                }
                 val lineText = contentLines.getOrNull(matchedLineIndex).orEmpty()
                 when (playLineWithAsrStop(document, matchedLineIndex, lineText)) {
                     SpeakerPlaybackResult.NOT_READY -> {
@@ -310,7 +332,9 @@ fun SpeakerScreen(
                     }
 
                     SpeakerPlaybackResult.EMPTY_TEXT -> Unit
-                    SpeakerPlaybackResult.STARTED -> Unit
+                    SpeakerPlaybackResult.STARTED -> {
+                        contentSemanticCandidateLineIndex = null
+                    }
                 }
             }
         }
@@ -603,10 +627,12 @@ fun SpeakerScreen(
                 localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
                 isLocalAsrEnabled = !isAnyTtsPlaying && !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
                 currentPlayingLineIndex = currentPlayingLineIndex,
+                candidateLineIndex = contentSemanticCandidateLineIndex,
                 editingText = uiState.editingText,
                 onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
                 onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
                 onSpeakLine = { lineIndex, line ->
+                    contentSemanticCandidateLineIndex = null
                     when (playLineWithAsrStop(selectedDocument, lineIndex, line)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -628,6 +654,7 @@ fun SpeakerScreen(
                     }
                 },
                 onPlay = {
+                    contentSemanticCandidateLineIndex = null
                     when (playDocumentWithAsrStop(selectedDocument)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -649,28 +676,34 @@ fun SpeakerScreen(
                     }
                 },
                 onPause = {
+                    contentSemanticCandidateLineIndex = null
                     playbackController.pause(selectedDocument.id)
                 },
                 onStop = {
+                    contentSemanticCandidateLineIndex = null
                     playbackController.stop()
                 },
                 onPreviousDocument = {
                     val targetDocument = previousDocument ?: return@SpeakerContentScreen
+                    contentSemanticCandidateLineIndex = null
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
                 onNextDocument = {
                     val targetDocument = nextDocument ?: return@SpeakerContentScreen
+                    contentSemanticCandidateLineIndex = null
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
                 isPreviousDocumentEnabled = previousDocument != null,
                 isNextDocumentEnabled = nextDocument != null,
                 onEdit = {
+                    contentSemanticCandidateLineIndex = null
                     playbackController.stop()
                     speakerViewModel.startEditing()
                 },
                 onSave = {
+                    contentSemanticCandidateLineIndex = null
                     speakerViewModel.saveEditing { saved ->
                         Toast.makeText(
                             context,
@@ -682,6 +715,7 @@ fun SpeakerScreen(
                     }
                 },
                 onCancelEdit = {
+                    contentSemanticCandidateLineIndex = null
                     speakerViewModel.cancelEditing()
                 },
                 modifier = Modifier
