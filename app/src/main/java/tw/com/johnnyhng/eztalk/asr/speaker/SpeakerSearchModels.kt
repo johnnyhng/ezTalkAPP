@@ -31,3 +31,27 @@ internal data class SpeakerSemanticSearchConfig(
     val candidateScoreThreshold: Float = 0.45f,
     val autoPlayScoreThreshold: Float = 0.62f
 )
+
+internal sealed interface SpeakerSemanticDecision {
+    data class AutoPlay(
+        val lineIndex: Int,
+        val result: SpeakerSearchResult
+    ) : SpeakerSemanticDecision
+
+    data class Candidate(
+        val lineIndex: Int,
+        val result: SpeakerSearchResult
+    ) : SpeakerSemanticDecision
+
+    data class Ambiguous(
+        val candidates: List<SpeakerSearchResult>
+    ) : SpeakerSemanticDecision
+
+    data object NoMatch : SpeakerSemanticDecision
+}
+
+internal data class SpeakerSemanticResolution(
+    val query: SpeakerSemanticQuery,
+    val rankedResults: List<SpeakerSearchResult>,
+    val decision: SpeakerSemanticDecision
+)

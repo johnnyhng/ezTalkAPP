@@ -54,14 +54,13 @@ import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.MultiTextImportResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerContentCommand
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticDecision
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticModule
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSearchResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticIndexer
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticSearch
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticSearchConfig
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.importTextUrisIntoSpeakerFolder
-import tw.com.johnnyhng.eztalk.asr.speaker.lexicalSimilarity
 import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerAsrController
 import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerPlaybackController
 import tw.com.johnnyhng.eztalk.asr.speaker.resolveSpeakerContentCommand
@@ -100,8 +99,7 @@ fun SpeakerScreen(
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var contentSemanticCandidateLineIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
-    val semanticSearch = remember { SpeakerSemanticSearch() }
-    val semanticConfig = remember { SpeakerSemanticSearchConfig() }
+    val semanticModule = remember { SpeakerSemanticModule() }
     val orderedDocuments = remember(uiState.directories) {
         uiState.directories.flatMap { it.documents }
     }
@@ -286,69 +284,72 @@ fun SpeakerScreen(
             }
 
             null -> {
-                val query = semanticSearch.buildQuery(finalText)
-                Log.i(
-                    TAG,
-                    "Speaker semantic query embedding length=${query.embedding.size} preview=${query.embedding.previewForLog()}"
-                )
-                val rankedResults = semanticSearch.rank(
-                    query = query,
+                val resolution = semanticModule.resolve(
+                    queryText = finalText,
+                    lines = contentLines,
                     chunks = indexedSelectedDocumentChunks
                 )
                 Log.i(
                     TAG,
-                    "Speaker semantic top3 cosine=${rankedResults.take(3).formatTop3CosineForLog()}"
+                    "Speaker semantic query embedding length=${resolution.query.embedding.size} preview=${resolution.query.embedding.previewForLog()}"
                 )
-                val result = rankedResults
-                    .firstOrNull { it.finalScore >= semanticConfig.minimumScoreThreshold }
-                if (result == null) {
-                    contentSemanticCandidateLineIndex = null
-                    Log.i(TAG, "Speaker semantic no matched content")
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_semantic_no_match),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@LaunchedEffect
-                }
                 Log.i(
                     TAG,
-                    "Speaker semantic matched content score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
+                    "Speaker semantic top3 cosine=${resolution.rankedResults.take(3).formatTop3CosineForLog()}"
                 )
-                val matchedLineIndex = resolveMatchedLineIndex(
-                    lines = contentLines,
-                    result = result
-                )
-                contentSemanticCandidateLineIndex = matchedLineIndex
-                if (result.finalScore < semanticConfig.autoPlayScoreThreshold) {
-                    Log.i(
-                        TAG,
-                        "Speaker semantic candidate only line=$matchedLineIndex score=${"%.4f".format(result.finalScore)}"
-                    )
-                    Toast.makeText(
-                        context,
-                        context.getString(
-                            R.string.speaker_semantic_candidate_selected,
-                            matchedLineIndex + 1
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@LaunchedEffect
-                }
-                val lineText = contentLines.getOrNull(matchedLineIndex).orEmpty()
-                when (playLineWithAsrStop(document, matchedLineIndex, lineText)) {
-                    SpeakerPlaybackResult.NOT_READY -> {
+                when (val decision = resolution.decision) {
+                    SpeakerSemanticDecision.NoMatch -> {
+                        contentSemanticCandidateLineIndex = null
+                        Log.i(TAG, "Speaker semantic no matched content")
                         Toast.makeText(
                             context,
-                            context.getString(R.string.speaker_tts_not_ready),
+                            context.getString(R.string.speaker_semantic_no_match),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
 
-                    SpeakerPlaybackResult.EMPTY_TEXT -> Unit
-                    SpeakerPlaybackResult.STARTED -> {
-                        contentSemanticCandidateLineIndex = null
+                    is SpeakerSemanticDecision.Candidate -> {
+                        contentSemanticCandidateLineIndex = decision.lineIndex
+                        val result = decision.result
+                        Log.i(
+                            TAG,
+                            "Speaker semantic candidate line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
+                        )
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                R.string.speaker_semantic_candidate_selected,
+                                decision.lineIndex + 1
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
+
+                    is SpeakerSemanticDecision.AutoPlay -> {
+                        val result = decision.result
+                        Log.i(
+                            TAG,
+                            "Speaker semantic autoplay line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
+                        )
+                        contentSemanticCandidateLineIndex = decision.lineIndex
+                        val lineText = contentLines.getOrNull(decision.lineIndex).orEmpty()
+                        when (playLineWithAsrStop(document, decision.lineIndex, lineText)) {
+                            SpeakerPlaybackResult.NOT_READY -> {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.speaker_tts_not_ready),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+
+                            SpeakerPlaybackResult.EMPTY_TEXT -> Unit
+                            SpeakerPlaybackResult.STARTED -> {
+                                contentSemanticCandidateLineIndex = null
+                            }
+                        }
+                    }
+
+                    is SpeakerSemanticDecision.Ambiguous -> Unit
                 }
             }
         }
@@ -738,22 +739,6 @@ fun SpeakerScreen(
             )
         }
     }
-}
-
-private fun resolveMatchedLineIndex(
-    lines: List<String>,
-    result: SpeakerSearchResult
-): Int {
-    val candidateIndices = (result.lineStart..result.lineEnd)
-        .filter { index -> index in lines.indices }
-
-    if (candidateIndices.isEmpty()) return result.lineStart.coerceAtLeast(0)
-
-    return candidateIndices
-        .maxByOrNull { index ->
-            lexicalSimilarity(result.matchedText, lines[index])
-        }
-        ?: candidateIndices.first()
 }
 
 private fun FloatArray.previewForLog(maxSize: Int = 8): String {
