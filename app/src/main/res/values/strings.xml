@@ -124,8 +124,11 @@
     <string name="speaker_save_failed">Failed to save txt file.</string>
     <string name="speaker_semantic_candidate_selected">Located line %1$d. Tap play or speak again to confirm.</string>
     <string name="speaker_semantic_no_match">No close content match found</string>
+    <string name="speaker_semantic_no_match_llm_applied">No lexical match found. LLM fallback returned a structured decision.</string>
     <string name="speaker_semantic_no_match_llm_preview">No close lexical match found. LLM fallback preview prepared.</string>
     <string name="speaker_llm_fallback">LLM Fallback</string>
+    <string name="speaker_llm_fallback_success">LLM fallback executed: %1$s</string>
+    <string name="speaker_llm_fallback_failed">LLM fallback failed: %1$s</string>
     <string name="speaker_llm_preview_status">LLM preview ready: model=%1$s, candidates=%2$d</string>
     <string name="speaker_llm_preview_unavailable">LLM fallback enabled, but no preview request could be built.</string>
     <string name="local_asr_placeholder">Local ASR result will appear here</string>

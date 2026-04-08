@@ -51,6 +51,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.llm.GeminiLlmProvider
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.MultiTextImportResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerContentCommand
@@ -99,7 +100,7 @@ fun SpeakerScreen(
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var contentSemanticCandidateLineIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
-    val semanticModule = remember { SpeakerSemanticModule() }
+    val semanticModule = remember { SpeakerSemanticModule(llmProvider = GeminiLlmProvider()) }
     val orderedDocuments = remember(uiState.directories) {
         uiState.directories.flatMap { it.documents }
     }
@@ -302,30 +303,46 @@ fun SpeakerScreen(
                     SpeakerSemanticDecision.NoMatch -> {
                         contentSemanticCandidateLineIndex = null
                         Log.i(TAG, "Speaker semantic no matched content")
-                        val llmRequest = if (uiState.isLlmFallbackEnabled) {
-                            semanticModule.buildLlmRequest(
+                        val llmRequest = semanticModule.buildLlmRequest(
+                            queryText = finalText,
+                            rankedResults = resolution.rankedResults
+                        )
+                        val llmFallbackResult = if (uiState.isLlmFallbackEnabled) {
+                            semanticModule.tryLlmFallback(
                                 queryText = finalText,
-                                rankedResults = resolution.rankedResults
+                                rankedResults = resolution.rankedResults,
+                                lines = contentLines
                             )
                         } else {
                             null
                         }
                         speakerViewModel.updateContentSemanticStatus(
                             when {
-                            llmRequest != null -> context.getString(
-                                R.string.speaker_llm_preview_status,
-                                llmRequest.model,
-                                resolution.rankedResults.take(5).size
-                            )
-                            uiState.isLlmFallbackEnabled -> context.getString(R.string.speaker_llm_preview_unavailable)
-                            else -> null
-                        }
+                                llmFallbackResult?.isSuccess == true -> context.getString(
+                                    R.string.speaker_llm_fallback_success,
+                                    llmFallbackResult.getOrThrow().javaClass.simpleName
+                                )
+                                llmFallbackResult?.isFailure == true -> context.getString(
+                                    R.string.speaker_llm_fallback_failed,
+                                    llmFallbackResult.exceptionOrNull()?.message ?: context.getString(R.string.speaker_llm_preview_unavailable)
+                                )
+                                llmRequest != null -> context.getString(
+                                    R.string.speaker_llm_preview_status,
+                                    llmRequest.model,
+                                    resolution.rankedResults.take(5).size
+                                )
+                                uiState.isLlmFallbackEnabled -> context.getString(R.string.speaker_llm_preview_unavailable)
+                                else -> null
+                            }
                         )
                         Toast.makeText(
                             context,
                             context.getString(
-                                if (llmRequest != null) R.string.speaker_semantic_no_match_llm_preview
-                                else R.string.speaker_semantic_no_match
+                                when {
+                                    llmFallbackResult?.isSuccess == true -> R.string.speaker_semantic_no_match_llm_applied
+                                    llmRequest != null -> R.string.speaker_semantic_no_match_llm_preview
+                                    else -> R.string.speaker_semantic_no_match
+                                }
                             ),
                             Toast.LENGTH_SHORT
                         ).show()
