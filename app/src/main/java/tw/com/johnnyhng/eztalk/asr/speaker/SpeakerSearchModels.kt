@@ -55,3 +55,10 @@ internal data class SpeakerSemanticResolution(
     val rankedResults: List<SpeakerSearchResult>,
     val decision: SpeakerSemanticDecision
 )
+
+internal data class SpeakerLlmSemanticPayload(
+    val decision: String,
+    val lineStart: Int? = null,
+    val lineEnd: Int? = null,
+    val reason: String? = null
+)
