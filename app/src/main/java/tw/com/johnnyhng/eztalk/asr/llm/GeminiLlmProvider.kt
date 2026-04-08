@@ -11,7 +11,7 @@ internal data class GeminiProviderConfig(
 internal class GeminiLlmProvider(
     private val config: GeminiProviderConfig = GeminiProviderConfig(),
     private val accessTokenProvider: GeminiAccessTokenProvider? = null,
-    private val apiClient: GeminiApiClient = GeminiApiClient(config.endpoint)
+    private val apiClient: GeminiApiClient = DefaultGeminiApiClient(config.endpoint)
 ) : LlmProvider {
     override val providerName: String = "gemini"
 

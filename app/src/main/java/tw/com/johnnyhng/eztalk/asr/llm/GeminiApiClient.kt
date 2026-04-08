@@ -14,10 +14,18 @@ internal data class GeminiApiResult(
     val responseBody: String
 )
 
-internal class GeminiApiClient(
-    private val endpoint: String
-) {
+internal interface GeminiApiClient {
     fun generateContent(
+        model: String,
+        accessToken: String,
+        request: LlmRequest
+    ): Result<GeminiApiResult>
+}
+
+internal class DefaultGeminiApiClient(
+    private val endpoint: String
+) : GeminiApiClient {
+    override fun generateContent(
         model: String,
         accessToken: String,
         request: LlmRequest
