@@ -1,5 +1,7 @@
 package tw.com.johnnyhng.eztalk.asr.speaker
 
+import org.json.JSONException
+import org.json.JSONObject
 import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LlmRequest
 import tw.com.johnnyhng.eztalk.asr.llm.LlmResponse
@@ -155,7 +157,7 @@ internal class SpeakerSemanticModule(
     ): SpeakerSearchResult? {
         val start = payload.lineStart
         val end = payload.lineEnd
-        if (start == null || end == null) return rankedResults.firstOrNull()
+        if (start == null || end == null) return null
 
         return rankedResults.firstOrNull { result ->
             result.lineStart == start && result.lineEnd == end
@@ -165,31 +167,49 @@ internal class SpeakerSemanticModule(
     }
 
     private fun parseSemanticPayload(rawText: String): SpeakerLlmSemanticPayload? {
-        val normalized = rawText.trim()
-        if (normalized.isBlank()) return null
-
-        fun extractString(key: String): String? {
-            val pattern = """"$key"\s*:\s*"([^"]*)"""".toRegex()
-            return pattern.find(normalized)?.groupValues?.getOrNull(1)
-        }
-
-        fun extractInt(key: String): Int? {
-            val pattern = """"$key"\s*:\s*(-?\d+)""".toRegex()
-            return pattern.find(normalized)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        }
-
-        val decision = extractString("decision")
-            ?: normalized.lowercase().takeIf {
-                it == "match" || it == "candidate" || it == "autoplay" || it == "play" || it == "ambiguous" || it == "no_match"
-            }
+        val json = parseSemanticJson(rawText) ?: return null
+        val decision = json.optString("decision")
+            .trim()
+            .lowercase()
+            .takeIf { it in allowedDecisions }
             ?: return null
 
         return SpeakerLlmSemanticPayload(
             decision = decision,
-            lineStart = extractInt("lineStart"),
-            lineEnd = extractInt("lineEnd"),
-            reason = extractString("reason")
+            lineStart = json.optNullableInt("lineStart"),
+            lineEnd = json.optNullableInt("lineEnd"),
+            reason = json.optString("reason").takeIf { it.isNotBlank() }
         )
+    }
+
+    private fun parseSemanticJson(rawText: String): JSONObject? {
+        val normalized = rawText.trim()
+        if (normalized.isBlank()) return null
+
+        val candidates = buildList {
+            add(normalized)
+            extractJsonFromCodeFence(normalized)?.let(::add)
+        }.distinct()
+
+        for (candidate in candidates) {
+            try {
+                return JSONObject(candidate)
+            } catch (_: JSONException) {
+                // Try the next normalized candidate.
+            }
+        }
+
+        return null
+    }
+
+    private fun extractJsonFromCodeFence(text: String): String? {
+        val fenced = """```(?:json)?\s*(\{.*})\s*```""".toRegex(setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        return fenced.find(text)?.groupValues?.getOrNull(1)?.trim()
+    }
+
+    private fun JSONObject.optNullableInt(key: String): Int? {
+        if (!has(key) || isNull(key)) return null
+        return optInt(key)
     }
 
     private fun resolveMatchedLineIndex(
@@ -206,5 +226,16 @@ internal class SpeakerSemanticModule(
                 lexicalSimilarity(result.matchedText, lines[index])
             }
             ?: candidateIndices.first()
+    }
+
+    private companion object {
+        val allowedDecisions = setOf(
+            "match",
+            "candidate",
+            "autoplay",
+            "play",
+            "ambiguous",
+            "no_match"
+        )
     }
 }
