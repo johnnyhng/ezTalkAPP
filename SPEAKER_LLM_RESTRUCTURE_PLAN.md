@@ -1,5 +1,56 @@
 # Speaker LLM Restructure Plan
 
+## Current Status
+
+Last updated: 2026-04-08
+
+Overall status:
+
+- Phase 1: Completed
+- Phase 2: Completed
+- Phase 3: Partially Completed
+- Phase 4: Not Started
+- Phase 5: Not Started
+
+Repo state snapshot:
+
+- `speaker/` runtime/domain package exists and is in active use.
+- `ui/speaker/` UI package exists and is in active use.
+- `llm/` shared abstraction package exists, but only the base abstraction/models are present.
+- `prompt/` package does not exist yet.
+- `Speaker` semantic behavior is still lexical-only.
+- `MediaPipe` runtime has already been removed for 16 KB page-size safety.
+
+Files already present in repo:
+
+- `speaker/`
+  - `SpeakerViewModel.kt`
+  - `SpeakerRepository.kt`
+  - `SpeakerPlaybackController.kt`
+  - `SpeakerAsrController.kt`
+  - `SpeakerCommandResolver.kt`
+  - `SpeakerSemanticIndexer.kt`
+  - `SpeakerSemanticSearch.kt`
+  - `SpeakerSearchModels.kt`
+  - `SpeakerImportManager.kt`
+- `ui/speaker/`
+  - `SpeakerScreen.kt`
+  - `SpeechFileExplorer.kt`
+  - `SpeakerContentScreen.kt`
+  - `LocalASRWidget.kt`
+  - `SpeakerUiModels.kt`
+- `llm/`
+  - `LlmProvider.kt`
+  - `LlmModels.kt`
+  - `LlmError.kt`
+
+Files not yet present:
+
+- `speaker/SpeakerSemanticModule.kt`
+- `llm/GeminiLlmProvider.kt`
+- `prompt/PromptTemplate.kt`
+- `prompt/SpeakerSemanticPromptBuilder.kt`
+
 ## Goal
 
 Restructure `Speaker` semantic search and future Gemini integration so that:
@@ -200,6 +251,8 @@ Target flow:
 
 ### Phase 1
 
+Status: Completed
+
 Move existing `Speaker` runtime logic out of `screens/`:
 
 - move `SpeakerViewModel.kt`
@@ -216,6 +269,8 @@ No behavior change.
 
 ### Phase 2
 
+Status: Completed
+
 Move `Speaker` UI files into `ui/speaker/`:
 
 - move `SpeakerScreen.kt`
@@ -228,30 +283,54 @@ No behavior change.
 
 ### Phase 3
 
+Status: Partially Completed
+
 Introduce shared LLM module:
 
 - add `llm/` package
 - define `LlmProvider`
 - add `GeminiLlmProvider`
 
+Current repo state:
+
+- `llm/` package exists
+- `LlmProvider` exists
+- shared models/errors are currently grouped in `LlmModels.kt` and `LlmError.kt`
+- `GeminiLlmProvider.kt` does not exist yet
+
 No `Speaker` integration yet.
 
 ### Phase 4
+
+Status: Not Started
 
 Introduce prompt package:
 
 - add `prompt/`
 - add `SpeakerSemanticPromptBuilder`
 
+Current repo state:
+
+- `prompt/` package does not exist yet
+- no prompt builder or prompt template files exist yet
+
 Still keep lexical-only runtime behavior.
 
 ### Phase 5
+
+Status: Not Started
 
 Add Gemini-backed semantic resolution to `SpeakerSemanticModule`:
 
 - call shared `LlmProvider`
 - use `SpeakerSemanticPromptBuilder`
 - return structured `SpeakerSemanticDecision`
+
+Current repo state:
+
+- `SpeakerSemanticModule` does not exist yet
+- lexical-only semantic search remains the active implementation
+- no Gemini runtime/provider integration is wired into `Speaker`
 
 ## Gemini-Specific Rules
 
@@ -285,8 +364,9 @@ It also prevents `screens/` from becoming the default dumping ground for:
 
 Before adding Gemini:
 
-1. Finish moving `Speaker` runtime files out of `screens/`
-2. Create `llm/` and `prompt/` packages
-3. Keep lexical fallback working during the move
+1. Finish Phase 3 by deciding whether `LlmModels.kt` should stay grouped or be split into `LlmRequest.kt` and `LlmResponse.kt`, and add `GeminiLlmProvider.kt`
+2. Implement Phase 4 by creating the `prompt/` package and `SpeakerSemanticPromptBuilder`
+3. Introduce `SpeakerSemanticModule` as the single semantic entry point while keeping lexical fallback as the default behavior
+4. Only after that, start Phase 5 Gemini integration
 
 Only after that should Gemini integration begin.
