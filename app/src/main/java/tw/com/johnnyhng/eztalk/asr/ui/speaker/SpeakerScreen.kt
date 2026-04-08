@@ -334,6 +334,43 @@ fun SpeakerScreen(
                                 else -> null
                             }
                         )
+                        val llmDecision = llmFallbackResult?.getOrNull()
+                        when (llmDecision) {
+                            is SpeakerSemanticDecision.Candidate -> {
+                                contentSemanticCandidateLineIndex = llmDecision.lineIndex
+                                Toast.makeText(
+                                    context,
+                                    context.getString(
+                                        R.string.speaker_semantic_candidate_selected,
+                                        llmDecision.lineIndex + 1
+                                    ),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@LaunchedEffect
+                            }
+
+                            is SpeakerSemanticDecision.AutoPlay -> {
+                                contentSemanticCandidateLineIndex = llmDecision.lineIndex
+                                val lineText = contentLines.getOrNull(llmDecision.lineIndex).orEmpty()
+                                when (playLineWithAsrStop(document, llmDecision.lineIndex, lineText)) {
+                                    SpeakerPlaybackResult.NOT_READY -> {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.speaker_tts_not_ready),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+
+                                    SpeakerPlaybackResult.EMPTY_TEXT -> Unit
+                                    SpeakerPlaybackResult.STARTED -> {
+                                        contentSemanticCandidateLineIndex = null
+                                    }
+                                }
+                                return@LaunchedEffect
+                            }
+
+                            else -> Unit
+                        }
                         Toast.makeText(
                             context,
                             context.getString(
