@@ -39,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,12 +51,22 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import tw.com.johnnyhng.eztalk.asr.NavRoutes
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
+import tw.com.johnnyhng.eztalk.asr.llm.GoogleAuthGeminiAccessTokenProvider
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.widgets.RemoteModelsManager
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+
+private sealed interface GeminiAuthStatus {
+    data object NotSignedIn : GeminiAuthStatus
+    data object Checking : GeminiAuthStatus
+    data object Ready : GeminiAuthStatus
+    data class Error(val message: String) : GeminiAuthStatus
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,8 +74,10 @@ fun SettingsScreen(
     homeViewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val userSettings by homeViewModel.userSettings.collectAsState()
     val showRemoteModelsDialog by homeViewModel.showRemoteModelsDialog.collectAsState()
+    val scope = rememberCoroutineScope()
 
     val models = homeViewModel.models
     val selectedModel = homeViewModel.selectedModel
@@ -86,8 +99,32 @@ fun SettingsScreen(
         ?: context.getString(R.string.home)
 
     val signInManager = remember { GoogleSignInManager() }
+    val tokenProvider = remember(appContext) { GoogleAuthGeminiAccessTokenProvider(appContext) }
     val googleSignInClient = remember {
         signInManager.getSignInClient(context)
+    }
+    var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
+    var geminiAuthStatus by remember { mutableStateOf<GeminiAuthStatus>(GeminiAuthStatus.NotSignedIn) }
+
+    fun refreshGeminiAuthStatus(session: GoogleAccountSession?) {
+        if (session == null) {
+            geminiAuthStatus = GeminiAuthStatus.NotSignedIn
+            return
+        }
+
+        geminiAuthStatus = GeminiAuthStatus.Checking
+        scope.launch {
+            tokenProvider.fetchToken()
+                .onSuccess {
+                    geminiAuthStatus = GeminiAuthStatus.Ready
+                }
+                .onFailure { error ->
+                    Log.w(TAG, "Gemini OAuth token check failed", error)
+                    geminiAuthStatus = GeminiAuthStatus.Error(
+                        error.message ?: "Gemini OAuth token check failed"
+                    )
+                }
+        }
     }
 
     val launcher = rememberLauncherForActivityResult(
@@ -96,7 +133,9 @@ fun SettingsScreen(
         if (result.resultCode == Activity.RESULT_OK) {
             signInManager.getSessionFromIntent(result.data)
                 .onSuccess { session ->
+                    googleSession = session
                     homeViewModel.updateUserId(session.email)
+                    refreshGeminiAuthStatus(session)
                     Toast.makeText(
                         context,
                         "Signed in as ${session.email}",
@@ -111,11 +150,12 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(signInManager, context) {
-        signInManager.getCurrentSession(context)?.let { session ->
-            if (userSettings.userId != session.email) {
-                homeViewModel.updateUserId(session.email)
-            }
+        val session = signInManager.getCurrentSession(context)
+        googleSession = session
+        if (session != null && userSettings.userId != session.email) {
+            homeViewModel.updateUserId(session.email)
         }
+        refreshGeminiAuthStatus(session)
     }
 
     LaunchedEffect(Unit) {
@@ -139,8 +179,25 @@ fun SettingsScreen(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // User ID setting
+        Text(
+            text = stringResource(
+                R.string.google_account_status,
+                googleSession?.email ?: stringResource(R.string.google_account_not_signed_in)
+            )
+        )
         Text(text = stringResource(R.string.current_user_id, userSettings.userId))
+        Text(
+            text = when (val status = geminiAuthStatus) {
+                GeminiAuthStatus.NotSignedIn -> stringResource(R.string.gemini_oauth_status_not_signed_in)
+                GeminiAuthStatus.Checking -> stringResource(R.string.gemini_oauth_status_checking)
+                GeminiAuthStatus.Ready -> stringResource(R.string.gemini_oauth_status_ready)
+                is GeminiAuthStatus.Error -> stringResource(
+                    R.string.gemini_oauth_status_error,
+                    status.message
+                )
+            },
+            style = MaterialTheme.typography.bodyMedium
+        )
         Row {
             Button(onClick = { launcher.launch(googleSignInClient.signInIntent) }, enabled = !isDownloading) {
                 Text(text = stringResource(R.string.sign_in_with_google))
@@ -150,6 +207,8 @@ fun SettingsScreen(
                 signInManager.signOut(context) { result ->
                     result
                         .onSuccess {
+                            googleSession = null
+                            geminiAuthStatus = GeminiAuthStatus.NotSignedIn
                             homeViewModel.updateUserId("user@example.com")
                             Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
                         }
@@ -161,6 +220,12 @@ fun SettingsScreen(
             }, enabled = !isDownloading) {
                 Text(stringResource(R.string.sign_out))
             }
+        }
+        Button(
+            onClick = { refreshGeminiAuthStatus(googleSession) },
+            enabled = !isDownloading && googleSession != null && geminiAuthStatus != GeminiAuthStatus.Checking
+        ) {
+            Text(stringResource(R.string.check_gemini_access))
         }
 
         OutlinedTextField(

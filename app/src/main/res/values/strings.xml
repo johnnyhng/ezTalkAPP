@@ -8,8 +8,15 @@
     <string name="clear">Clear</string>
     <string name="language">Language</string>
     <string name="current_user_id">Current User ID: %1$s</string>
+    <string name="google_account_status">Google account: %1$s</string>
+    <string name="google_account_not_signed_in">Not signed in</string>
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="sign_out">Sign Out</string>
+    <string name="check_gemini_access">Check Gemini Access</string>
+    <string name="gemini_oauth_status_not_signed_in">Gemini OAuth: Not signed in</string>
+    <string name="gemini_oauth_status_checking">Gemini OAuth: Checking access token…</string>
+    <string name="gemini_oauth_status_ready">Gemini OAuth: Ready</string>
+    <string name="gemini_oauth_status_error">Gemini OAuth: %1$s</string>
     <string name="asr_model">ASR Model</string>
     <string name="asr_loading_title">ASR loading</string>
     <string name="asr_loading_message">Loading ASR model, please wait.</string>
