@@ -47,12 +47,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
 import tw.com.johnnyhng.eztalk.asr.NavRoutes
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.widgets.RemoteModelsManager
@@ -87,29 +85,35 @@ fun SettingsScreen(
         ?.second
         ?: context.getString(R.string.home)
 
-    val gso = remember {
-        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .build()
-    }
+    val signInManager = remember { GoogleSignInManager() }
     val googleSignInClient = remember {
-        GoogleSignIn.getClient(context, gso)
+        signInManager.getSignInClient(context)
     }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            try {
-                val account = task.getResult(ApiException::class.java)
-                account?.email?.let {
-                    homeViewModel.updateUserId(it)
-                    Toast.makeText(context, "Signed in as $it", Toast.LENGTH_SHORT).show()
+            signInManager.getSessionFromIntent(result.data)
+                .onSuccess { session ->
+                    homeViewModel.updateUserId(session.email)
+                    Toast.makeText(
+                        context,
+                        "Signed in as ${session.email}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
-            } catch (e: ApiException) {
-                Log.w(TAG, "Google sign in failed", e)
-                Toast.makeText(context, "Google sign in failed", Toast.LENGTH_SHORT).show()
+                .onFailure { error ->
+                    Log.w(TAG, "Google sign in failed", error)
+                    Toast.makeText(context, "Google sign in failed", Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
+    LaunchedEffect(signInManager, context) {
+        signInManager.getCurrentSession(context)?.let { session ->
+            if (userSettings.userId != session.email) {
+                homeViewModel.updateUserId(session.email)
             }
         }
     }
@@ -143,9 +147,16 @@ fun SettingsScreen(
             }
             Spacer(modifier = Modifier.width(16.dp))
             Button(onClick = {
-                googleSignInClient.signOut().addOnCompleteListener {
-                    homeViewModel.updateUserId("user@example.com") // Reset to default
-                    Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
+                signInManager.signOut(context) { result ->
+                    result
+                        .onSuccess {
+                            homeViewModel.updateUserId("user@example.com")
+                            Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
+                        }
+                        .onFailure { error ->
+                            Log.w(TAG, "Google sign out failed", error)
+                            Toast.makeText(context, "Google sign out failed", Toast.LENGTH_SHORT).show()
+                        }
                 }
             }, enabled = !isDownloading) {
                 Text(stringResource(R.string.sign_out))
@@ -223,7 +234,7 @@ fun SettingsScreen(
                     readOnly = true,
                     value = selectedModel?.name ?: stringResource(R.string.no_model_selected),
                     onValueChange = {},
-                    label = { Text(stringResource(R.string.selected_model)) },
+                    label = { Text(stringResource(R.string.asr_model)) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelMenuExpanded) },
                     enabled = !isDownloading
                 )
@@ -241,42 +252,33 @@ fun SettingsScreen(
                             },
                             leadingIcon = {
                                 RadioButton(
-                                    selected = (model.name == selectedModel?.name),
+                                    selected = selectedModel?.name == model.name,
                                     onClick = null
                                 )
                             }
                         )
                     }
-                    if (models.isEmpty()) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.no_models_found)) },
-                            enabled = false,
-                            onClick = {}
-                        )
-                    }
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(onClick = {
-                    homeViewModel.showRemoteModelsDialog()
-                }, enabled = !isDownloading && backendUrl.isNotBlank()) {
-                    Icon(Icons.Default.Cloud, contentDescription = stringResource(R.string.check_version))
-                }
-                IconButton(onClick = {
-                    selectedModel?.let {
-                        homeViewModel.deleteModel(it)
-                    }
-                }, enabled = !isDownloading && canDeleteModel) {
-                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_model))
-                }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onClick = {
+                homeViewModel.showRemoteModelsDialog()
+            }, enabled = !isDownloading && backendUrl.isNotBlank()) {
+                Icon(Icons.Default.Cloud, contentDescription = stringResource(R.string.check_version))
             }
-            if (isDownloading) {
-                val progress = downloadProgress
-                if (progress != null) {
-                    LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
-                } else {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                }
+            IconButton(onClick = {
+                selectedModel?.let(homeViewModel::deleteModel)
+            }, enabled = !isDownloading && canDeleteModel) {
+                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_model))
+            }
+        }
+        if (isDownloading) {
+            val progress = downloadProgress
+            if (progress != null) {
+                LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
 

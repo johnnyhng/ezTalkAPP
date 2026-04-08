@@ -51,6 +51,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.llm.GoogleAuthGeminiAccessTokenProvider
 import tw.com.johnnyhng.eztalk.asr.llm.GeminiLlmProvider
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.MultiTextImportResult
@@ -84,6 +85,7 @@ fun SpeakerScreen(
 ) {
     val speakerViewModel: SpeakerViewModel = viewModel()
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val activity = context as Activity
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -101,7 +103,13 @@ fun SpeakerScreen(
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var contentSemanticCandidateLineIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
-    val semanticModule = remember { SpeakerSemanticModule(llmProvider = GeminiLlmProvider()) }
+    val semanticModule = remember(appContext) {
+        SpeakerSemanticModule(
+            llmProvider = GeminiLlmProvider(
+                accessTokenProvider = GoogleAuthGeminiAccessTokenProvider(appContext)
+            )
+        )
+    }
     val orderedDocuments = remember(uiState.directories) {
         uiState.directories.flatMap { it.documents }
     }
