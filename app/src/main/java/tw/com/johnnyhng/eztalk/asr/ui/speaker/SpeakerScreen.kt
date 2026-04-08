@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.ui.speaker
 
 import android.Manifest
 import android.app.Activity

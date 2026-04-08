@@ -55,9 +55,9 @@ import tw.com.johnnyhng.eztalk.asr.screens.DataCollectScreen
 import tw.com.johnnyhng.eztalk.asr.screens.FileManagerScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HelpScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HomeScreen
-import tw.com.johnnyhng.eztalk.asr.screens.SpeakerScreen
 import tw.com.johnnyhng.eztalk.asr.screens.SettingsScreen
 import tw.com.johnnyhng.eztalk.asr.screens.TranslateScreen
+import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerScreen
 import tw.com.johnnyhng.eztalk.asr.ui.theme.SimulateStreamingAsrTheme
 import java.util.Locale
 

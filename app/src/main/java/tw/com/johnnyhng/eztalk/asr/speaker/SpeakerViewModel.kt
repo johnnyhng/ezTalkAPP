@@ -11,8 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
-import tw.com.johnnyhng.eztalk.asr.screens.SpeakerDirectoryUi
-import tw.com.johnnyhng.eztalk.asr.screens.SpeakerDocumentUi
+import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerDirectoryUi
+import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerDocumentUi
 
 internal data class SpeakerScreenUiState(
     val directories: List<SpeakerDirectoryUi> = emptyList(),

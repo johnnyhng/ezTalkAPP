@@ -16,6 +16,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerContentScreen
+import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerDirectoryUi
+import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerDocumentUi
+import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeechFileExplorer
 
 class SpeakerComponentsBehaviorTest {
     @get:Rule
