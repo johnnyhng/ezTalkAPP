@@ -62,3 +62,20 @@ internal data class SpeakerLlmSemanticPayload(
     val lineEnd: Int? = null,
     val reason: String? = null
 )
+
+internal sealed interface SpeakerLlmFallbackState {
+    data class PreviewReady(
+        val model: String,
+        val candidateCount: Int
+    ) : SpeakerLlmFallbackState
+
+    data class Success(
+        val decision: SpeakerSemanticDecision
+    ) : SpeakerLlmFallbackState
+
+    data class Failure(
+        val message: String
+    ) : SpeakerLlmFallbackState
+
+    data object Unavailable : SpeakerLlmFallbackState
+}

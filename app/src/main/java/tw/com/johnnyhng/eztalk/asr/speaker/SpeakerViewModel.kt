@@ -31,7 +31,7 @@ internal data class SpeakerScreenUiState(
     val isEditingDocument: Boolean = false,
     val editingText: String = "",
     val isLlmFallbackEnabled: Boolean = false,
-    val contentSemanticStatus: String? = null
+    val llmFallbackState: SpeakerLlmFallbackState? = null
 )
 
 internal class SpeakerViewModel(application: Application) : AndroidViewModel(application) {
@@ -62,7 +62,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             selectedDocumentId = documentId,
             isEditingDocument = false,
             editingText = document?.fullText.orEmpty(),
-            contentSemanticStatus = null
+            llmFallbackState = null
         )
     }
 
@@ -73,12 +73,12 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
     fun onLlmFallbackEnabledChange(enabled: Boolean) {
         uiState = uiState.copy(
             isLlmFallbackEnabled = enabled,
-            contentSemanticStatus = if (enabled) uiState.contentSemanticStatus else null
+            llmFallbackState = if (enabled) uiState.llmFallbackState else null
         )
     }
 
-    fun updateContentSemanticStatus(status: String?) {
-        uiState = uiState.copy(contentSemanticStatus = status)
+    fun updateLlmFallbackState(state: SpeakerLlmFallbackState?) {
+        uiState = uiState.copy(llmFallbackState = state)
     }
 
     fun startEditing() {
@@ -86,7 +86,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(
             isEditingDocument = true,
             editingText = document.fullText,
-            contentSemanticStatus = null
+            llmFallbackState = null
         )
     }
 
@@ -94,7 +94,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(
             isEditingDocument = false,
             editingText = selectedDocument()?.fullText.orEmpty(),
-            contentSemanticStatus = null
+            llmFallbackState = null
         )
     }
 
@@ -129,7 +129,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             selectedDocumentId = if (shouldClearSelection) null else uiState.selectedDocumentId,
             isEditingDocument = if (shouldClearSelection) false else uiState.isEditingDocument,
             editingText = if (shouldClearSelection) "" else uiState.editingText,
-            contentSemanticStatus = if (shouldClearSelection) null else uiState.contentSemanticStatus
+            llmFallbackState = if (shouldClearSelection) null else uiState.llmFallbackState
         )
     }
 

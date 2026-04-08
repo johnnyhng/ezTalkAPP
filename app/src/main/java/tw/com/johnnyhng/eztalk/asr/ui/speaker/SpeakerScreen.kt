@@ -55,6 +55,7 @@ import tw.com.johnnyhng.eztalk.asr.llm.GeminiLlmProvider
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.MultiTextImportResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerContentCommand
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerLlmFallbackState
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticDecision
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticModule
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
@@ -177,7 +178,7 @@ fun SpeakerScreen(
         playbackController.stop()
         contentAsrText = ""
         contentSemanticCandidateLineIndex = null
-        speakerViewModel.updateContentSemanticStatus(null)
+        speakerViewModel.updateLlmFallbackState(null)
     }
 
     LaunchedEffect(selectedDocument?.id, expandedPane) {
@@ -316,22 +317,20 @@ fun SpeakerScreen(
                         } else {
                             null
                         }
-                        speakerViewModel.updateContentSemanticStatus(
+                        speakerViewModel.updateLlmFallbackState(
                             when {
-                                llmFallbackResult?.isSuccess == true -> context.getString(
-                                    R.string.speaker_llm_fallback_success,
-                                    llmFallbackResult.getOrThrow().javaClass.simpleName
+                                llmFallbackResult?.isSuccess == true -> SpeakerLlmFallbackState.Success(
+                                    llmFallbackResult.getOrThrow()
                                 )
-                                llmFallbackResult?.isFailure == true -> context.getString(
-                                    R.string.speaker_llm_fallback_failed,
-                                    llmFallbackResult.exceptionOrNull()?.message ?: context.getString(R.string.speaker_llm_preview_unavailable)
+                                llmFallbackResult?.isFailure == true -> SpeakerLlmFallbackState.Failure(
+                                    llmFallbackResult.exceptionOrNull()?.message
+                                        ?: context.getString(R.string.speaker_llm_preview_unavailable)
                                 )
-                                llmRequest != null -> context.getString(
-                                    R.string.speaker_llm_preview_status,
-                                    llmRequest.model,
-                                    resolution.rankedResults.take(5).size
+                                llmRequest != null -> SpeakerLlmFallbackState.PreviewReady(
+                                    model = llmRequest.model,
+                                    candidateCount = resolution.rankedResults.take(5).size
                                 )
-                                uiState.isLlmFallbackEnabled -> context.getString(R.string.speaker_llm_preview_unavailable)
+                                uiState.isLlmFallbackEnabled -> SpeakerLlmFallbackState.Unavailable
                                 else -> null
                             }
                         )
@@ -350,7 +349,7 @@ fun SpeakerScreen(
 
                     is SpeakerSemanticDecision.Candidate -> {
                         contentSemanticCandidateLineIndex = decision.lineIndex
-                        speakerViewModel.updateContentSemanticStatus(null)
+                        speakerViewModel.updateLlmFallbackState(null)
                         val result = decision.result
                         Log.i(
                             TAG,
@@ -368,7 +367,7 @@ fun SpeakerScreen(
 
                     is SpeakerSemanticDecision.AutoPlay -> {
                         val result = decision.result
-                        speakerViewModel.updateContentSemanticStatus(null)
+                        speakerViewModel.updateLlmFallbackState(null)
                         Log.i(
                             TAG,
                             "Speaker semantic autoplay line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
@@ -680,7 +679,7 @@ fun SpeakerScreen(
                 isPaused = isSelectedDocumentPaused,
                 isEditing = uiState.isEditingDocument,
                 localAsrText = contentAsrText,
-                localAsrSecondaryText = uiState.contentSemanticStatus,
+                localAsrSecondaryText = uiState.llmFallbackState.toDisplayText(context),
                 isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecording,
                 localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
                 isLocalAsrEnabled = !isAnyTtsPlaying && !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
@@ -693,7 +692,7 @@ fun SpeakerScreen(
                 onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
                 onSpeakLine = { lineIndex, line ->
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     when (playLineWithAsrStop(selectedDocument, lineIndex, line)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -716,7 +715,7 @@ fun SpeakerScreen(
                 },
                 onPlay = {
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     when (playDocumentWithAsrStop(selectedDocument)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -739,25 +738,25 @@ fun SpeakerScreen(
                 },
                 onPause = {
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     playbackController.pause(selectedDocument.id)
                 },
                 onStop = {
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     playbackController.stop()
                 },
                 onPreviousDocument = {
                     val targetDocument = previousDocument ?: return@SpeakerContentScreen
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
                 onNextDocument = {
                     val targetDocument = nextDocument ?: return@SpeakerContentScreen
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
@@ -765,13 +764,13 @@ fun SpeakerScreen(
                 isNextDocumentEnabled = nextDocument != null,
                 onEdit = {
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     playbackController.stop()
                     speakerViewModel.startEditing()
                 },
                 onSave = {
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     speakerViewModel.saveEditing { saved ->
                         Toast.makeText(
                             context,
@@ -784,7 +783,7 @@ fun SpeakerScreen(
                 },
                 onCancelEdit = {
                     contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateContentSemanticStatus(null)
+                    speakerViewModel.updateLlmFallbackState(null)
                     speakerViewModel.cancelEditing()
                 },
                 modifier = Modifier
@@ -802,6 +801,26 @@ private fun FloatArray.previewForLog(maxSize: Int = 8): String {
         postfix = if (size > maxSize) ", ...]" else "]"
     ) { value ->
         "%.4f".format(value)
+    }
+}
+
+private fun SpeakerLlmFallbackState?.toDisplayText(context: android.content.Context): String? {
+    return when (this) {
+        is SpeakerLlmFallbackState.PreviewReady -> context.getString(
+            R.string.speaker_llm_preview_status,
+            model,
+            candidateCount
+        )
+        is SpeakerLlmFallbackState.Success -> context.getString(
+            R.string.speaker_llm_fallback_success,
+            decision.javaClass.simpleName
+        )
+        is SpeakerLlmFallbackState.Failure -> context.getString(
+            R.string.speaker_llm_fallback_failed,
+            message
+        )
+        SpeakerLlmFallbackState.Unavailable -> context.getString(R.string.speaker_llm_preview_unavailable)
+        null -> null
     }
 }
 
