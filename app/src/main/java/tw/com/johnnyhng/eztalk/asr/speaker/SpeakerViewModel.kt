@@ -29,7 +29,9 @@ internal data class SpeakerScreenUiState(
     val importProgressTotal: Int = 0,
     val importProgressFolderName: String = "",
     val isEditingDocument: Boolean = false,
-    val editingText: String = ""
+    val editingText: String = "",
+    val isLlmFallbackEnabled: Boolean = false,
+    val contentSemanticStatus: String? = null
 )
 
 internal class SpeakerViewModel(application: Application) : AndroidViewModel(application) {
@@ -59,7 +61,8 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(
             selectedDocumentId = documentId,
             isEditingDocument = false,
-            editingText = document?.fullText.orEmpty()
+            editingText = document?.fullText.orEmpty(),
+            contentSemanticStatus = null
         )
     }
 
@@ -67,18 +70,31 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(editingText = text)
     }
 
+    fun onLlmFallbackEnabledChange(enabled: Boolean) {
+        uiState = uiState.copy(
+            isLlmFallbackEnabled = enabled,
+            contentSemanticStatus = if (enabled) uiState.contentSemanticStatus else null
+        )
+    }
+
+    fun updateContentSemanticStatus(status: String?) {
+        uiState = uiState.copy(contentSemanticStatus = status)
+    }
+
     fun startEditing() {
         val document = selectedDocument() ?: return
         uiState = uiState.copy(
             isEditingDocument = true,
-            editingText = document.fullText
+            editingText = document.fullText,
+            contentSemanticStatus = null
         )
     }
 
     fun cancelEditing() {
         uiState = uiState.copy(
             isEditingDocument = false,
-            editingText = selectedDocument()?.fullText.orEmpty()
+            editingText = selectedDocument()?.fullText.orEmpty(),
+            contentSemanticStatus = null
         )
     }
 
@@ -112,7 +128,8 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             },
             selectedDocumentId = if (shouldClearSelection) null else uiState.selectedDocumentId,
             isEditingDocument = if (shouldClearSelection) false else uiState.isEditingDocument,
-            editingText = if (shouldClearSelection) "" else uiState.editingText
+            editingText = if (shouldClearSelection) "" else uiState.editingText,
+            contentSemanticStatus = if (shouldClearSelection) null else uiState.contentSemanticStatus
         )
     }
 
