@@ -8,16 +8,16 @@ Overall status:
 
 - Phase 1: Completed
 - Phase 2: Completed
-- Phase 3: Partially Completed
-- Phase 4: Not Started
+- Phase 3: Completed
+- Phase 4: Partially Completed
 - Phase 5: Not Started
 
 Repo state snapshot:
 
 - `speaker/` runtime/domain package exists and is in active use.
 - `ui/speaker/` UI package exists and is in active use.
-- `llm/` shared abstraction package exists, but only the base abstraction/models are present.
-- `prompt/` package does not exist yet.
+- `llm/` shared abstraction package exists with base request/response types and a Gemini placeholder provider.
+- `prompt/` package now exists with prompt skeletons, but is not wired into provider execution yet.
 - `Speaker` semantic behavior is still lexical-only.
 - `MediaPipe` runtime has already been removed for 16 KB page-size safety.
 
@@ -40,16 +40,22 @@ Files already present in repo:
   - `LocalASRWidget.kt`
   - `SpeakerUiModels.kt`
 - `llm/`
+  - `GeminiLlmProvider.kt`
+  - `LlmOutputFormat.kt`
   - `LlmProvider.kt`
-  - `LlmModels.kt`
+  - `LlmRequest.kt`
+  - `LlmResponse.kt`
+  - `LlmUsageMetadata.kt`
   - `LlmError.kt`
+- `prompt/`
+  - `PromptTemplate.kt`
+  - `SpeakerSemanticPromptBuilder.kt`
 
 Files not yet present:
 
-- `speaker/SpeakerSemanticModule.kt`
-- `llm/GeminiLlmProvider.kt`
-- `prompt/PromptTemplate.kt`
-- `prompt/SpeakerSemanticPromptBuilder.kt`
+- provider-backed Gemini request execution
+- `SpeakerSemanticModule` integration with `LlmProvider`
+- structured Gemini semantic decision mapping in runtime
 
 ## Goal
 
@@ -295,14 +301,15 @@ Current repo state:
 
 - `llm/` package exists
 - `LlmProvider` exists
-- shared models/errors are currently grouped in `LlmModels.kt` and `LlmError.kt`
-- `GeminiLlmProvider.kt` does not exist yet
+- `LlmRequest.kt` / `LlmResponse.kt` / `LlmUsageMetadata.kt` / `LlmOutputFormat.kt` exist
+- `GeminiLlmProvider.kt` exists as a placeholder provider boundary
+- real Gemini execution is not implemented yet
 
 No `Speaker` integration yet.
 
 ### Phase 4
 
-Status: Not Started
+Status: Partially Completed
 
 Introduce prompt package:
 
@@ -311,8 +318,10 @@ Introduce prompt package:
 
 Current repo state:
 
-- `prompt/` package does not exist yet
-- no prompt builder or prompt template files exist yet
+- `prompt/` package exists
+- `PromptTemplate.kt` exists
+- `SpeakerSemanticPromptBuilder.kt` exists
+- prompt output is not yet used by a real provider-backed semantic flow
 
 Still keep lexical-only runtime behavior.
 
@@ -328,7 +337,7 @@ Add Gemini-backed semantic resolution to `SpeakerSemanticModule`:
 
 Current repo state:
 
-- `SpeakerSemanticModule` does not exist yet
+- `SpeakerSemanticModule` exists as the semantic entry point
 - lexical-only semantic search remains the active implementation
 - no Gemini runtime/provider integration is wired into `Speaker`
 
@@ -365,8 +374,8 @@ It also prevents `screens/` from becoming the default dumping ground for:
 Before adding Gemini:
 
 1. Finish Phase 3 by deciding whether `LlmModels.kt` should stay grouped or be split into `LlmRequest.kt` and `LlmResponse.kt`, and add `GeminiLlmProvider.kt`
-2. Implement Phase 4 by creating the `prompt/` package and `SpeakerSemanticPromptBuilder`
-3. Introduce `SpeakerSemanticModule` as the single semantic entry point while keeping lexical fallback as the default behavior
-4. Only after that, start Phase 5 Gemini integration
+2. Finish Phase 4 by wiring prompt output into the future provider path, not just keeping prompt skeleton files on disk
+3. Start Phase 5 by teaching `SpeakerSemanticModule` to optionally call `LlmProvider` after lexical pass while keeping lexical fallback as the default behavior
+4. Add runtime/config selection for Gemini model and API credentials outside the UI layer
 
 Only after that should Gemini integration begin.

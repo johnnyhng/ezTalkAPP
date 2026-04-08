@@ -1,9 +1,21 @@
 package tw.com.johnnyhng.eztalk.asr.speaker
 
+import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
+import tw.com.johnnyhng.eztalk.asr.llm.LlmRequest
+import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerSemanticPromptBuilder
+import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerSemanticPromptCandidate
+
 internal class SpeakerSemanticModule(
     private val semanticSearch: SpeakerSemanticSearch = SpeakerSemanticSearch(),
-    private val config: SpeakerSemanticSearchConfig = SpeakerSemanticSearchConfig()
+    private val config: SpeakerSemanticSearchConfig = SpeakerSemanticSearchConfig(),
+    private val llmProvider: LlmProvider? = null,
+    private val promptBuilder: SpeakerSemanticPromptBuilder = SpeakerSemanticPromptBuilder(),
+    private val llmModel: String = "gemini-2.5-flash"
 ) {
+    fun canUseLlmFallback(): Boolean {
+        return llmProvider != null
+    }
+
     fun resolve(
         queryText: String,
         lines: List<String>,
@@ -35,6 +47,35 @@ internal class SpeakerSemanticModule(
             query = query,
             rankedResults = rankedResults,
             decision = decision
+        )
+    }
+
+    fun buildLlmRequest(
+        queryText: String,
+        rankedResults: List<SpeakerSearchResult>,
+        maxCandidates: Int = 5
+    ): LlmRequest? {
+        if (queryText.isBlank() || rankedResults.isEmpty()) return null
+
+        val prompt = promptBuilder.build(
+            asrText = queryText,
+            candidates = rankedResults
+                .take(maxCandidates.coerceAtLeast(1))
+                .map { result ->
+                    SpeakerSemanticPromptCandidate(
+                        lineStart = result.lineStart,
+                        lineEnd = result.lineEnd,
+                        text = result.matchedText
+                    )
+                }
+        )
+
+        return LlmRequest(
+            model = llmModel,
+            systemInstruction = prompt.systemInstruction,
+            userPrompt = prompt.userPrompt,
+            outputFormat = tw.com.johnnyhng.eztalk.asr.llm.LlmOutputFormat.JSON,
+            schemaHint = prompt.expectedResponseSchema
         )
     }
 
