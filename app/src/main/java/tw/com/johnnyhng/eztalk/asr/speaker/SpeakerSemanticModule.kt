@@ -122,6 +122,33 @@ internal class SpeakerSemanticModule(
         }
     }
 
+    suspend fun tryLlmFallback(
+        queryText: String,
+        rankedResults: List<SpeakerSearchResult>,
+        lines: List<String>,
+        maxCandidates: Int = 5
+    ): Result<SpeakerSemanticDecision> {
+        val provider = llmProvider ?: return Result.failure(
+            IllegalStateException("LLM provider is not configured")
+        )
+
+        val request = buildLlmRequest(
+            queryText = queryText,
+            rankedResults = rankedResults,
+            maxCandidates = maxCandidates
+        ) ?: return Result.failure(
+            IllegalArgumentException("Unable to build LLM request for fallback")
+        )
+
+        return provider.generate(request).map { response ->
+            parseLlmResponse(
+                response = response,
+                rankedResults = rankedResults,
+                lines = lines
+            )
+        }
+    }
+
     private fun findMatchingResult(
         payload: SpeakerLlmSemanticPayload,
         rankedResults: List<SpeakerSearchResult>
