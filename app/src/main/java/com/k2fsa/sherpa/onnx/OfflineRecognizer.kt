@@ -41,6 +41,14 @@ data class OfflineWenetCtcModelConfig(
     var model: String = "",
 )
 
+data class OfflineTdnnModelConfig(
+    var model: String = "",
+)
+
+data class OfflineOmnilingualAsrCtcModelConfig(
+    var model: String = "",
+)
+
 data class OfflineWhisperModelConfig(
     var encoder: String = "",
     var decoder: String = "",
@@ -69,10 +77,17 @@ data class OfflineMoonshineModelConfig(
     var cachedDecoder: String = "",
 )
 
+data class QnnConfig(
+    var backendLib: String = "",
+    var systemLib: String = "",
+    var contextBinary: String = "",
+)
+
 data class OfflineSenseVoiceModelConfig(
     var model: String = "",
     var language: String = "",
     var useInverseTextNormalization: Boolean = true,
+    var qnnConfig: QnnConfig = QnnConfig(),
 )
 
 data class OfflineModelConfig(
@@ -80,6 +95,7 @@ data class OfflineModelConfig(
     var paraformer: OfflineParaformerModelConfig = OfflineParaformerModelConfig(),
     var whisper: OfflineWhisperModelConfig = OfflineWhisperModelConfig(),
     var fireRedAsr: OfflineFireRedAsrModelConfig = OfflineFireRedAsrModelConfig(),
+    var tdnn: OfflineTdnnModelConfig = OfflineTdnnModelConfig(),
     var moonshine: OfflineMoonshineModelConfig = OfflineMoonshineModelConfig(),
     var nemo: OfflineNemoEncDecCtcModelConfig = OfflineNemoEncDecCtcModelConfig(),
     var senseVoice: OfflineSenseVoiceModelConfig = OfflineSenseVoiceModelConfig(),
@@ -87,6 +103,7 @@ data class OfflineModelConfig(
     var zipformerCtc: OfflineZipformerCtcModelConfig = OfflineZipformerCtcModelConfig(),
     var wenetCtc: OfflineWenetCtcModelConfig = OfflineWenetCtcModelConfig(),
     var canary: OfflineCanaryModelConfig = OfflineCanaryModelConfig(),
+    var omnilingual: OfflineOmnilingualAsrCtcModelConfig = OfflineOmnilingualAsrCtcModelConfig(),
     var teleSpeech: String = "",
     var numThreads: Int = 1,
     var debug: Boolean = false,
@@ -97,10 +114,24 @@ data class OfflineModelConfig(
     var bpeVocab: String = "",
 )
 
+data class OfflineLMConfig(
+    var model: String = "",
+    var scale: Float = 0.5f,
+    var lodrScale: Float = 0.01f,
+    var lodrFst: String = "",
+    var lodrBackoffId: Int = -1,
+)
+
+data class OfflineCtcFstDecoderConfig(
+    var graph: String = "",
+    var maxActive: Int = 3000,
+)
+
 data class OfflineRecognizerConfig(
     var featConfig: FeatureConfig = FeatureConfig(),
     var modelConfig: OfflineModelConfig = OfflineModelConfig(),
-    // var lmConfig: OfflineLMConfig(), // TODO(fangjun): enable it
+    var lmConfig: OfflineLMConfig = OfflineLMConfig(),
+    var ctcFstDecoderConfig: OfflineCtcFstDecoderConfig = OfflineCtcFstDecoderConfig(),
     var hr: HomophoneReplacerConfig = HomophoneReplacerConfig(),
     var decodingMethod: String = "greedy_search",  // modified_beam_search,
     var maxActivePaths: Int = 4,
