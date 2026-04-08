@@ -19,7 +19,8 @@ Repo state snapshot:
 - `llm/` shared abstraction package exists with base request/response types and a Gemini placeholder provider.
 - `prompt/` package exists and is already used by `SpeakerSemanticModule.buildLlmRequest(...)`.
 - `SpeakerSemanticModule` exists and acts as the semantic entry point.
-- `Speaker` semantic behavior is still lexical-first, with an LLM fallback preview path but no real provider execution.
+- `Speaker` semantic behavior is still lexical-first, but the LLM fallback path now executes through the provider hook.
+- The current Gemini provider is still a placeholder, so fallback execution currently returns controlled failure instead of making a real network request.
 - LLM fallback toggle/status has started moving out of `SpeakerScreen` and into `SpeakerViewModel`.
 - `MediaPipe` runtime has already been removed for 16 KB page-size safety.
 
@@ -55,10 +56,10 @@ Files already present in repo:
 
 Files not yet present:
 
-- provider-backed Gemini request execution
-- parsed Gemini response to `SpeakerSemanticDecision` mapping
-- structured Gemini semantic decision mapping in runtime
 - config/settings-backed Gemini credential management
+- real Gemini HTTP/client execution inside `GeminiLlmProvider`
+- robust structured JSON parsing beyond the current lightweight response mapper
+- runtime path that applies successful LLM fallback decisions to playback/highlight flow instead of only surfacing status
 
 ## Goal
 
@@ -344,9 +345,12 @@ Current repo state:
 - `SpeakerSemanticDecision` and `SpeakerSemanticResolution` exist
 - lexical semantic search remains the active implementation
 - `SpeakerSemanticModule` can already build an LLM fallback request from ranked lexical candidates
+- `SpeakerSemanticModule` can parse an `LlmResponse` back into `SpeakerSemanticDecision`
+- `SpeakerSemanticModule` can call `LlmProvider.generate(...)` through `tryLlmFallback(...)`
 - `SpeakerScreen` has an LLM fallback preview toggle and preview status
 - fallback preview state has started moving into `SpeakerViewModel`
-- no real Gemini provider execution or response parsing is wired into `Speaker` yet
+- `Speaker` now exercises the provider hook on lexical no-match
+- no real Gemini network execution is wired in yet because `GeminiLlmProvider` is still a placeholder
 
 ## Gemini-Specific Rules
 
@@ -381,8 +385,8 @@ It also prevents `screens/` from becoming the default dumping ground for:
 Before adding Gemini:
 
 1. Finish Phase 3 by deciding whether `LlmModels.kt` should stay grouped or be split into `LlmRequest.kt` and `LlmResponse.kt`, and add `GeminiLlmProvider.kt`
-2. Finish the remaining Phase 5 runtime work by having `SpeakerSemanticModule` optionally execute `LlmProvider.generate(...)` instead of only building a preview request
-3. Parse provider output back into `SpeakerSemanticDecision` rather than showing only preview status text
+2. Replace the placeholder `GeminiLlmProvider` with a real provider implementation
+3. Apply successful `tryLlmFallback(...)` results back into playback/highlight flow instead of only surfacing status text
 4. Add runtime/config selection for Gemini model and API credentials outside the UI layer
 5. Continue shrinking screen-local orchestration so fallback behavior lives in runtime/viewmodel instead of `SpeakerScreen`
 
