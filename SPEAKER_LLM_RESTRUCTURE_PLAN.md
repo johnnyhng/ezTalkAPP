@@ -16,15 +16,15 @@ Repo state snapshot:
 
 - `speaker/` runtime/domain package exists and is in active use.
 - `ui/speaker/` UI package exists and is in active use.
-- `llm/` shared abstraction package exists with base request/response types and a Gemini placeholder provider.
+- `llm/` shared abstraction package exists with base request/response types, OAuth token plumbing, and a real Gemini HTTP provider.
 - `prompt/` package exists and is already used by `SpeakerSemanticModule.buildLlmRequest(...)`.
 - `SpeakerSemanticModule` exists and acts as the semantic entry point.
 - `Speaker` semantic behavior is still lexical-first, but the LLM fallback path now executes through the provider hook.
-- The current Gemini provider is still a placeholder, so fallback execution currently returns controlled failure instead of making a real network request.
+- `GeminiLlmProvider` now performs real OAuth-backed Gemini HTTP calls with provider-side `401` invalidate/retry.
 - LLM fallback toggle/state has started moving out of `SpeakerScreen` and into `SpeakerViewModel`.
 - Successful fallback decisions are now wired back into the same candidate/autoplay flow used by lexical decisions.
 - `google-services.json` is already present in the project root.
-- Android OAuth-based Gemini authentication is not implemented yet.
+- Android OAuth token fetch is wired, but end-to-end consent / recovery still needs device validation.
 - `MediaPipe` runtime has already been removed for 16 KB page-size safety.
 
 Files already present in repo:
@@ -47,25 +47,28 @@ Files already present in repo:
   - `SpeakerUiModels.kt`
 - `llm/`
   - `GeminiLlmProvider.kt`
+  - `GeminiApiClient.kt`
+  - `GeminiAccessTokenProvider.kt`
   - `LlmOutputFormat.kt`
   - `LlmProvider.kt`
   - `LlmRequest.kt`
   - `LlmResponse.kt`
   - `LlmUsageMetadata.kt`
   - `LlmError.kt`
+- `auth/`
+  - `GoogleAccountSession.kt`
+  - `GoogleSignInManager.kt`
 - `prompt/`
   - `PromptTemplate.kt`
   - `SpeakerSemanticPromptBuilder.kt`
 
 Files not yet present:
 
-- Android OAuth account/session manager for Gemini usage
-- scoped Gemini access-token provider for `https://www.googleapis.com/auth/generative-language`
-- provider-side `401` invalidate/retry token handling
 - config/settings-backed Gemini model selection
-- real Gemini HTTP/client execution inside `GeminiLlmProvider`
-- robust structured JSON parsing beyond the current lightweight response mapper
+- explicit OAuth recovery / consent handoff path for `UserRecoverableAuthException`
+- device-validated end-to-end Gemini OAuth flow
 - runtime/viewmodel ownership of the remaining fallback orchestration that still lives in `SpeakerScreen`
+- broader provider integration tests beyond the current success / `401` / malformed-payload coverage
 
 ## Goal
 
@@ -340,8 +343,10 @@ Current repo state:
 - `llm/` package exists
 - `LlmProvider` exists
 - `LlmRequest.kt` / `LlmResponse.kt` / `LlmUsageMetadata.kt` / `LlmOutputFormat.kt` exist
-- `GeminiLlmProvider.kt` exists as a placeholder provider boundary
-- real Gemini execution is not implemented yet
+- `GeminiLlmProvider.kt` now performs OAuth-backed Gemini HTTP execution
+- `GeminiApiClient.kt` exists for provider-side HTTP transport
+- `GeminiAccessTokenProvider.kt` exists for scoped token fetch / invalidation
+- provider behavior is covered by unit tests for success, `401` retry, and malformed payload handling
 
 No `Speaker` integration yet.
 
@@ -381,13 +386,16 @@ Current repo state:
 - lexical semantic search remains the active implementation
 - `SpeakerSemanticModule` can already build an LLM fallback request from ranked lexical candidates
 - `SpeakerSemanticModule` can parse an `LlmResponse` back into `SpeakerSemanticDecision`
+- LLM response parsing is now stricter and requires structured JSON for actionable candidate/autoplay results
 - `SpeakerSemanticModule` can call `LlmProvider.generate(...)` through `tryLlmFallback(...)`
 - `SpeakerScreen` has an LLM fallback preview toggle and preview status
 - fallback state has started moving into `SpeakerViewModel`
 - `Speaker` now exercises the provider hook on lexical no-match
 - successful fallback decisions now re-enter the same candidate/autoplay path used by lexical decisions
-- no real Gemini network execution is wired in yet because `GeminiLlmProvider` is still a placeholder
-- Android OAuth sign-in, scoped token fetch, and `401` token invalidation/retry are still missing
+- real Gemini network execution is wired through `GeminiLlmProvider`
+- Android OAuth token fetch and provider-side `401` invalidation/retry are implemented
+- parser behavior and provider retry behavior are both covered by unit tests
+- remaining gaps are device-validated OAuth consent/recovery behavior and moving more fallback orchestration out of `SpeakerScreen`
 
 ## Gemini-Specific Rules
 
@@ -435,12 +443,11 @@ It also prevents `screens/` from becoming the default dumping ground for:
 
 Before adding Gemini:
 
-1. Add Android OAuth session ownership outside `SpeakerScreen`, using Credential Manager / Google Sign-In for account state
-2. Implement `GeminiAccessTokenProvider` to fetch a scoped token for `https://www.googleapis.com/auth/generative-language` before each Gemini call
-3. Replace the placeholder `GeminiLlmProvider` with a real HTTP/client implementation that sends `Authorization: Bearer <token>`
-4. Add provider-side `401` handling with token invalidation and a single retry, instead of leaving recovery logic in UI code
-5. Continue shrinking screen-local orchestration so fallback behavior lives in runtime/viewmodel instead of `SpeakerScreen`
-6. Harden response parsing so provider output is validated more strictly than the current lightweight mapper
-7. Keep Gemini model selection in config/settings, but do not introduce API-key-based auth for this flow
+1. Validate the Android OAuth flow on device, especially scope consent and `UserRecoverableAuthException` recovery
+2. Add an explicit runtime path for OAuth recovery instead of only surfacing provider failure
+3. Continue shrinking screen-local orchestration so fallback behavior lives in runtime/viewmodel instead of `SpeakerScreen`
+4. Add config/settings-backed Gemini model selection
+5. Expand provider and semantic fallback test coverage beyond the current parser / retry happy-path set
+6. Keep Gemini auth OAuth-based; do not introduce API-key-based auth for this flow
 
 Only after that should Phase 5 be considered complete.
