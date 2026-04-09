@@ -1,7 +1,11 @@
 package tw.com.johnnyhng.eztalk.asr.llm
 
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import tw.com.johnnyhng.eztalk.asr.TAG
 
 internal data class GeminiProviderConfig(
     val model: String = "gemini-2.5-flash",
@@ -18,6 +22,11 @@ internal class GeminiLlmProvider(
     override suspend fun generate(
         request: LlmRequest
     ): Result<LlmResponse> {
+        Log.i(
+            TAG,
+            "Gemini generate start model=${request.model.ifBlank { config.model }} " +
+                "promptLength=${request.userPrompt.length} outputFormat=${request.outputFormat}"
+        )
         val tokenProvider = accessTokenProvider ?: return Result.failure(
             LlmError.ProviderFailure(
                 detail = "Gemini OAuth token provider is not configured"
@@ -34,6 +43,7 @@ internal class GeminiLlmProvider(
         }
 
         val model = request.model.ifBlank { config.model }
+        Log.i(TAG, "Gemini generate acquired OAuth token for model=$model")
         return executeGenerateContent(
             model = model,
             token = token,
@@ -48,11 +58,19 @@ internal class GeminiLlmProvider(
         request: LlmRequest,
         allowRetryAfterUnauthorized: Boolean
     ): Result<LlmResponse> {
-        val result = apiClient.generateContent(
-            model = model,
-            accessToken = token,
-            request = request
-        ).getOrElse { error ->
+        Log.i(
+            TAG,
+            "Gemini executeGenerateContent model=$model retryAllowed=$allowRetryAfterUnauthorized " +
+                "systemInstruction=${!request.systemInstruction.isNullOrBlank()}"
+        )
+        val result = withContext(Dispatchers.IO) {
+            apiClient.generateContent(
+                model = model,
+                accessToken = token,
+                request = request
+            )
+        }.getOrElse { error ->
+            Log.w(TAG, "Gemini request transport failure", error)
             return Result.failure(
                 LlmError.Network(
                     detail = "Gemini request failed before a response was received",
@@ -61,10 +79,16 @@ internal class GeminiLlmProvider(
             )
         }
 
+        Log.i(
+            TAG,
+            "Gemini response received http=${result.responseCode} bodyLength=${result.responseBody.length}"
+        )
+
         return when (result.responseCode) {
             HttpURLConnection.HTTP_OK -> parseSuccessResponse(result.responseBody)
 
             HttpURLConnection.HTTP_UNAUTHORIZED -> {
+                Log.w(TAG, "Gemini response unauthorized; attempting retry=$allowRetryAfterUnauthorized")
                 if (!allowRetryAfterUnauthorized) {
                     Result.failure(
                         LlmError.ProviderFailure(
@@ -76,22 +100,31 @@ internal class GeminiLlmProvider(
                 }
             }
 
-            429 -> Result.failure(
-                LlmError.RateLimited("Gemini request was rate limited")
-            )
-
-            else -> Result.failure(
-                LlmError.ProviderFailure(
-                    detail = buildString {
-                        append("Gemini request failed with HTTP ")
-                        append(result.responseCode)
-                        if (result.responseBody.isNotBlank()) {
-                            append(": ")
-                            append(result.responseBody.take(500))
-                        }
-                    }
+            429 -> {
+                Log.w(TAG, "Gemini response rate limited")
+                Result.failure(
+                    LlmError.RateLimited("Gemini request was rate limited")
                 )
-            )
+            }
+
+            else -> {
+                Log.w(
+                    TAG,
+                    "Gemini request failed http=${result.responseCode} body=${result.responseBody.take(500)}"
+                )
+                Result.failure(
+                    LlmError.ProviderFailure(
+                        detail = buildString {
+                            append("Gemini request failed with HTTP ")
+                            append(result.responseCode)
+                            if (result.responseBody.isNotBlank()) {
+                                append(": ")
+                                append(result.responseBody.take(500))
+                            }
+                        }
+                    )
+                )
+            }
         }
     }
 
@@ -100,6 +133,7 @@ internal class GeminiLlmProvider(
         staleToken: String,
         request: LlmRequest
     ): Result<LlmResponse> {
+        Log.i(TAG, "Gemini retryAfterUnauthorized starting for model=$model")
         val tokenProvider = accessTokenProvider ?: return Result.failure(
             LlmError.ProviderFailure("Gemini OAuth token provider is not configured")
         )
@@ -121,6 +155,8 @@ internal class GeminiLlmProvider(
                 )
             )
         }
+
+        Log.i(TAG, "Gemini retryAfterUnauthorized acquired refreshed token")
 
         return executeGenerateContent(
             model = model,
@@ -150,8 +186,15 @@ internal class GeminiLlmProvider(
                 usage = json.optJSONObject("usageMetadata")?.let(::parseUsageMetadata)
             )
         }.fold(
-            onSuccess = { Result.success(it) },
+            onSuccess = {
+                Log.i(
+                    TAG,
+                    "Gemini response parsed successfully rawTextLength=${it.rawText.length} finishReason=${it.finishReason}"
+                )
+                Result.success(it)
+            },
             onFailure = { error ->
+                Log.w(TAG, "Gemini response parse failed body=${responseBody.take(500)}", error)
                 Result.failure(
                     LlmError.InvalidResponse(
                         detail = "Failed to parse Gemini response payload",

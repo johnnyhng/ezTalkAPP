@@ -330,10 +330,15 @@ fun SpeakerScreen(
                                 llmFallbackResult?.isSuccess == true -> SpeakerLlmFallbackState.Success(
                                     llmFallbackResult.getOrThrow()
                                 )
-                                llmFallbackResult?.isFailure == true -> SpeakerLlmFallbackState.Failure(
-                                    llmFallbackResult.exceptionOrNull()?.message
-                                        ?: context.getString(R.string.speaker_llm_preview_unavailable)
-                                )
+                                llmFallbackResult?.isFailure == true -> {
+                                    val error = llmFallbackResult.exceptionOrNull()
+                                    Log.w(TAG, "Speaker LLM fallback failed", error)
+                                    SpeakerLlmFallbackState.Failure(
+                                        error.toDisplayMessage(
+                                            fallback = context.getString(R.string.speaker_llm_preview_unavailable)
+                                        )
+                                    )
+                                }
                                 llmRequest != null -> SpeakerLlmFallbackState.PreviewReady(
                                     model = llmRequest.model,
                                     candidateCount = resolution.rankedResults.take(5).size
@@ -867,6 +872,17 @@ private fun SpeakerLlmFallbackState?.toDisplayText(context: android.content.Cont
         SpeakerLlmFallbackState.Unavailable -> context.getString(R.string.speaker_llm_preview_unavailable)
         null -> null
     }
+}
+
+private fun Throwable?.toDisplayMessage(fallback: String): String {
+    if (this == null) return fallback
+
+    val parts = buildList {
+        message?.takeIf { it.isNotBlank() }?.let(::add)
+        cause?.message?.takeIf { it.isNotBlank() && it != message }?.let(::add)
+    }
+
+    return parts.joinToString(" | ").ifBlank { fallback }
 }
 
 private fun List<SpeakerSearchResult>.formatTop3CosineForLog(): String {
