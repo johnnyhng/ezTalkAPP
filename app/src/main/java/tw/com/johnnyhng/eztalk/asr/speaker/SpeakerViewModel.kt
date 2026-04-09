@@ -30,7 +30,6 @@ internal data class SpeakerScreenUiState(
     val editingText: String = "",
     val contentAsrText: String = "",
     val contentSemanticCandidateLineIndex: Int? = null,
-    val isLlmFallbackEnabled: Boolean = false,
     val llmFallbackState: SpeakerLlmFallbackState? = null
 )
 
@@ -74,13 +73,6 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
 
     fun updateContentAsrText(text: String) {
         uiState = uiState.copy(contentAsrText = text)
-    }
-
-    fun onLlmFallbackEnabledChange(enabled: Boolean) {
-        uiState = uiState.copy(
-            isLlmFallbackEnabled = enabled,
-            llmFallbackState = if (enabled) uiState.llmFallbackState else null
-        )
     }
 
     fun updateLlmFallbackState(state: SpeakerLlmFallbackState?) {

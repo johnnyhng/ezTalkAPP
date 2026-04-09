@@ -15,7 +15,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -32,9 +31,6 @@ internal fun LocalASRWidget(
     isRecording: Boolean = false,
     countdownProgress: Float = 0f,
     isEnabled: Boolean = true,
-    showLlmFallbackToggle: Boolean = false,
-    isLlmFallbackEnabled: Boolean = false,
-    onLlmFallbackToggle: (Boolean) -> Unit = {},
     onMicClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -77,22 +73,6 @@ internal fun LocalASRWidget(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-                if (showLlmFallbackToggle) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.speaker_llm_fallback),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Switch(
-                            checked = isLlmFallbackEnabled,
-                            onCheckedChange = onLlmFallbackToggle,
-                            enabled = isEnabled && !isRecording
-                        )
-                    }
                 }
             }
             Box(contentAlignment = Alignment.Center) {

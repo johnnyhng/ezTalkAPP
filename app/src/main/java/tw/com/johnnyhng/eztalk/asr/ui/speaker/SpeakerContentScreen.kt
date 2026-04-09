@@ -52,12 +52,10 @@ internal fun SpeakerContentScreen(
     isLocalAsrRecording: Boolean = false,
     localAsrCountdownProgress: Float = 0f,
     isLocalAsrEnabled: Boolean = true,
-    isLlmFallbackEnabled: Boolean = false,
     currentPlayingLineIndex: Int?,
     candidateLineIndex: Int? = null,
     editingText: String,
     onEditingTextChange: (String) -> Unit,
-    onLlmFallbackToggle: (Boolean) -> Unit = {},
     onLocalAsrClick: () -> Unit = {},
     onSpeakLine: (Int, String) -> Unit,
     onPlay: () -> Unit,
@@ -154,9 +152,6 @@ internal fun SpeakerContentScreen(
                     isRecording = isLocalAsrRecording,
                     countdownProgress = localAsrCountdownProgress,
                     isEnabled = isLocalAsrEnabled,
-                    showLlmFallbackToggle = true,
-                    isLlmFallbackEnabled = isLlmFallbackEnabled,
-                    onLlmFallbackToggle = onLlmFallbackToggle,
                     onMicClick = onLocalAsrClick,
                     modifier = Modifier.padding(12.dp)
                 )

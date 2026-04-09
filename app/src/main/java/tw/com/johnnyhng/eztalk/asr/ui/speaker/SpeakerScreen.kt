@@ -105,12 +105,15 @@ fun SpeakerScreen(
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
+    val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
         SpeakerSemanticModule(
-            llmProvider = GeminiLlmProvider(
-                accessTokenProvider = GoogleAuthGeminiAccessTokenProvider(appContext)
-            ),
-            llmModel = userSettings.geminiModel
+            llmProvider = geminiModel?.let {
+                GeminiLlmProvider(
+                    accessTokenProvider = GoogleAuthGeminiAccessTokenProvider(appContext)
+                )
+            },
+            llmModel = geminiModel ?: "gemini-2.5-flash"
         )
     }
     val orderedDocuments = remember(uiState.directories) {
@@ -239,7 +242,7 @@ fun SpeakerScreen(
             indexedChunks = indexedSelectedDocumentChunks,
             isSelectedDocumentPlaying = isSelectedDocumentPlaying,
             isSelectedDocumentPaused = isSelectedDocumentPaused,
-            isLlmFallbackEnabled = uiState.isLlmFallbackEnabled,
+            isLlmFallbackEnabled = true,
             resetContentSemanticUi = resetContentSemanticUi,
             pauseDocument = playbackController::pause,
             stopPlayback = playbackController::stop,
@@ -537,12 +540,10 @@ fun SpeakerScreen(
                 isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecording,
                 localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
                 isLocalAsrEnabled = !isAnyTtsPlaying && !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
-                isLlmFallbackEnabled = uiState.isLlmFallbackEnabled,
                 currentPlayingLineIndex = currentPlayingLineIndex,
                 candidateLineIndex = uiState.contentSemanticCandidateLineIndex,
                 editingText = uiState.editingText,
                 onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
-                onLlmFallbackToggle = speakerViewModel::onLlmFallbackEnabledChange,
                 onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
                 onSpeakLine = { lineIndex, line ->
                     resetContentSemanticUi()
