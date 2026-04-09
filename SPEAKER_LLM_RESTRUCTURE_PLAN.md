@@ -25,6 +25,8 @@ Repo state snapshot:
 - Gemini model selection is now settings-backed instead of hard-coded in `SpeakerScreen`.
 - LLM fallback toggle/state has started moving out of `SpeakerScreen` and into `SpeakerViewModel`.
 - Content semantic candidate/highlight state has started moving into `SpeakerViewModel`.
+- Content ASR command/semantic coordinators now live under `speaker/` instead of `ui/speaker/`.
+- `SpeakerScreen` content ASR effect has been reduced to a single coordinator call plus UI wiring.
 - Successful fallback decisions are now wired back into the same candidate/autoplay flow used by lexical decisions.
 - `app/google-services.json` is present and matches the Android package name.
 - Android OAuth token fetch is wired and device-validated far enough to reach Gemini HTTP 200 responses.
@@ -72,7 +74,7 @@ Files already present in repo:
 
 Files not yet present:
 
-- runtime/viewmodel ownership of the remaining fallback orchestration that still lives in `SpeakerScreen`
+- runtime/viewmodel ownership of the remaining fallback orchestration and ASR text state that still live in `SpeakerScreen`
 - broader provider integration tests beyond the current success / `401` / malformed-payload coverage
 - end-to-end automated coverage for the real Gemini HTTP fallback path
 
