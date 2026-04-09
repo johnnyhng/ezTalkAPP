@@ -67,7 +67,6 @@ import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.importTextUrisIntoSpeakerFolder
 import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerAsrController
 import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerPlaybackController
-import tw.com.johnnyhng.eztalk.asr.speaker.resolveSpeakerContentCommand
 import tw.com.johnnyhng.eztalk.asr.speaker.sanitizeFolderName
 import tw.com.johnnyhng.eztalk.asr.speaker.toFallbackState
 import tw.com.johnnyhng.eztalk.asr.speaker.toastMessageResId
@@ -235,155 +234,104 @@ fun SpeakerScreen(
         val finalText = speakerAsrState.finalText
         Log.i(TAG, "Speaker content ASR text: $finalText")
 
-        when (val command = resolveSpeakerContentCommand(finalText, contentLines)) {
-            SpeakerContentCommand.Play -> {
-                resetContentSemanticUi()
-                Log.i(TAG, "Speaker content command matched: Play")
-                when (playDocumentWithAsrStop(document)) {
-                    SpeakerPlaybackResult.NOT_READY -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_tts_not_ready),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
+        if (
+            handleSpeakerContentCommand(
+                context = context,
+                finalText = finalText,
+                document = document,
+                contentLines = contentLines,
+                isSelectedDocumentPlaying = isSelectedDocumentPlaying,
+                isSelectedDocumentPaused = isSelectedDocumentPaused,
+                resetContentSemanticUi = resetContentSemanticUi,
+                pauseDocument = playbackController::pause,
+                stopPlayback = playbackController::stop,
+                playDocumentWithAsrStop = playDocumentWithAsrStop,
+                playLineWithAsrStop = playLineWithAsrStop
+            )
+        ) {
+            return@LaunchedEffect
+        }
 
-                    SpeakerPlaybackResult.EMPTY_TEXT -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_empty_text_file),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-
-                    SpeakerPlaybackResult.STARTED -> Unit
-                }
-            }
-
-            SpeakerContentCommand.Pause -> {
-                resetContentSemanticUi()
-                Log.i(TAG, "Speaker content command matched: Pause")
-                if (isSelectedDocumentPlaying) {
-                    playbackController.pause(document.id)
-                }
-            }
-
-            SpeakerContentCommand.Stop -> {
-                resetContentSemanticUi()
-                Log.i(TAG, "Speaker content command matched: Stop")
-                if (isSelectedDocumentPlaying || isSelectedDocumentPaused) {
-                    playbackController.stop()
-                }
-            }
-
-            is SpeakerContentCommand.PlayLine -> {
-                resetContentSemanticUi()
-                Log.i(TAG, "Speaker content command matched: PlayLine(${command.lineIndex})")
-                val lineText = contentLines.getOrNull(command.lineIndex).orEmpty()
-                when (playLineWithAsrStop(document, command.lineIndex, lineText)) {
-                    SpeakerPlaybackResult.NOT_READY -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_tts_not_ready),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-
-                    SpeakerPlaybackResult.EMPTY_TEXT -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.speaker_empty_text_file),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-
-                    SpeakerPlaybackResult.STARTED -> Unit
-                }
-            }
-
-            null -> {
-                val resolution = semanticModule.resolve(
+        val resolution = semanticModule.resolve(
+            queryText = finalText,
+            lines = contentLines,
+            chunks = indexedSelectedDocumentChunks
+        )
+        Log.i(
+            TAG,
+            "Speaker semantic query embedding length=${resolution.query.embedding.size} preview=${resolution.query.embedding.previewForLog()}"
+        )
+        Log.i(
+            TAG,
+            "Speaker semantic top3 cosine=${resolution.rankedResults.take(3).formatTop3CosineForLog()}"
+        )
+        when (val decision = resolution.decision) {
+            SpeakerSemanticDecision.NoMatch -> {
+                contentSemanticCandidateLineIndex = null
+                Log.i(TAG, "Speaker semantic no matched content")
+                val noMatchOutcome = semanticModule.resolveNoMatchOutcome(
                     queryText = finalText,
+                    rankedResults = resolution.rankedResults,
                     lines = contentLines,
-                    chunks = indexedSelectedDocumentChunks
+                    isLlmFallbackEnabled = uiState.isLlmFallbackEnabled
                 )
-                Log.i(
-                    TAG,
-                    "Speaker semantic query embedding length=${resolution.query.embedding.size} preview=${resolution.query.embedding.previewForLog()}"
+                speakerViewModel.updateLlmFallbackState(
+                    noMatchOutcome.toFallbackState(
+                        fallbackMessage = context.getString(R.string.speaker_llm_preview_unavailable),
+                        onFailure = { error -> Log.w(TAG, "Speaker LLM fallback failed", error) }
+                    )
                 )
-                Log.i(
-                    TAG,
-                    "Speaker semantic top3 cosine=${resolution.rankedResults.take(3).formatTop3CosineForLog()}"
-                )
-                when (val decision = resolution.decision) {
-                    SpeakerSemanticDecision.NoMatch -> {
-                        contentSemanticCandidateLineIndex = null
-                        Log.i(TAG, "Speaker semantic no matched content")
-                        val noMatchOutcome = semanticModule.resolveNoMatchOutcome(
-                            queryText = finalText,
-                            rankedResults = resolution.rankedResults,
-                            lines = contentLines,
-                            isLlmFallbackEnabled = uiState.isLlmFallbackEnabled
-                        )
-                        speakerViewModel.updateLlmFallbackState(
-                            noMatchOutcome.toFallbackState(
-                                fallbackMessage = context.getString(R.string.speaker_llm_preview_unavailable),
-                                onFailure = { error -> Log.w(TAG, "Speaker LLM fallback failed", error) }
-                            )
-                        )
-                        if (
-                            applySpeakerSemanticDecision(
-                                context = context,
-                                document = document,
-                                decision = noMatchOutcome.llmFallbackResult?.getOrNull(),
-                                contentLines = contentLines,
-                                playLineWithAsrStop = playLineWithAsrStop,
-                                updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
-                            )
-                        ) {
-                            return@LaunchedEffect
-                        }
-                        Toast.makeText(context, context.getString(noMatchOutcome.toastMessageResId()), Toast.LENGTH_SHORT).show()
-                    }
-
-                    is SpeakerSemanticDecision.Candidate -> {
-                        contentSemanticCandidateLineIndex = decision.lineIndex
-                        speakerViewModel.updateLlmFallbackState(null)
-                        val result = decision.result
-                        Log.i(
-                            TAG,
-                            "Speaker semantic candidate line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
-                        )
-                        applySpeakerSemanticDecision(
-                            context = context,
-                            document = document,
-                            decision = decision,
-                            contentLines = contentLines,
-                            playLineWithAsrStop = playLineWithAsrStop,
-                            updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
-                        )
-                    }
-
-                    is SpeakerSemanticDecision.AutoPlay -> {
-                        val result = decision.result
-                        speakerViewModel.updateLlmFallbackState(null)
-                        Log.i(
-                            TAG,
-                            "Speaker semantic autoplay line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
-                        )
-                        applySpeakerSemanticDecision(
-                            context = context,
-                            document = document,
-                            decision = decision,
-                            contentLines = contentLines,
-                            playLineWithAsrStop = playLineWithAsrStop,
-                            updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
-                        )
-                    }
-
-                    is SpeakerSemanticDecision.Ambiguous -> Unit
+                if (
+                    applySpeakerSemanticDecision(
+                        context = context,
+                        document = document,
+                        decision = noMatchOutcome.llmFallbackResult?.getOrNull(),
+                        contentLines = contentLines,
+                        playLineWithAsrStop = playLineWithAsrStop,
+                        updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
+                    )
+                ) {
+                    return@LaunchedEffect
                 }
+                Toast.makeText(context, context.getString(noMatchOutcome.toastMessageResId()), Toast.LENGTH_SHORT).show()
             }
+
+            is SpeakerSemanticDecision.Candidate -> {
+                contentSemanticCandidateLineIndex = decision.lineIndex
+                speakerViewModel.updateLlmFallbackState(null)
+                val result = decision.result
+                Log.i(
+                    TAG,
+                    "Speaker semantic candidate line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
+                )
+                applySpeakerSemanticDecision(
+                    context = context,
+                    document = document,
+                    decision = decision,
+                    contentLines = contentLines,
+                    playLineWithAsrStop = playLineWithAsrStop,
+                    updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
+                )
+            }
+
+            is SpeakerSemanticDecision.AutoPlay -> {
+                val result = decision.result
+                speakerViewModel.updateLlmFallbackState(null)
+                Log.i(
+                    TAG,
+                    "Speaker semantic autoplay line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
+                )
+                applySpeakerSemanticDecision(
+                    context = context,
+                    document = document,
+                    decision = decision,
+                    contentLines = contentLines,
+                    playLineWithAsrStop = playLineWithAsrStop,
+                    updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
+                )
+            }
+
+            is SpeakerSemanticDecision.Ambiguous -> Unit
         }
     }
 
