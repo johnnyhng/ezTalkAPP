@@ -252,87 +252,18 @@ fun SpeakerScreen(
             return@LaunchedEffect
         }
 
-        val resolution = semanticModule.resolve(
+        handleSpeakerSemanticResolution(
+            context = context,
+            semanticModule = semanticModule,
             queryText = finalText,
-            lines = contentLines,
-            chunks = indexedSelectedDocumentChunks
+            document = document,
+            contentLines = contentLines,
+            indexedChunks = indexedSelectedDocumentChunks,
+            isLlmFallbackEnabled = uiState.isLlmFallbackEnabled,
+            playLineWithAsrStop = playLineWithAsrStop,
+            updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it },
+            updateLlmFallbackState = speakerViewModel::updateLlmFallbackState
         )
-        Log.i(
-            TAG,
-            "Speaker semantic query embedding length=${resolution.query.embedding.size} preview=${resolution.query.embedding.previewForLog()}"
-        )
-        Log.i(
-            TAG,
-            "Speaker semantic top3 cosine=${resolution.rankedResults.take(3).formatTop3CosineForLog()}"
-        )
-        when (val decision = resolution.decision) {
-            SpeakerSemanticDecision.NoMatch -> {
-                contentSemanticCandidateLineIndex = null
-                Log.i(TAG, "Speaker semantic no matched content")
-                val noMatchOutcome = semanticModule.resolveNoMatchOutcome(
-                    queryText = finalText,
-                    rankedResults = resolution.rankedResults,
-                    lines = contentLines,
-                    isLlmFallbackEnabled = uiState.isLlmFallbackEnabled
-                )
-                speakerViewModel.updateLlmFallbackState(
-                    noMatchOutcome.toFallbackState(
-                        fallbackMessage = context.getString(R.string.speaker_llm_preview_unavailable),
-                        onFailure = { error -> Log.w(TAG, "Speaker LLM fallback failed", error) }
-                    )
-                )
-                if (
-                    applySpeakerSemanticDecision(
-                        context = context,
-                        document = document,
-                        decision = noMatchOutcome.llmFallbackResult?.getOrNull(),
-                        contentLines = contentLines,
-                        playLineWithAsrStop = playLineWithAsrStop,
-                        updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
-                    )
-                ) {
-                    return@LaunchedEffect
-                }
-                Toast.makeText(context, context.getString(noMatchOutcome.toastMessageResId()), Toast.LENGTH_SHORT).show()
-            }
-
-            is SpeakerSemanticDecision.Candidate -> {
-                contentSemanticCandidateLineIndex = decision.lineIndex
-                speakerViewModel.updateLlmFallbackState(null)
-                val result = decision.result
-                Log.i(
-                    TAG,
-                    "Speaker semantic candidate line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
-                )
-                applySpeakerSemanticDecision(
-                    context = context,
-                    document = document,
-                    decision = decision,
-                    contentLines = contentLines,
-                    playLineWithAsrStop = playLineWithAsrStop,
-                    updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
-                )
-            }
-
-            is SpeakerSemanticDecision.AutoPlay -> {
-                val result = decision.result
-                speakerViewModel.updateLlmFallbackState(null)
-                Log.i(
-                    TAG,
-                    "Speaker semantic autoplay line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
-                )
-                applySpeakerSemanticDecision(
-                    context = context,
-                    document = document,
-                    decision = decision,
-                    contentLines = contentLines,
-                    playLineWithAsrStop = playLineWithAsrStop,
-                    updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
-                )
-            }
-
-            is SpeakerSemanticDecision.Ambiguous -> Unit
-        }
     }
 
     fun toggleSpeakerAsr(target: SpeakerAsrTarget) {
@@ -721,35 +652,6 @@ fun SpeakerScreen(
                     .weight(1f)
             )
         }
-    }
-}
-
-private fun FloatArray.previewForLog(maxSize: Int = 8): String {
-    if (isEmpty()) return "[]"
-    return take(maxSize).joinToString(
-        prefix = "[",
-        postfix = if (size > maxSize) ", ...]" else "]"
-    ) { value ->
-        "%.4f".format(value)
-    }
-}
-
-private fun List<SpeakerSearchResult>.formatTop3CosineForLog(): String {
-    if (isEmpty()) return "[]"
-    return take(3).joinToString(
-        prefix = "[",
-        postfix = "]"
-    ) { result ->
-        "{cos=${"%.4f".format(result.semanticScore)}, hybrid=${"%.4f".format(result.finalScore)}, lines=${result.lineStart}-${result.lineEnd}, text=${result.matchedText.oneLineForLog()}}"
-    }
-}
-
-private fun String.oneLineForLog(maxLength: Int = 60): String {
-    val normalized = replace('\n', ' ').trim()
-    return if (normalized.length <= maxLength) {
-        normalized
-    } else {
-        normalized.take(maxLength) + "..."
     }
 }
 

@@ -6,8 +6,15 @@ import android.widget.Toast
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerContentCommand
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerIndexedChunk
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerLlmFallbackState
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSearchResult
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticDecision
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticModule
 import tw.com.johnnyhng.eztalk.asr.speaker.resolveSpeakerContentCommand
+import tw.com.johnnyhng.eztalk.asr.speaker.toFallbackState
+import tw.com.johnnyhng.eztalk.asr.speaker.toastMessageResId
 
 internal fun handleSpeakerContentCommand(
     context: Context,
@@ -93,5 +100,147 @@ internal fun handleSpeakerContentCommand(
         }
 
         null -> false
+    }
+}
+
+internal suspend fun handleSpeakerSemanticResolution(
+    context: Context,
+    semanticModule: SpeakerSemanticModule,
+    queryText: String,
+    document: SpeakerDocumentUi,
+    contentLines: List<String>,
+    indexedChunks: List<SpeakerIndexedChunk>,
+    isLlmFallbackEnabled: Boolean,
+    playLineWithAsrStop: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult,
+    updateCandidateLineIndex: (Int?) -> Unit,
+    updateLlmFallbackState: (SpeakerLlmFallbackState?) -> Unit
+): Boolean {
+    val resolution = semanticModule.resolve(
+        queryText = queryText,
+        lines = contentLines,
+        chunks = indexedChunks
+    )
+    Log.i(
+        TAG,
+        "Speaker semantic query embedding length=${resolution.query.embedding.size} preview=${resolution.query.embedding.previewForLog()}"
+    )
+    Log.i(
+        TAG,
+        "Speaker semantic top3 cosine=${resolution.rankedResults.take(3).formatTop3CosineForLog()}"
+    )
+    return when (val decision = resolution.decision) {
+        SpeakerSemanticDecision.NoMatch -> {
+            updateCandidateLineIndex(null)
+            Log.i(TAG, "Speaker semantic no matched content")
+            val noMatchOutcome = semanticModule.resolveNoMatchOutcome(
+                queryText = queryText,
+                rankedResults = resolution.rankedResults,
+                lines = contentLines,
+                isLlmFallbackEnabled = isLlmFallbackEnabled
+            )
+            updateLlmFallbackState(
+                noMatchOutcome.toFallbackState(
+                    fallbackMessage = context.getString(R.string.speaker_llm_preview_unavailable),
+                    onFailure = { error -> Log.w(TAG, "Speaker LLM fallback failed", error) }
+                )
+            )
+            if (
+                applySpeakerSemanticDecision(
+                    context = context,
+                    document = document,
+                    decision = noMatchOutcome.llmFallbackResult?.getOrNull(),
+                    contentLines = contentLines,
+                    playLineWithAsrStop = playLineWithAsrStop,
+                    updateCandidateLineIndex = updateCandidateLineIndex
+                )
+            ) {
+                true
+            } else {
+                Toast.makeText(
+                    context,
+                    context.getString(noMatchOutcome.toastMessageResId()),
+                    Toast.LENGTH_SHORT
+                ).show()
+                true
+            }
+        }
+
+        is SpeakerSemanticDecision.Candidate -> {
+            updateCandidateLineIndex(decision.lineIndex)
+            updateLlmFallbackState(null)
+            logSpeakerSemanticDecision("candidate", decision)
+            applySpeakerSemanticDecision(
+                context = context,
+                document = document,
+                decision = decision,
+                contentLines = contentLines,
+                playLineWithAsrStop = playLineWithAsrStop,
+                updateCandidateLineIndex = updateCandidateLineIndex
+            )
+        }
+
+        is SpeakerSemanticDecision.AutoPlay -> {
+            updateLlmFallbackState(null)
+            logSpeakerSemanticDecision("autoplay", decision)
+            applySpeakerSemanticDecision(
+                context = context,
+                document = document,
+                decision = decision,
+                contentLines = contentLines,
+                playLineWithAsrStop = playLineWithAsrStop,
+                updateCandidateLineIndex = updateCandidateLineIndex
+            )
+        }
+
+        is SpeakerSemanticDecision.Ambiguous -> false
+    }
+}
+
+private fun logSpeakerSemanticDecision(
+    label: String,
+    decision: SpeakerSemanticDecision
+) {
+    val result = when (decision) {
+        is SpeakerSemanticDecision.Candidate -> decision.result
+        is SpeakerSemanticDecision.AutoPlay -> decision.result
+        else -> return
+    }
+    val lineIndex = when (decision) {
+        is SpeakerSemanticDecision.Candidate -> decision.lineIndex
+        is SpeakerSemanticDecision.AutoPlay -> decision.lineIndex
+        else -> return
+    }
+    Log.i(
+        TAG,
+        "Speaker semantic $label line=$lineIndex score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
+    )
+}
+
+private fun FloatArray.previewForLog(maxSize: Int = 8): String {
+    if (isEmpty()) return "[]"
+    return take(maxSize).joinToString(
+        prefix = "[",
+        postfix = if (size > maxSize) ", ...]" else "]"
+    ) { value ->
+        "%.4f".format(value)
+    }
+}
+
+private fun List<SpeakerSearchResult>.formatTop3CosineForLog(): String {
+    if (isEmpty()) return "[]"
+    return take(3).joinToString(
+        prefix = "[",
+        postfix = "]"
+    ) { result ->
+        "{cos=${"%.4f".format(result.semanticScore)}, hybrid=${"%.4f".format(result.finalScore)}, lines=${result.lineStart}-${result.lineEnd}, text=${result.matchedText.oneLineForLog()}}"
+    }
+}
+
+private fun String.oneLineForLog(maxLength: Int = 60): String {
+    val normalized = replace('\n', ' ').trim()
+    return if (normalized.length <= maxLength) {
+        normalized
+    } else {
+        normalized.take(maxLength) + "..."
     }
 }
