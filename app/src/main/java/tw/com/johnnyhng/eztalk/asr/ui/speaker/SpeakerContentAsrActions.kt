@@ -103,6 +103,56 @@ internal fun handleSpeakerContentCommand(
     }
 }
 
+internal suspend fun handleSpeakerContentAsr(
+    context: Context,
+    semanticModule: SpeakerSemanticModule,
+    finalText: String,
+    document: SpeakerDocumentUi,
+    contentLines: List<String>,
+    indexedChunks: List<SpeakerIndexedChunk>,
+    isSelectedDocumentPlaying: Boolean,
+    isSelectedDocumentPaused: Boolean,
+    isLlmFallbackEnabled: Boolean,
+    resetContentSemanticUi: () -> Unit,
+    pauseDocument: (String) -> Unit,
+    stopPlayback: () -> Unit,
+    playDocumentWithAsrStop: (SpeakerDocumentUi) -> SpeakerPlaybackResult,
+    playLineWithAsrStop: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult,
+    updateCandidateLineIndex: (Int?) -> Unit,
+    updateLlmFallbackState: (SpeakerLlmFallbackState?) -> Unit
+) {
+    if (
+        handleSpeakerContentCommand(
+            context = context,
+            finalText = finalText,
+            document = document,
+            contentLines = contentLines,
+            isSelectedDocumentPlaying = isSelectedDocumentPlaying,
+            isSelectedDocumentPaused = isSelectedDocumentPaused,
+            resetContentSemanticUi = resetContentSemanticUi,
+            pauseDocument = pauseDocument,
+            stopPlayback = stopPlayback,
+            playDocumentWithAsrStop = playDocumentWithAsrStop,
+            playLineWithAsrStop = playLineWithAsrStop
+        )
+    ) {
+        return
+    }
+
+    handleSpeakerSemanticResolution(
+        context = context,
+        semanticModule = semanticModule,
+        queryText = finalText,
+        document = document,
+        contentLines = contentLines,
+        indexedChunks = indexedChunks,
+        isLlmFallbackEnabled = isLlmFallbackEnabled,
+        playLineWithAsrStop = playLineWithAsrStop,
+        updateCandidateLineIndex = updateCandidateLineIndex,
+        updateLlmFallbackState = updateLlmFallbackState
+    )
+}
+
 internal suspend fun handleSpeakerSemanticResolution(
     context: Context,
     semanticModule: SpeakerSemanticModule,

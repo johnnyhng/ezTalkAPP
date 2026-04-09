@@ -234,32 +234,20 @@ fun SpeakerScreen(
         val finalText = speakerAsrState.finalText
         Log.i(TAG, "Speaker content ASR text: $finalText")
 
-        if (
-            handleSpeakerContentCommand(
-                context = context,
-                finalText = finalText,
-                document = document,
-                contentLines = contentLines,
-                isSelectedDocumentPlaying = isSelectedDocumentPlaying,
-                isSelectedDocumentPaused = isSelectedDocumentPaused,
-                resetContentSemanticUi = resetContentSemanticUi,
-                pauseDocument = playbackController::pause,
-                stopPlayback = playbackController::stop,
-                playDocumentWithAsrStop = playDocumentWithAsrStop,
-                playLineWithAsrStop = playLineWithAsrStop
-            )
-        ) {
-            return@LaunchedEffect
-        }
-
-        handleSpeakerSemanticResolution(
+        handleSpeakerContentAsr(
             context = context,
             semanticModule = semanticModule,
-            queryText = finalText,
+            finalText = finalText,
             document = document,
             contentLines = contentLines,
             indexedChunks = indexedSelectedDocumentChunks,
+            isSelectedDocumentPlaying = isSelectedDocumentPlaying,
+            isSelectedDocumentPaused = isSelectedDocumentPaused,
             isLlmFallbackEnabled = uiState.isLlmFallbackEnabled,
+            resetContentSemanticUi = resetContentSemanticUi,
+            pauseDocument = playbackController::pause,
+            stopPlayback = playbackController::stop,
+            playDocumentWithAsrStop = playDocumentWithAsrStop,
             playLineWithAsrStop = playLineWithAsrStop,
             updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it },
             updateLlmFallbackState = speakerViewModel::updateLlmFallbackState
