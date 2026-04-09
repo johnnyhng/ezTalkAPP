@@ -146,6 +146,10 @@ fun SpeakerScreen(
             }
             playbackController.playLine(document, lineIndex, line)
         }
+    val resetContentSemanticUi: () -> Unit = {
+        contentSemanticCandidateLineIndex = null
+        speakerViewModel.updateLlmFallbackState(null)
+    }
 
     LaunchedEffect(userSettings.userId) {
         speakerViewModel.setUserId(userSettings.userId)
@@ -187,8 +191,7 @@ fun SpeakerScreen(
         speakerAsrController.stop()
         playbackController.stop()
         contentAsrText = ""
-        contentSemanticCandidateLineIndex = null
-        speakerViewModel.updateLlmFallbackState(null)
+        resetContentSemanticUi()
     }
 
     LaunchedEffect(selectedDocument?.id, expandedPane) {
@@ -232,7 +235,7 @@ fun SpeakerScreen(
 
         when (val command = resolveSpeakerContentCommand(finalText, contentLines)) {
             SpeakerContentCommand.Play -> {
-                contentSemanticCandidateLineIndex = null
+                resetContentSemanticUi()
                 Log.i(TAG, "Speaker content command matched: Play")
                 when (playDocumentWithAsrStop(document)) {
                     SpeakerPlaybackResult.NOT_READY -> {
@@ -256,7 +259,7 @@ fun SpeakerScreen(
             }
 
             SpeakerContentCommand.Pause -> {
-                contentSemanticCandidateLineIndex = null
+                resetContentSemanticUi()
                 Log.i(TAG, "Speaker content command matched: Pause")
                 if (isSelectedDocumentPlaying) {
                     playbackController.pause(document.id)
@@ -264,7 +267,7 @@ fun SpeakerScreen(
             }
 
             SpeakerContentCommand.Stop -> {
-                contentSemanticCandidateLineIndex = null
+                resetContentSemanticUi()
                 Log.i(TAG, "Speaker content command matched: Stop")
                 if (isSelectedDocumentPlaying || isSelectedDocumentPaused) {
                     playbackController.stop()
@@ -272,7 +275,7 @@ fun SpeakerScreen(
             }
 
             is SpeakerContentCommand.PlayLine -> {
-                contentSemanticCandidateLineIndex = null
+                resetContentSemanticUi()
                 Log.i(TAG, "Speaker content command matched: PlayLine(${command.lineIndex})")
                 val lineText = contentLines.getOrNull(command.lineIndex).orEmpty()
                 when (playLineWithAsrStop(document, command.lineIndex, lineText)) {
@@ -678,8 +681,7 @@ fun SpeakerScreen(
                 onLlmFallbackToggle = speakerViewModel::onLlmFallbackEnabledChange,
                 onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
                 onSpeakLine = { lineIndex, line ->
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     when (playLineWithAsrStop(selectedDocument, lineIndex, line)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -701,8 +703,7 @@ fun SpeakerScreen(
                     }
                 },
                 onPlay = {
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     when (playDocumentWithAsrStop(selectedDocument)) {
                         SpeakerPlaybackResult.NOT_READY -> {
                             Toast.makeText(
@@ -724,40 +725,34 @@ fun SpeakerScreen(
                     }
                 },
                 onPause = {
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     playbackController.pause(selectedDocument.id)
                 },
                 onStop = {
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     playbackController.stop()
                 },
                 onPreviousDocument = {
                     val targetDocument = previousDocument ?: return@SpeakerContentScreen
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
                 onNextDocument = {
                     val targetDocument = nextDocument ?: return@SpeakerContentScreen
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
                 isPreviousDocumentEnabled = previousDocument != null,
                 isNextDocumentEnabled = nextDocument != null,
                 onEdit = {
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     playbackController.stop()
                     speakerViewModel.startEditing()
                 },
                 onSave = {
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     speakerViewModel.saveEditing { saved ->
                         Toast.makeText(
                             context,
@@ -769,8 +764,7 @@ fun SpeakerScreen(
                     }
                 },
                 onCancelEdit = {
-                    contentSemanticCandidateLineIndex = null
-                    speakerViewModel.updateLlmFallbackState(null)
+                    resetContentSemanticUi()
                     speakerViewModel.cancelEditing()
                 },
                 modifier = Modifier
