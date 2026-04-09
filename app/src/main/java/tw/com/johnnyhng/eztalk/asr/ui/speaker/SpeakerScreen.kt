@@ -102,7 +102,6 @@ fun SpeakerScreen(
     var importTargetDirectory by remember { mutableStateOf<String?>(null) }
     var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
-    var contentAsrText by rememberSaveable { mutableStateOf("") }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
@@ -158,7 +157,7 @@ fun SpeakerScreen(
         val latestText = speakerAsrState.finalText.ifBlank { speakerAsrState.partialText }
         when (activeAsrTarget) {
             SpeakerAsrTarget.EXPLORER -> explorerAsrText = latestText
-            SpeakerAsrTarget.CONTENT -> contentAsrText = latestText
+            SpeakerAsrTarget.CONTENT -> speakerViewModel.updateContentAsrText(latestText)
             null -> Unit
         }
     }
@@ -189,7 +188,6 @@ fun SpeakerScreen(
     LaunchedEffect(selectedDocument?.id) {
         speakerAsrController.stop()
         playbackController.stop()
-        contentAsrText = ""
         resetContentSemanticUi()
     }
 
@@ -269,7 +267,7 @@ fun SpeakerScreen(
             activeAsrTarget = target
             when (target) {
                 SpeakerAsrTarget.EXPLORER -> explorerAsrText = ""
-                SpeakerAsrTarget.CONTENT -> contentAsrText = ""
+                SpeakerAsrTarget.CONTENT -> speakerViewModel.updateContentAsrText("")
             }
             speakerAsrController.start(userSettings)
         }
@@ -534,7 +532,7 @@ fun SpeakerScreen(
                 isPlaying = isSelectedDocumentPlaying,
                 isPaused = isSelectedDocumentPaused,
                 isEditing = uiState.isEditingDocument,
-                localAsrText = contentAsrText,
+                localAsrText = uiState.contentAsrText,
                 localAsrSecondaryText = uiState.llmFallbackState.toDisplayText(context),
                 isLocalAsrRecording = activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecording,
                 localAsrCountdownProgress = if (activeAsrTarget == SpeakerAsrTarget.CONTENT && speakerAsrState.isRecognizingSpeech) speakerAsrState.countdownProgress else 0f,
