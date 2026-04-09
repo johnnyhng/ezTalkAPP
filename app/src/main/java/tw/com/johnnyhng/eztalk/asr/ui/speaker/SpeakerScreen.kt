@@ -322,41 +322,17 @@ fun SpeakerScreen(
                             context = context
                         )
                         speakerViewModel.updateLlmFallbackState(noMatchOutcome.fallbackState)
-                        when (val llmDecision = noMatchOutcome.llmDecision) {
-                            is SpeakerSemanticDecision.Candidate -> {
-                                contentSemanticCandidateLineIndex = llmDecision.lineIndex
-                                Toast.makeText(
-                                    context,
-                                    context.getString(
-                                        R.string.speaker_semantic_candidate_selected,
-                                        llmDecision.lineIndex + 1
-                                    ),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                return@LaunchedEffect
-                            }
-
-                            is SpeakerSemanticDecision.AutoPlay -> {
-                                contentSemanticCandidateLineIndex = llmDecision.lineIndex
-                                val lineText = contentLines.getOrNull(llmDecision.lineIndex).orEmpty()
-                                when (playLineWithAsrStop(document, llmDecision.lineIndex, lineText)) {
-                                    SpeakerPlaybackResult.NOT_READY -> {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(R.string.speaker_tts_not_ready),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-
-                                    SpeakerPlaybackResult.EMPTY_TEXT -> Unit
-                                    SpeakerPlaybackResult.STARTED -> {
-                                        contentSemanticCandidateLineIndex = null
-                                    }
-                                }
-                                return@LaunchedEffect
-                            }
-
-                            else -> Unit
+                        if (
+                            applySpeakerSemanticDecision(
+                                context = context,
+                                document = document,
+                                decision = noMatchOutcome.llmDecision,
+                                contentLines = contentLines,
+                                playLineWithAsrStop = playLineWithAsrStop,
+                                updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
+                            )
+                        ) {
+                            return@LaunchedEffect
                         }
                         Toast.makeText(
                             context,
@@ -373,14 +349,14 @@ fun SpeakerScreen(
                             TAG,
                             "Speaker semantic candidate line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
                         )
-                        Toast.makeText(
-                            context,
-                            context.getString(
-                                R.string.speaker_semantic_candidate_selected,
-                                decision.lineIndex + 1
-                            ),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        applySpeakerSemanticDecision(
+                            context = context,
+                            document = document,
+                            decision = decision,
+                            contentLines = contentLines,
+                            playLineWithAsrStop = playLineWithAsrStop,
+                            updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
+                        )
                     }
 
                     is SpeakerSemanticDecision.AutoPlay -> {
@@ -390,22 +366,14 @@ fun SpeakerScreen(
                             TAG,
                             "Speaker semantic autoplay line=${decision.lineIndex} score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
                         )
-                        contentSemanticCandidateLineIndex = decision.lineIndex
-                        val lineText = contentLines.getOrNull(decision.lineIndex).orEmpty()
-                        when (playLineWithAsrStop(document, decision.lineIndex, lineText)) {
-                            SpeakerPlaybackResult.NOT_READY -> {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.speaker_tts_not_ready),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-
-                            SpeakerPlaybackResult.EMPTY_TEXT -> Unit
-                            SpeakerPlaybackResult.STARTED -> {
-                                contentSemanticCandidateLineIndex = null
-                            }
-                        }
+                        applySpeakerSemanticDecision(
+                            context = context,
+                            document = document,
+                            decision = decision,
+                            contentLines = contentLines,
+                            playLineWithAsrStop = playLineWithAsrStop,
+                            updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it }
+                        )
                     }
 
                     is SpeakerSemanticDecision.Ambiguous -> Unit
@@ -882,6 +850,50 @@ private suspend fun resolveSpeakerNoMatchOutcome(
         llmDecision = llmFallbackResult?.getOrNull(),
         toastMessageResId = toastMessageResId
     )
+}
+
+private fun applySpeakerSemanticDecision(
+    context: android.content.Context,
+    document: SpeakerDocumentUi,
+    decision: SpeakerSemanticDecision?,
+    contentLines: List<String>,
+    playLineWithAsrStop: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult,
+    updateCandidateLineIndex: (Int?) -> Unit
+): Boolean {
+    return when (decision) {
+        is SpeakerSemanticDecision.Candidate -> {
+            updateCandidateLineIndex(decision.lineIndex)
+            Toast.makeText(
+                context,
+                context.getString(
+                    R.string.speaker_semantic_candidate_selected,
+                    decision.lineIndex + 1
+                ),
+                Toast.LENGTH_SHORT
+            ).show()
+            true
+        }
+
+        is SpeakerSemanticDecision.AutoPlay -> {
+            updateCandidateLineIndex(decision.lineIndex)
+            val lineText = contentLines.getOrNull(decision.lineIndex).orEmpty()
+            when (playLineWithAsrStop(document, decision.lineIndex, lineText)) {
+                SpeakerPlaybackResult.NOT_READY -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_tts_not_ready),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                SpeakerPlaybackResult.EMPTY_TEXT -> Unit
+                SpeakerPlaybackResult.STARTED -> updateCandidateLineIndex(null)
+            }
+            true
+        }
+
+        else -> false
+    }
 }
 
 private fun SpeakerLlmFallbackState?.toDisplayText(context: android.content.Context): String? {
