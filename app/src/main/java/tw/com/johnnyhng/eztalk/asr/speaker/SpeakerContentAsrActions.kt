@@ -1,23 +1,10 @@
-package tw.com.johnnyhng.eztalk.asr.ui.speaker
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerContentCommand
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerIndexedChunk
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerLlmFallbackState
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticDecision
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticModule
-import tw.com.johnnyhng.eztalk.asr.speaker.formatTop3CosineForLog
-import tw.com.johnnyhng.eztalk.asr.speaker.oneLineForLog
-import tw.com.johnnyhng.eztalk.asr.speaker.previewForLog
-import tw.com.johnnyhng.eztalk.asr.speaker.resolveSpeakerContentCommand
-import tw.com.johnnyhng.eztalk.asr.speaker.toFallbackState
-import tw.com.johnnyhng.eztalk.asr.speaker.toastMessageResId
 
 internal fun handleSpeakerContentCommand(
     context: Context,

@@ -1,11 +1,8 @@
-package tw.com.johnnyhng.eztalk.asr.ui.speaker
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 import android.content.Context
 import android.widget.Toast
 import tw.com.johnnyhng.eztalk.asr.R
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
-import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticDecision
 
 internal fun applySpeakerSemanticDecision(
     context: Context,
