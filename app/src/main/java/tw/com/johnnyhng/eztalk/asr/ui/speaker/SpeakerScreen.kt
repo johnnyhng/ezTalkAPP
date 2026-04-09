@@ -69,6 +69,8 @@ import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerAsrController
 import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerPlaybackController
 import tw.com.johnnyhng.eztalk.asr.speaker.resolveSpeakerContentCommand
 import tw.com.johnnyhng.eztalk.asr.speaker.sanitizeFolderName
+import tw.com.johnnyhng.eztalk.asr.speaker.toFallbackState
+import tw.com.johnnyhng.eztalk.asr.speaker.toastMessageResId
 
 private enum class SpeakerAsrTarget {
     EXPLORER,
@@ -324,7 +326,10 @@ fun SpeakerScreen(
                             isLlmFallbackEnabled = uiState.isLlmFallbackEnabled
                         )
                         speakerViewModel.updateLlmFallbackState(
-                            noMatchOutcome.toFallbackState(context)
+                            noMatchOutcome.toFallbackState(
+                                fallbackMessage = context.getString(R.string.speaker_llm_preview_unavailable),
+                                onFailure = { error -> Log.w(TAG, "Speaker LLM fallback failed", error) }
+                            )
                         )
                         if (
                             applySpeakerSemanticDecision(
@@ -338,11 +343,7 @@ fun SpeakerScreen(
                         ) {
                             return@LaunchedEffect
                         }
-                        Toast.makeText(
-                            context,
-                            context.getString(noMatchOutcome.toastMessageResId()),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        Toast.makeText(context, context.getString(noMatchOutcome.toastMessageResId()), Toast.LENGTH_SHORT).show()
                     }
 
                     is SpeakerSemanticDecision.Candidate -> {
@@ -829,39 +830,6 @@ private fun applySpeakerSemanticDecision(
     }
 }
 
-private fun SpeakerNoMatchOutcome.toFallbackState(
-    context: android.content.Context
-): SpeakerLlmFallbackState? {
-    return when {
-        llmFallbackResult?.isSuccess == true -> SpeakerLlmFallbackState.Success(
-            llmFallbackResult.getOrThrow()
-        )
-        llmFallbackResult?.isFailure == true -> {
-            val error = llmFallbackResult.exceptionOrNull()
-            Log.w(TAG, "Speaker LLM fallback failed", error)
-            SpeakerLlmFallbackState.Failure(
-                error.toDisplayMessage(
-                    fallback = context.getString(R.string.speaker_llm_preview_unavailable)
-                )
-            )
-        }
-        llmRequestModel != null -> SpeakerLlmFallbackState.PreviewReady(
-            model = llmRequestModel,
-            candidateCount = llmCandidateCount
-        )
-        isLlmFallbackEnabled -> SpeakerLlmFallbackState.Unavailable
-        else -> null
-    }
-}
-
-private fun SpeakerNoMatchOutcome.toastMessageResId(): Int {
-    return when {
-        llmFallbackResult?.isSuccess == true -> R.string.speaker_semantic_no_match_llm_applied
-        llmRequestModel != null -> R.string.speaker_semantic_no_match_llm_preview
-        else -> R.string.speaker_semantic_no_match
-    }
-}
-
 private fun SpeakerLlmFallbackState?.toDisplayText(context: android.content.Context): String? {
     return when (this) {
         is SpeakerLlmFallbackState.PreviewReady -> context.getString(
@@ -880,17 +848,6 @@ private fun SpeakerLlmFallbackState?.toDisplayText(context: android.content.Cont
         SpeakerLlmFallbackState.Unavailable -> context.getString(R.string.speaker_llm_preview_unavailable)
         null -> null
     }
-}
-
-private fun Throwable?.toDisplayMessage(fallback: String): String {
-    if (this == null) return fallback
-
-    val parts = buildList {
-        message?.takeIf { it.isNotBlank() }?.let(::add)
-        cause?.message?.takeIf { it.isNotBlank() && it != message }?.let(::add)
-    }
-
-    return parts.joinToString(" | ").ifBlank { fallback }
 }
 
 private fun List<SpeakerSearchResult>.formatTop3CosineForLog(): String {
