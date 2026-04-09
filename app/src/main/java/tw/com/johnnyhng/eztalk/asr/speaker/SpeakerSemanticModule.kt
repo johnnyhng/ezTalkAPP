@@ -151,6 +151,37 @@ internal class SpeakerSemanticModule(
         }
     }
 
+    suspend fun resolveNoMatchOutcome(
+        queryText: String,
+        rankedResults: List<SpeakerSearchResult>,
+        lines: List<String>,
+        isLlmFallbackEnabled: Boolean,
+        maxCandidates: Int = 5
+    ): SpeakerNoMatchOutcome {
+        val llmRequest = buildLlmRequest(
+            queryText = queryText,
+            rankedResults = rankedResults,
+            maxCandidates = maxCandidates
+        )
+        val llmFallbackResult = if (isLlmFallbackEnabled) {
+            tryLlmFallback(
+                queryText = queryText,
+                rankedResults = rankedResults,
+                lines = lines,
+                maxCandidates = maxCandidates
+            )
+        } else {
+            null
+        }
+
+        return SpeakerNoMatchOutcome(
+            isLlmFallbackEnabled = isLlmFallbackEnabled,
+            llmRequestModel = llmRequest?.model,
+            llmCandidateCount = rankedResults.take(maxCandidates).size,
+            llmFallbackResult = llmFallbackResult
+        )
+    }
+
     private fun findMatchingResult(
         payload: SpeakerLlmSemanticPayload,
         rankedResults: List<SpeakerSearchResult>

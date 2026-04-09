@@ -79,3 +79,10 @@ internal sealed interface SpeakerLlmFallbackState {
 
     data object Unavailable : SpeakerLlmFallbackState
 }
+
+internal data class SpeakerNoMatchOutcome(
+    val isLlmFallbackEnabled: Boolean = false,
+    val llmRequestModel: String? = null,
+    val llmCandidateCount: Int = 0,
+    val llmFallbackResult: Result<SpeakerSemanticDecision>? = null
+)
