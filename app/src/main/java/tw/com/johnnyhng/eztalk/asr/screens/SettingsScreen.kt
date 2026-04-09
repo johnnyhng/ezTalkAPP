@@ -48,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.auth.UserRecoverableAuthException
 import tw.com.johnnyhng.eztalk.asr.NavRoutes
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
@@ -66,6 +67,25 @@ private sealed interface GeminiAuthStatus {
     data object Checking : GeminiAuthStatus
     data object Ready : GeminiAuthStatus
     data class Error(val message: String) : GeminiAuthStatus
+}
+
+private fun geminiOAuthErrorMessage(
+    context: android.content.Context,
+    error: Throwable
+): String {
+    val details = buildString {
+        append(error.message.orEmpty())
+        val causeMessage = error.cause?.message.orEmpty()
+        if (causeMessage.isNotBlank()) {
+            append(' ')
+            append(causeMessage)
+        }
+    }.lowercase()
+
+    return when {
+        "invalid_scope" in details -> context.getString(R.string.gemini_oauth_status_invalid_scope)
+        else -> error.message ?: context.getString(R.string.gemini_oauth_status_unknown_error)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -105,11 +125,36 @@ fun SettingsScreen(
     }
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
     var geminiAuthStatus by remember { mutableStateOf<GeminiAuthStatus>(GeminiAuthStatus.NotSignedIn) }
+    lateinit var refreshGeminiAuthStatus: (GoogleAccountSession?) -> Unit
 
-    fun refreshGeminiAuthStatus(session: GoogleAccountSession?) {
+    val geminiConsentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            refreshGeminiAuthStatus(googleSession)
+        } else {
+            geminiAuthStatus = GeminiAuthStatus.Error(
+                context.getString(R.string.gemini_oauth_status_consent_denied)
+            )
+        }
+    }
+
+    fun launchGeminiRecovery(error: UserRecoverableAuthException) {
+        geminiAuthStatus = GeminiAuthStatus.Error(
+            context.getString(R.string.gemini_oauth_status_consent_required)
+        )
+        Toast.makeText(
+            context,
+            context.getString(R.string.gemini_oauth_consent_required),
+            Toast.LENGTH_SHORT
+        ).show()
+        geminiConsentLauncher.launch(error.intent)
+    }
+
+    refreshGeminiAuthStatus = refresh@ { session ->
         if (session == null) {
             geminiAuthStatus = GeminiAuthStatus.NotSignedIn
-            return
+            return@refresh
         }
 
         geminiAuthStatus = GeminiAuthStatus.Checking
@@ -120,9 +165,14 @@ fun SettingsScreen(
                 }
                 .onFailure { error ->
                     Log.w(TAG, "Gemini OAuth token check failed", error)
-                    geminiAuthStatus = GeminiAuthStatus.Error(
-                        error.message ?: "Gemini OAuth token check failed"
-                    )
+                    when (error) {
+                        is UserRecoverableAuthException -> launchGeminiRecovery(error)
+                        else -> {
+                            geminiAuthStatus = GeminiAuthStatus.Error(
+                                geminiOAuthErrorMessage(context, error)
+                            )
+                        }
+                    }
                 }
         }
     }

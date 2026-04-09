@@ -2,7 +2,6 @@ package tw.com.johnnyhng.eztalk.asr.llm
 
 import android.content.Context
 import com.google.android.gms.auth.GoogleAuthUtil
-import com.google.android.gms.auth.UserRecoverableAuthException
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,17 +25,6 @@ internal class GoogleAuthGeminiAccessTokenProvider(
                 account,
                 GEMINI_OAUTH_SCOPE
             )
-        }.recoverCatching { error ->
-            when (error) {
-                is UserRecoverableAuthException -> {
-                    throw IllegalStateException(
-                        "Gemini OAuth requires user recovery before a token can be issued",
-                        error
-                    )
-                }
-
-                else -> throw error
-            }
         }
     }
 
@@ -48,6 +36,6 @@ internal class GoogleAuthGeminiAccessTokenProvider(
 
     private companion object {
         const val GEMINI_OAUTH_SCOPE =
-            "oauth2:https://www.googleapis.com/auth/generative-language"
+            "oauth2:https://www.googleapis.com/auth/generative-language.retriever"
     }
 }

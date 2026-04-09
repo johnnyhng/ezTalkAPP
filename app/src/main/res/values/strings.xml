@@ -17,6 +17,11 @@
     <string name="gemini_oauth_status_checking">Gemini OAuth: Checking access token…</string>
     <string name="gemini_oauth_status_ready">Gemini OAuth: Ready</string>
     <string name="gemini_oauth_status_error">Gemini OAuth: %1$s</string>
+    <string name="gemini_oauth_status_consent_required">Gemini OAuth: Consent required</string>
+    <string name="gemini_oauth_status_consent_denied">Gemini OAuth: Consent not completed</string>
+    <string name="gemini_oauth_consent_required">Gemini access needs Google consent. Complete the next step to continue.</string>
+    <string name="gemini_oauth_status_invalid_scope">Gemini OAuth: invalid_scope. Check Google Cloud consent screen, add the generative-language.retriever scope, add your account to test users, and enable the Generative Language API.</string>
+    <string name="gemini_oauth_status_unknown_error">Gemini OAuth token check failed</string>
     <string name="asr_model">ASR Model</string>
     <string name="asr_loading_title">ASR loading</string>
     <string name="asr_loading_message">Loading ASR model, please wait.</string>

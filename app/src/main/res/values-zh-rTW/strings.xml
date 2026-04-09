@@ -17,6 +17,11 @@
     <string name="gemini_oauth_status_checking">Gemini OAuth：正在檢查存取權杖…</string>
     <string name="gemini_oauth_status_ready">Gemini OAuth：可用</string>
     <string name="gemini_oauth_status_error">Gemini OAuth：%1$s</string>
+    <string name="gemini_oauth_status_consent_required">Gemini OAuth：需要授權同意</string>
+    <string name="gemini_oauth_status_consent_denied">Gemini OAuth：授權流程未完成</string>
+    <string name="gemini_oauth_consent_required">Gemini 存取需要 Google 授權同意，請完成下一步。</string>
+    <string name="gemini_oauth_status_invalid_scope">Gemini OAuth：invalid_scope。請檢查 Google Cloud consent screen、加入 generative-language.retriever scope、將目前帳號加入 test users，並啟用 Generative Language API。</string>
+    <string name="gemini_oauth_status_unknown_error">Gemini OAuth 權杖檢查失敗</string>
     <string name="asr_model">ASR 模型</string>
     <string name="asr_loading_title">ASR 載入中</string>
     <string name="asr_loading_message">正在載入 ASR 模型，請稍候。</string>
