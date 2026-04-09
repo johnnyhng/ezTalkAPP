@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk.asr.ui.speaker
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 import androidx.compose.runtime.Immutable
 

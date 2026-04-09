@@ -64,6 +64,7 @@ import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSearchResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticIndexer
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerViewModel
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
 import tw.com.johnnyhng.eztalk.asr.speaker.importTextUrisIntoSpeakerFolder
 import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerAsrController
 import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerPlaybackController

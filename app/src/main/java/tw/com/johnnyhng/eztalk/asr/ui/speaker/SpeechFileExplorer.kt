@@ -35,6 +35,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDirectoryUi
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
 
 @Composable
 internal fun SpeechFileExplorer(
