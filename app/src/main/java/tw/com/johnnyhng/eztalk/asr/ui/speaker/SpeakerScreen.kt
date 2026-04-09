@@ -786,26 +786,6 @@ private fun FloatArray.previewForLog(maxSize: Int = 8): String {
     }
 }
 
-private fun SpeakerLlmFallbackState?.toDisplayText(context: android.content.Context): String? {
-    return when (this) {
-        is SpeakerLlmFallbackState.PreviewReady -> context.getString(
-            R.string.speaker_llm_preview_status,
-            model,
-            candidateCount
-        )
-        is SpeakerLlmFallbackState.Success -> context.getString(
-            R.string.speaker_llm_fallback_success,
-            decision.javaClass.simpleName
-        )
-        is SpeakerLlmFallbackState.Failure -> context.getString(
-            R.string.speaker_llm_fallback_failed,
-            message
-        )
-        SpeakerLlmFallbackState.Unavailable -> context.getString(R.string.speaker_llm_preview_unavailable)
-        null -> null
-    }
-}
-
 private fun List<SpeakerSearchResult>.formatTop3CosineForLog(): String {
     if (isEmpty()) return "[]"
     return take(3).joinToString(
