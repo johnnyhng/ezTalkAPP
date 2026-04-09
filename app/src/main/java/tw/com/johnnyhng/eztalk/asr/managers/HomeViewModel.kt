@@ -274,6 +274,9 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateEntryScreenRoute(v: String) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(entryScreenRoute = sanitizeEntryScreenRoute(v)))
     }
+    fun updateGeminiModel(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(geminiModel = v))
+    }
 
     private fun markUpdateAvailability(
         remoteModels: List<RemoteModelDescriptor>,

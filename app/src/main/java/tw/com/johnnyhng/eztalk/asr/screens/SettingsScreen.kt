@@ -104,6 +104,7 @@ fun SettingsScreen(
     var modelMenuExpanded by remember { mutableStateOf(false) }
     var entryScreenMenuExpanded by remember { mutableStateOf(false) }
     var backendUrl by remember(userSettings.backendUrl) { mutableStateOf(userSettings.backendUrl) }
+    var geminiModel by remember(userSettings.geminiModel) { mutableStateOf(userSettings.geminiModel) }
     val isDownloading by homeViewModel.isDownloadingFlow.collectAsState()
     val downloadProgress by homeViewModel.downloadProgressFlow.collectAsState()
     val canDeleteModel = homeViewModel.canDeleteModel
@@ -277,6 +278,18 @@ fun SettingsScreen(
         ) {
             Text(stringResource(R.string.check_gemini_access))
         }
+
+        OutlinedTextField(
+            value = geminiModel,
+            onValueChange = {
+                geminiModel = it
+                homeViewModel.updateGeminiModel(it)
+            },
+            label = { Text(stringResource(R.string.gemini_model_label)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            enabled = !isDownloading
+        )
 
         OutlinedTextField(
             value = backendUrl,

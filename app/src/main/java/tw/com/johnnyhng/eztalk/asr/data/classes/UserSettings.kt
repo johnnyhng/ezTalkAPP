@@ -11,7 +11,8 @@ data class UserSettings(
     val backendUrl: String = "https://120.126.151.159:56432/api/v2",
     val enableTtsFeedback: Boolean = true,
     val selectedModelName: String = "",
-    val entryScreenRoute: String = "home"
+    val entryScreenRoute: String = "home",
+    val geminiModel: String = "gemini-2.5-flash"
 ) {
     val effectiveRecognitionUrl: String
         get() = BackendEndpoints.processAudio(backendUrl)

@@ -103,11 +103,12 @@ fun SpeakerScreen(
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var contentSemanticCandidateLineIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
-    val semanticModule = remember(appContext) {
+    val semanticModule = remember(appContext, userSettings.geminiModel) {
         SpeakerSemanticModule(
             llmProvider = GeminiLlmProvider(
                 accessTokenProvider = GoogleAuthGeminiAccessTokenProvider(appContext)
-            )
+            ),
+            llmModel = userSettings.geminiModel
         )
     }
     val orderedDocuments = remember(uiState.directories) {
