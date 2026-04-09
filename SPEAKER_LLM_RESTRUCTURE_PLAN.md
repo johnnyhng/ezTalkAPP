@@ -24,6 +24,7 @@ Repo state snapshot:
 - `SettingsScreen` now surfaces Google account status, Gemini OAuth readiness, consent recovery, and scope diagnostics.
 - Gemini model selection is now settings-backed instead of hard-coded in `SpeakerScreen`.
 - LLM fallback toggle/state has started moving out of `SpeakerScreen` and into `SpeakerViewModel`.
+- Content ASR text state has started moving into `SpeakerViewModel`.
 - Content semantic candidate/highlight state has started moving into `SpeakerViewModel`.
 - Content ASR command/semantic coordinators now live under `speaker/` instead of `ui/speaker/`.
 - `SpeakerScreen` content ASR effect has been reduced to a single coordinator call plus UI wiring.
@@ -74,7 +75,7 @@ Files already present in repo:
 
 Files not yet present:
 
-- runtime/viewmodel ownership of the remaining fallback orchestration and ASR text state that still live in `SpeakerScreen`
+- runtime/viewmodel ownership of the remaining fallback orchestration that still lives in `SpeakerScreen`
 - broader provider integration tests beyond the current success / `401` / malformed-payload coverage
 - end-to-end automated coverage for the real Gemini HTTP fallback path
 
