@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Last updated: 2026-04-08
+Last updated: 2026-04-09
 
 Overall status:
 
@@ -21,10 +21,11 @@ Repo state snapshot:
 - `SpeakerSemanticModule` exists and acts as the semantic entry point.
 - `Speaker` semantic behavior is still lexical-first, but the LLM fallback path now executes through the provider hook.
 - `GeminiLlmProvider` now performs real OAuth-backed Gemini HTTP calls with provider-side `401` invalidate/retry.
+- `SettingsScreen` now surfaces Google account status, Gemini OAuth readiness, consent recovery, and scope diagnostics.
 - LLM fallback toggle/state has started moving out of `SpeakerScreen` and into `SpeakerViewModel`.
 - Successful fallback decisions are now wired back into the same candidate/autoplay flow used by lexical decisions.
-- `google-services.json` is already present in the project root.
-- Android OAuth token fetch is wired, but end-to-end consent / recovery still needs device validation.
+- `app/google-services.json` is present and matches the Android package name.
+- Android OAuth token fetch is wired and device-validated far enough to reach Gemini HTTP 200 responses.
 - `MediaPipe` runtime has already been removed for 16 KB page-size safety.
 
 Files already present in repo:
@@ -45,6 +46,8 @@ Files already present in repo:
   - `SpeakerContentScreen.kt`
   - `LocalASRWidget.kt`
   - `SpeakerUiModels.kt`
+- `screens/`
+  - `SettingsScreen.kt`
 - `llm/`
   - `GeminiLlmProvider.kt`
   - `GeminiApiClient.kt`
@@ -65,10 +68,9 @@ Files already present in repo:
 Files not yet present:
 
 - config/settings-backed Gemini model selection
-- explicit OAuth recovery / consent handoff path for `UserRecoverableAuthException`
-- device-validated end-to-end Gemini OAuth flow
 - runtime/viewmodel ownership of the remaining fallback orchestration that still lives in `SpeakerScreen`
 - broader provider integration tests beyond the current success / `401` / malformed-payload coverage
+- end-to-end automated coverage for the real Gemini HTTP fallback path
 
 ## Goal
 
@@ -100,6 +102,7 @@ Files to place here:
 - `SpeakerContentScreen.kt`
 - `LocalASRWidget.kt`
 - `SpeakerUiModels.kt`
+- `SettingsScreen.kt` remains the current OAuth/account control surface until that flow is moved behind a shared session/runtime layer
 
 Responsibilities:
 - Render panes
@@ -387,6 +390,7 @@ Current repo state:
 - `SpeakerSemanticModule` can already build an LLM fallback request from ranked lexical candidates
 - `SpeakerSemanticModule` can parse an `LlmResponse` back into `SpeakerSemanticDecision`
 - LLM response parsing is now stricter and requires structured JSON for actionable candidate/autoplay results
+- fenced JSON parsing was hardened to avoid Android regex-engine crashes during real Gemini responses
 - `SpeakerSemanticModule` can call `LlmProvider.generate(...)` through `tryLlmFallback(...)`
 - `SpeakerScreen` has an LLM fallback preview toggle and preview status
 - fallback state has started moving into `SpeakerViewModel`
@@ -394,8 +398,9 @@ Current repo state:
 - successful fallback decisions now re-enter the same candidate/autoplay path used by lexical decisions
 - real Gemini network execution is wired through `GeminiLlmProvider`
 - Android OAuth token fetch and provider-side `401` invalidation/retry are implemented
+- device testing has already reached: ASR no-match -> OAuth token success -> Gemini HTTP 200 -> response parse success
 - parser behavior and provider retry behavior are both covered by unit tests
-- remaining gaps are device-validated OAuth consent/recovery behavior and moving more fallback orchestration out of `SpeakerScreen`
+- remaining gaps are moving more fallback orchestration out of `SpeakerScreen`, adding model config, and expanding automated coverage around the real fallback path
 
 ## Gemini-Specific Rules
 
@@ -414,7 +419,7 @@ Do not use an app-owned Gemini API key for this flow.
 Follow the Android OAuth approach in `ezTalk Android OAuth 2.0 實作指南.md`:
 
 - use the signed-in Google account
-- request the `https://www.googleapis.com/auth/generative-language` scope
+- request the `https://www.googleapis.com/auth/generative-language.retriever` scope for app-managed Android token fetch
 - fetch an access token before each Gemini call
 - if Gemini returns `401`, invalidate the cached token and retry once
 - keep OAuth/account/session management outside `SpeakerScreen`
@@ -444,10 +449,10 @@ It also prevents `screens/` from becoming the default dumping ground for:
 Before adding Gemini:
 
 1. Validate the Android OAuth flow on device, especially scope consent and `UserRecoverableAuthException` recovery
-2. Add an explicit runtime path for OAuth recovery instead of only surfacing provider failure
-3. Continue shrinking screen-local orchestration so fallback behavior lives in runtime/viewmodel instead of `SpeakerScreen`
-4. Add config/settings-backed Gemini model selection
-5. Expand provider and semantic fallback test coverage beyond the current parser / retry happy-path set
+2. Continue shrinking screen-local orchestration so fallback behavior lives in runtime/viewmodel instead of `SpeakerScreen`
+3. Add config/settings-backed Gemini model selection
+4. Expand provider and semantic fallback test coverage beyond the current parser / retry happy-path set
+5. Add automated coverage around the real Gemini HTTP fallback path where feasible
 6. Keep Gemini auth OAuth-based; do not introduce API-key-based auth for this flow
 
 Only after that should Phase 5 be considered complete.
