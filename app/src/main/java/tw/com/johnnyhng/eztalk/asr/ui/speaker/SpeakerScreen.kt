@@ -105,7 +105,6 @@ fun SpeakerScreen(
     var contentAsrText by rememberSaveable { mutableStateOf("") }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
-    var contentSemanticCandidateLineIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
         SpeakerSemanticModule(
@@ -149,10 +148,7 @@ fun SpeakerScreen(
             }
             playbackController.playLine(document, lineIndex, line)
         }
-    val resetContentSemanticUi: () -> Unit = {
-        contentSemanticCandidateLineIndex = null
-        speakerViewModel.updateLlmFallbackState(null)
-    }
+    val resetContentSemanticUi: () -> Unit = speakerViewModel::resetContentSemanticUi
 
     LaunchedEffect(userSettings.userId) {
         speakerViewModel.setUserId(userSettings.userId)
@@ -251,7 +247,7 @@ fun SpeakerScreen(
             stopPlayback = playbackController::stop,
             playDocumentWithAsrStop = playDocumentWithAsrStop,
             playLineWithAsrStop = playLineWithAsrStop,
-            updateCandidateLineIndex = { contentSemanticCandidateLineIndex = it },
+            updateCandidateLineIndex = speakerViewModel::updateContentSemanticCandidateLineIndex,
             updateLlmFallbackState = speakerViewModel::updateLlmFallbackState
         )
     }
@@ -545,7 +541,7 @@ fun SpeakerScreen(
                 isLocalAsrEnabled = !isAnyTtsPlaying && !isAsrModelLoading && (!speakerAsrState.isRecording || activeAsrTarget == SpeakerAsrTarget.CONTENT),
                 isLlmFallbackEnabled = uiState.isLlmFallbackEnabled,
                 currentPlayingLineIndex = currentPlayingLineIndex,
-                candidateLineIndex = contentSemanticCandidateLineIndex,
+                candidateLineIndex = uiState.contentSemanticCandidateLineIndex,
                 editingText = uiState.editingText,
                 onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
                 onLlmFallbackToggle = speakerViewModel::onLlmFallbackEnabledChange,

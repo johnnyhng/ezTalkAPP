@@ -22,7 +22,9 @@ Repo state snapshot:
 - `Speaker` semantic behavior is still lexical-first, but the LLM fallback path now executes through the provider hook.
 - `GeminiLlmProvider` now performs real OAuth-backed Gemini HTTP calls with provider-side `401` invalidate/retry.
 - `SettingsScreen` now surfaces Google account status, Gemini OAuth readiness, consent recovery, and scope diagnostics.
+- Gemini model selection is now settings-backed instead of hard-coded in `SpeakerScreen`.
 - LLM fallback toggle/state has started moving out of `SpeakerScreen` and into `SpeakerViewModel`.
+- Content semantic candidate/highlight state has started moving into `SpeakerViewModel`.
 - Successful fallback decisions are now wired back into the same candidate/autoplay flow used by lexical decisions.
 - `app/google-services.json` is present and matches the Android package name.
 - Android OAuth token fetch is wired and device-validated far enough to reach Gemini HTTP 200 responses.
@@ -36,16 +38,19 @@ Files already present in repo:
   - `SpeakerPlaybackController.kt`
   - `SpeakerAsrController.kt`
   - `SpeakerCommandResolver.kt`
+  - `SpeakerUiModels.kt`
   - `SpeakerSemanticIndexer.kt`
   - `SpeakerSemanticSearch.kt`
   - `SpeakerSearchModels.kt`
+  - `SpeakerSemanticLogging.kt`
+  - `SpeakerContentAsrActions.kt`
+  - `SpeakerSemanticUiActions.kt`
   - `SpeakerImportManager.kt`
 - `ui/speaker/`
   - `SpeakerScreen.kt`
   - `SpeechFileExplorer.kt`
   - `SpeakerContentScreen.kt`
   - `LocalASRWidget.kt`
-  - `SpeakerUiModels.kt`
 - `screens/`
   - `SettingsScreen.kt`
 - `llm/`
@@ -67,7 +72,6 @@ Files already present in repo:
 
 Files not yet present:
 
-- config/settings-backed Gemini model selection
 - runtime/viewmodel ownership of the remaining fallback orchestration that still lives in `SpeakerScreen`
 - broader provider integration tests beyond the current success / `401` / malformed-payload coverage
 - end-to-end automated coverage for the real Gemini HTTP fallback path
@@ -101,7 +105,6 @@ Files to place here:
 - `SpeechFileExplorer.kt`
 - `SpeakerContentScreen.kt`
 - `LocalASRWidget.kt`
-- `SpeakerUiModels.kt`
 - `SettingsScreen.kt` remains the current OAuth/account control surface until that flow is moved behind a shared session/runtime layer
 
 Responsibilities:
@@ -131,10 +134,14 @@ Files to place here:
 - `SpeakerPlaybackController.kt`
 - `SpeakerAsrController.kt`
 - `SpeakerCommandResolver.kt`
+- `SpeakerUiModels.kt`
 - `SpeakerSemanticModule.kt`
 - `SpeakerSemanticIndexer.kt`
 - `SpeakerSemanticSearch.kt`
 - `SpeakerSearchModels.kt`
+- `SpeakerSemanticLogging.kt`
+- `SpeakerContentAsrActions.kt`
+- `SpeakerSemanticUiActions.kt`
 - `SpeakerImportManager.kt`
 
 Responsibilities:

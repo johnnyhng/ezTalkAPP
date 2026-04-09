@@ -28,6 +28,7 @@ internal data class SpeakerScreenUiState(
     val importProgressFolderName: String = "",
     val isEditingDocument: Boolean = false,
     val editingText: String = "",
+    val contentSemanticCandidateLineIndex: Int? = null,
     val isLlmFallbackEnabled: Boolean = false,
     val llmFallbackState: SpeakerLlmFallbackState? = null
 )
@@ -60,6 +61,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             selectedDocumentId = documentId,
             isEditingDocument = false,
             editingText = document?.fullText.orEmpty(),
+            contentSemanticCandidateLineIndex = null,
             llmFallbackState = null
         )
     }
@@ -79,11 +81,23 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(llmFallbackState = state)
     }
 
+    fun updateContentSemanticCandidateLineIndex(lineIndex: Int?) {
+        uiState = uiState.copy(contentSemanticCandidateLineIndex = lineIndex)
+    }
+
+    fun resetContentSemanticUi() {
+        uiState = uiState.copy(
+            contentSemanticCandidateLineIndex = null,
+            llmFallbackState = null
+        )
+    }
+
     fun startEditing() {
         val document = selectedDocument() ?: return
         uiState = uiState.copy(
             isEditingDocument = true,
             editingText = document.fullText,
+            contentSemanticCandidateLineIndex = null,
             llmFallbackState = null
         )
     }
@@ -92,6 +106,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(
             isEditingDocument = false,
             editingText = selectedDocument()?.fullText.orEmpty(),
+            contentSemanticCandidateLineIndex = null,
             llmFallbackState = null
         )
     }
@@ -127,6 +142,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             selectedDocumentId = if (shouldClearSelection) null else uiState.selectedDocumentId,
             isEditingDocument = if (shouldClearSelection) false else uiState.isEditingDocument,
             editingText = if (shouldClearSelection) "" else uiState.editingText,
+            contentSemanticCandidateLineIndex = if (shouldClearSelection) null else uiState.contentSemanticCandidateLineIndex,
             llmFallbackState = if (shouldClearSelection) null else uiState.llmFallbackState
         )
     }
