@@ -64,6 +64,25 @@ class SpeakerSemanticModuleTest {
     }
 
     @Test
+    fun parseLlmResponse_acceptsPlainFencedJsonCandidate() {
+        val response = LlmResponse(
+            rawText = """
+                ```
+                {"decision":"candidate","lineStart":1,"lineEnd":1}
+                ```
+            """.trimIndent()
+        )
+
+        val decision = module.parseLlmResponse(
+            response = response,
+            rankedResults = rankedResults,
+            lines = lines
+        )
+
+        assertTrue(decision is SpeakerSemanticDecision.Candidate)
+    }
+
+    @Test
     fun parseLlmResponse_rejectsCandidateWithoutLineRange() {
         val response = LlmResponse(
             rawText = """{"decision":"candidate","reason":"missing location"}"""

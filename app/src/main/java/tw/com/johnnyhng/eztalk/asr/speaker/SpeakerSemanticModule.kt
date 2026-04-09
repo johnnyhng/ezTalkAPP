@@ -203,8 +203,15 @@ internal class SpeakerSemanticModule(
     }
 
     private fun extractJsonFromCodeFence(text: String): String? {
-        val fenced = """```(?:json)?\s*(\{.*})\s*```""".toRegex(setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
-        return fenced.find(text)?.groupValues?.getOrNull(1)?.trim()
+        if (!text.startsWith("```")) return null
+
+        val firstLineBreak = text.indexOf('\n')
+        if (firstLineBreak == -1) return null
+
+        val closingFenceIndex = text.lastIndexOf("```")
+        if (closingFenceIndex <= firstLineBreak) return null
+
+        return text.substring(firstLineBreak + 1, closingFenceIndex).trim()
     }
 
     private fun JSONObject.optNullableInt(key: String): Int? {
