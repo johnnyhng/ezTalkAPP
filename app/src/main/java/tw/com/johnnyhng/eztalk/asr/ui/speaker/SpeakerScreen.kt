@@ -313,43 +313,16 @@ fun SpeakerScreen(
                     SpeakerSemanticDecision.NoMatch -> {
                         contentSemanticCandidateLineIndex = null
                         Log.i(TAG, "Speaker semantic no matched content")
-                        val llmRequest = semanticModule.buildLlmRequest(
+                        val noMatchOutcome = resolveSpeakerNoMatchOutcome(
+                            semanticModule = semanticModule,
                             queryText = finalText,
-                            rankedResults = resolution.rankedResults
+                            rankedResults = resolution.rankedResults,
+                            lines = contentLines,
+                            isLlmFallbackEnabled = uiState.isLlmFallbackEnabled,
+                            context = context
                         )
-                        val llmFallbackResult = if (uiState.isLlmFallbackEnabled) {
-                            semanticModule.tryLlmFallback(
-                                queryText = finalText,
-                                rankedResults = resolution.rankedResults,
-                                lines = contentLines
-                            )
-                        } else {
-                            null
-                        }
-                        speakerViewModel.updateLlmFallbackState(
-                            when {
-                                llmFallbackResult?.isSuccess == true -> SpeakerLlmFallbackState.Success(
-                                    llmFallbackResult.getOrThrow()
-                                )
-                                llmFallbackResult?.isFailure == true -> {
-                                    val error = llmFallbackResult.exceptionOrNull()
-                                    Log.w(TAG, "Speaker LLM fallback failed", error)
-                                    SpeakerLlmFallbackState.Failure(
-                                        error.toDisplayMessage(
-                                            fallback = context.getString(R.string.speaker_llm_preview_unavailable)
-                                        )
-                                    )
-                                }
-                                llmRequest != null -> SpeakerLlmFallbackState.PreviewReady(
-                                    model = llmRequest.model,
-                                    candidateCount = resolution.rankedResults.take(5).size
-                                )
-                                uiState.isLlmFallbackEnabled -> SpeakerLlmFallbackState.Unavailable
-                                else -> null
-                            }
-                        )
-                        val llmDecision = llmFallbackResult?.getOrNull()
-                        when (llmDecision) {
+                        speakerViewModel.updateLlmFallbackState(noMatchOutcome.fallbackState)
+                        when (val llmDecision = noMatchOutcome.llmDecision) {
                             is SpeakerSemanticDecision.Candidate -> {
                                 contentSemanticCandidateLineIndex = llmDecision.lineIndex
                                 Toast.makeText(
@@ -387,13 +360,7 @@ fun SpeakerScreen(
                         }
                         Toast.makeText(
                             context,
-                            context.getString(
-                                when {
-                                    llmFallbackResult?.isSuccess == true -> R.string.speaker_semantic_no_match_llm_applied
-                                    llmRequest != null -> R.string.speaker_semantic_no_match_llm_preview
-                                    else -> R.string.speaker_semantic_no_match
-                                }
-                            ),
+                            context.getString(noMatchOutcome.toastMessageResId),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -853,6 +820,68 @@ private fun FloatArray.previewForLog(maxSize: Int = 8): String {
     ) { value ->
         "%.4f".format(value)
     }
+}
+
+private data class SpeakerNoMatchOutcome(
+    val fallbackState: SpeakerLlmFallbackState?,
+    val llmDecision: SpeakerSemanticDecision?,
+    val toastMessageResId: Int
+)
+
+private suspend fun resolveSpeakerNoMatchOutcome(
+    semanticModule: SpeakerSemanticModule,
+    queryText: String,
+    rankedResults: List<SpeakerSearchResult>,
+    lines: List<String>,
+    isLlmFallbackEnabled: Boolean,
+    context: android.content.Context
+): SpeakerNoMatchOutcome {
+    val llmRequest = semanticModule.buildLlmRequest(
+        queryText = queryText,
+        rankedResults = rankedResults
+    )
+    val llmFallbackResult = if (isLlmFallbackEnabled) {
+        semanticModule.tryLlmFallback(
+            queryText = queryText,
+            rankedResults = rankedResults,
+            lines = lines
+        )
+    } else {
+        null
+    }
+
+    val fallbackState = when {
+        llmFallbackResult?.isSuccess == true -> SpeakerLlmFallbackState.Success(
+            llmFallbackResult.getOrThrow()
+        )
+        llmFallbackResult?.isFailure == true -> {
+            val error = llmFallbackResult.exceptionOrNull()
+            Log.w(TAG, "Speaker LLM fallback failed", error)
+            SpeakerLlmFallbackState.Failure(
+                error.toDisplayMessage(
+                    fallback = context.getString(R.string.speaker_llm_preview_unavailable)
+                )
+            )
+        }
+        llmRequest != null -> SpeakerLlmFallbackState.PreviewReady(
+            model = llmRequest.model,
+            candidateCount = rankedResults.take(5).size
+        )
+        isLlmFallbackEnabled -> SpeakerLlmFallbackState.Unavailable
+        else -> null
+    }
+
+    val toastMessageResId = when {
+        llmFallbackResult?.isSuccess == true -> R.string.speaker_semantic_no_match_llm_applied
+        llmRequest != null -> R.string.speaker_semantic_no_match_llm_preview
+        else -> R.string.speaker_semantic_no_match
+    }
+
+    return SpeakerNoMatchOutcome(
+        fallbackState = fallbackState,
+        llmDecision = llmFallbackResult?.getOrNull(),
+        toastMessageResId = toastMessageResId
+    )
 }
 
 private fun SpeakerLlmFallbackState?.toDisplayText(context: android.content.Context): String? {
