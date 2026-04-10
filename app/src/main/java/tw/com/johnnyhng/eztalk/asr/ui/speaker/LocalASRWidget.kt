@@ -1,11 +1,12 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.ui.speaker
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
@@ -26,6 +27,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 @Composable
 internal fun LocalASRWidget(
     recognizedText: String = "",
+    secondaryText: String? = null,
     isRecording: Boolean = false,
     countdownProgress: Float = 0f,
     isEnabled: Boolean = true,
@@ -44,22 +46,35 @@ internal fun LocalASRWidget(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = when {
-                    recognizedText.isNotBlank() -> recognizedText
-                    isRecording -> stringResource(R.string.recognizing)
-                    else -> stringResource(R.string.local_asr_placeholder)
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (recognizedText.isBlank() && !isRecording) {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = when {
+                        recognizedText.isNotBlank() -> recognizedText
+                        isRecording -> stringResource(R.string.recognizing)
+                        else -> stringResource(R.string.local_asr_placeholder)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (recognizedText.isBlank() && !isRecording) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!secondaryText.isNullOrBlank()) {
+                    Text(
+                        text = secondaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
             Box(contentAlignment = Alignment.Center) {
                 if (isRecording) {
                     if (countdownProgress > 0f) {

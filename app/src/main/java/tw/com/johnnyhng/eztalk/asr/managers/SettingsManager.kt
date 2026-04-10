@@ -20,6 +20,7 @@ private val backendUrlKey = stringPreferencesKey("backend_url")
 private val enableTtsFeedbackKey = booleanPreferencesKey("enable_tts_feedback")
 private val selectedModelNameKey = stringPreferencesKey("selected_model_name")
 private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
+private val geminiModelKey = stringPreferencesKey("gemini_model")
 private val defaultUserSettings = UserSettings()
 
 internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
@@ -34,7 +35,8 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         selectedModelName = preferences[selectedModelNameKey] ?: defaultUserSettings.selectedModelName,
         entryScreenRoute = sanitizeEntryScreenRoute(
             preferences[entryScreenRouteKey] ?: defaultUserSettings.entryScreenRoute
-        )
+        ),
+        geminiModel = preferences[geminiModelKey] ?: defaultUserSettings.geminiModel
     )
 }
 
@@ -48,6 +50,7 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[enableTtsFeedbackKey] = settings.enableTtsFeedback
     preferences[selectedModelNameKey] = settings.selectedModelName
     preferences[entryScreenRouteKey] = sanitizeEntryScreenRoute(settings.entryScreenRoute)
+    preferences[geminiModelKey] = settings.geminiModel
 }
 
 class SettingsManager(context: Context) {

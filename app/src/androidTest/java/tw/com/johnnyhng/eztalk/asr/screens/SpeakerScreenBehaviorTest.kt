@@ -22,6 +22,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
+import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerScreen
 import java.io.File
 
 class SpeakerScreenBehaviorTest {

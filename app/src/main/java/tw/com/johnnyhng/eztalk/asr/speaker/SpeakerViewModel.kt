@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.speaker
 
 import android.app.Application
 import android.content.Context
@@ -27,7 +27,10 @@ internal data class SpeakerScreenUiState(
     val importProgressTotal: Int = 0,
     val importProgressFolderName: String = "",
     val isEditingDocument: Boolean = false,
-    val editingText: String = ""
+    val editingText: String = "",
+    val contentAsrText: String = "",
+    val contentSemanticCandidateLineIndex: Int? = null,
+    val llmFallbackState: SpeakerLlmFallbackState? = null
 )
 
 internal class SpeakerViewModel(application: Application) : AndroidViewModel(application) {
@@ -57,7 +60,10 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(
             selectedDocumentId = documentId,
             isEditingDocument = false,
-            editingText = document?.fullText.orEmpty()
+            editingText = document?.fullText.orEmpty(),
+            contentAsrText = "",
+            contentSemanticCandidateLineIndex = null,
+            llmFallbackState = null
         )
     }
 
@@ -65,18 +71,44 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(editingText = text)
     }
 
+    fun updateContentAsrText(text: String) {
+        uiState = uiState.copy(contentAsrText = text)
+    }
+
+    fun updateLlmFallbackState(state: SpeakerLlmFallbackState?) {
+        uiState = uiState.copy(llmFallbackState = state)
+    }
+
+    fun updateContentSemanticCandidateLineIndex(lineIndex: Int?) {
+        uiState = uiState.copy(contentSemanticCandidateLineIndex = lineIndex)
+    }
+
+    fun resetContentSemanticUi() {
+        uiState = uiState.copy(
+            contentAsrText = "",
+            contentSemanticCandidateLineIndex = null,
+            llmFallbackState = null
+        )
+    }
+
     fun startEditing() {
         val document = selectedDocument() ?: return
         uiState = uiState.copy(
             isEditingDocument = true,
-            editingText = document.fullText
+            editingText = document.fullText,
+            contentAsrText = "",
+            contentSemanticCandidateLineIndex = null,
+            llmFallbackState = null
         )
     }
 
     fun cancelEditing() {
         uiState = uiState.copy(
             isEditingDocument = false,
-            editingText = selectedDocument()?.fullText.orEmpty()
+            editingText = selectedDocument()?.fullText.orEmpty(),
+            contentAsrText = "",
+            contentSemanticCandidateLineIndex = null,
+            llmFallbackState = null
         )
     }
 
@@ -110,7 +142,10 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             },
             selectedDocumentId = if (shouldClearSelection) null else uiState.selectedDocumentId,
             isEditingDocument = if (shouldClearSelection) false else uiState.isEditingDocument,
-            editingText = if (shouldClearSelection) "" else uiState.editingText
+            editingText = if (shouldClearSelection) "" else uiState.editingText,
+            contentAsrText = if (shouldClearSelection) "" else uiState.contentAsrText,
+            contentSemanticCandidateLineIndex = if (shouldClearSelection) null else uiState.contentSemanticCandidateLineIndex,
+            llmFallbackState = if (shouldClearSelection) null else uiState.llmFallbackState
         )
     }
 

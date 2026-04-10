@@ -8,8 +8,21 @@
     <string name="clear">清除</string>
     <string name="language">語言</string>
     <string name="current_user_id">目前的使用者 ID: %1$s</string>
+    <string name="google_account_status">Google 帳號：%1$s</string>
+    <string name="google_account_not_signed_in">尚未登入</string>
     <string name="sign_in_with_google">使用 Google 登入</string>
     <string name="sign_out">登出</string>
+    <string name="check_gemini_access">檢查 Gemini 存取權</string>
+    <string name="gemini_model_label">Gemini 模型</string>
+    <string name="gemini_oauth_status_not_signed_in">Gemini OAuth：尚未登入</string>
+    <string name="gemini_oauth_status_checking">Gemini OAuth：正在檢查存取權杖…</string>
+    <string name="gemini_oauth_status_ready">Gemini OAuth：可用</string>
+    <string name="gemini_oauth_status_error">Gemini OAuth：%1$s</string>
+    <string name="gemini_oauth_status_consent_required">Gemini OAuth：需要授權同意</string>
+    <string name="gemini_oauth_status_consent_denied">Gemini OAuth：授權流程未完成</string>
+    <string name="gemini_oauth_consent_required">Gemini 存取需要 Google 授權同意，請完成下一步。</string>
+    <string name="gemini_oauth_status_invalid_scope">Gemini OAuth：invalid_scope。請檢查 Google Cloud consent screen、加入 generative-language.retriever scope、將目前帳號加入 test users，並啟用 Generative Language API。</string>
+    <string name="gemini_oauth_status_unknown_error">Gemini OAuth 權杖檢查失敗</string>
     <string name="asr_model">ASR 模型</string>
     <string name="asr_loading_title">ASR 載入中</string>
     <string name="asr_loading_message">正在載入 ASR 模型，請稍候。</string>
@@ -124,6 +137,13 @@
     <string name="speaker_save_failed">儲存 txt 檔案失敗。</string>
     <string name="speaker_semantic_candidate_selected">已定位到第 %1$d 行，請點播放或再說一次確認。</string>
     <string name="speaker_semantic_no_match">找不到足夠接近的內容</string>
+    <string name="speaker_semantic_no_match_llm_applied">找不到 lexical 結果，但 LLM fallback 已回傳結構化決策。</string>
+    <string name="speaker_semantic_no_match_llm_preview">找不到足夠接近的 lexical 結果，已準備 LLM fallback 預覽。</string>
+    <string name="speaker_llm_fallback">LLM 備援</string>
+    <string name="speaker_llm_fallback_success">LLM 備援已執行：%1$s</string>
+    <string name="speaker_llm_fallback_failed">LLM 備援失敗：%1$s</string>
+    <string name="speaker_llm_preview_status">LLM 預覽已建立：model=%1$s，candidates=%2$d</string>
+    <string name="speaker_llm_preview_unavailable">LLM 備援已啟用，但目前無法建立預覽 request。</string>
     <string name="local_asr_placeholder">Local ASR 結果會顯示在這裡</string>
     <string name="local_asr_mic">Local ASR 麥克風</string>
 </resources>

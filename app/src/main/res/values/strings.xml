@@ -8,8 +8,21 @@
     <string name="clear">Clear</string>
     <string name="language">Language</string>
     <string name="current_user_id">Current User ID: %1$s</string>
+    <string name="google_account_status">Google account: %1$s</string>
+    <string name="google_account_not_signed_in">Not signed in</string>
     <string name="sign_in_with_google">Sign in with Google</string>
     <string name="sign_out">Sign Out</string>
+    <string name="check_gemini_access">Check Gemini Access</string>
+    <string name="gemini_model_label">Gemini model</string>
+    <string name="gemini_oauth_status_not_signed_in">Gemini OAuth: Not signed in</string>
+    <string name="gemini_oauth_status_checking">Gemini OAuth: Checking access token…</string>
+    <string name="gemini_oauth_status_ready">Gemini OAuth: Ready</string>
+    <string name="gemini_oauth_status_error">Gemini OAuth: %1$s</string>
+    <string name="gemini_oauth_status_consent_required">Gemini OAuth: Consent required</string>
+    <string name="gemini_oauth_status_consent_denied">Gemini OAuth: Consent not completed</string>
+    <string name="gemini_oauth_consent_required">Gemini access needs Google consent. Complete the next step to continue.</string>
+    <string name="gemini_oauth_status_invalid_scope">Gemini OAuth: invalid_scope. Check Google Cloud consent screen, add the generative-language.retriever scope, add your account to test users, and enable the Generative Language API.</string>
+    <string name="gemini_oauth_status_unknown_error">Gemini OAuth token check failed</string>
     <string name="asr_model">ASR Model</string>
     <string name="asr_loading_title">ASR loading</string>
     <string name="asr_loading_message">Loading ASR model, please wait.</string>
@@ -124,6 +137,13 @@
     <string name="speaker_save_failed">Failed to save txt file.</string>
     <string name="speaker_semantic_candidate_selected">Located line %1$d. Tap play or speak again to confirm.</string>
     <string name="speaker_semantic_no_match">No close content match found</string>
+    <string name="speaker_semantic_no_match_llm_applied">No lexical match found. LLM fallback returned a structured decision.</string>
+    <string name="speaker_semantic_no_match_llm_preview">No close lexical match found. LLM fallback preview prepared.</string>
+    <string name="speaker_llm_fallback">LLM Fallback</string>
+    <string name="speaker_llm_fallback_success">LLM fallback executed: %1$s</string>
+    <string name="speaker_llm_fallback_failed">LLM fallback failed: %1$s</string>
+    <string name="speaker_llm_preview_status">LLM preview ready: model=%1$s, candidates=%2$d</string>
+    <string name="speaker_llm_preview_unavailable">LLM fallback enabled, but no preview request could be built.</string>
     <string name="local_asr_placeholder">Local ASR result will appear here</string>
     <string name="local_asr_mic">Local ASR microphone</string>
 </resources>

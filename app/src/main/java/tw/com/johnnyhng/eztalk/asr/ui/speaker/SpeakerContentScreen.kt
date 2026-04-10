@@ -1,4 +1,4 @@
-package tw.com.johnnyhng.eztalk.asr.screens
+package tw.com.johnnyhng.eztalk.asr.ui.speaker
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
 
 @Composable
 internal fun SpeakerContentScreen(
@@ -47,6 +48,7 @@ internal fun SpeakerContentScreen(
     isPaused: Boolean,
     isEditing: Boolean,
     localAsrText: String = "",
+    localAsrSecondaryText: String? = null,
     isLocalAsrRecording: Boolean = false,
     localAsrCountdownProgress: Float = 0f,
     isLocalAsrEnabled: Boolean = true,
@@ -146,6 +148,7 @@ internal fun SpeakerContentScreen(
                 SpeakerDivider()
                 LocalASRWidget(
                     recognizedText = localAsrText,
+                    secondaryText = localAsrSecondaryText,
                     isRecording = isLocalAsrRecording,
                     countdownProgress = localAsrCountdownProgress,
                     isEnabled = isLocalAsrEnabled,
@@ -298,5 +301,7 @@ private fun SpeakerPlaybackAction(
 private fun buildSpeakerContentLines(text: String): List<String> {
     return text
         .replace("\r\n", "\n")
-        .split('\n')
+        .split(Regex("[\\n。.]"))
+        .map(String::trim)
+        .filter(String::isNotBlank)
 }
