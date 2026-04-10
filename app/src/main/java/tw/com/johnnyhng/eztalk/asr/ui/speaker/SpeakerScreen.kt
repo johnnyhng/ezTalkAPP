@@ -104,7 +104,7 @@ fun SpeakerScreen(
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
-    var shouldResumeContentAsrAfterPlayback by rememberSaveable { mutableStateOf(false) }
+    var isContentSpeechModeEnabled by rememberSaveable { mutableStateOf(false) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
     val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
@@ -152,15 +152,11 @@ fun SpeakerScreen(
             playbackController.playLine(document, lineIndex, line)
         }
     val playDocumentFromAsr: (SpeakerDocumentUi) -> SpeakerPlaybackResult = { document ->
-        val result = playDocumentWithAsrStop(document)
-        shouldResumeContentAsrAfterPlayback = result == SpeakerPlaybackResult.STARTED
-        result
+        playDocumentWithAsrStop(document)
     }
     val playLineFromAsr: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult =
         { document, lineIndex, line ->
-            val result = playLineWithAsrStop(document, lineIndex, line)
-            shouldResumeContentAsrAfterPlayback = result == SpeakerPlaybackResult.STARTED
-            result
+            playLineWithAsrStop(document, lineIndex, line)
         }
     val resetContentSemanticUi: () -> Unit = speakerViewModel::resetContentSemanticUi
     val startContentAsrIfPossible: suspend () -> Unit = startContentAsr@{
@@ -208,7 +204,7 @@ fun SpeakerScreen(
     }
 
     LaunchedEffect(selectedDocument?.id) {
-        shouldResumeContentAsrAfterPlayback = false
+        isContentSpeechModeEnabled = false
         speakerAsrController.stop()
         playbackController.stop()
         resetContentSemanticUi()
@@ -223,7 +219,7 @@ fun SpeakerScreen(
     DisposableEffect(lifecycleOwner, playbackController, speakerAsrController) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                shouldResumeContentAsrAfterPlayback = false
+                isContentSpeechModeEnabled = false
                 speakerAsrController.stop()
                 playbackController.stop()
             }
@@ -231,7 +227,7 @@ fun SpeakerScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            shouldResumeContentAsrAfterPlayback = false
+            isContentSpeechModeEnabled = false
             speakerAsrController.stop()
             playbackController.stop()
         }
@@ -243,17 +239,14 @@ fun SpeakerScreen(
         selectedDocument?.id,
         isAnyTtsPlaying
     ) {
-        if (!shouldResumeContentAsrAfterPlayback) return@LaunchedEffect
+        if (!isContentSpeechModeEnabled) return@LaunchedEffect
         if (playbackState.completionVersion == 0) return@LaunchedEffect
         if (playbackState.completedDocumentId != selectedDocument?.id) {
-            shouldResumeContentAsrAfterPlayback = false
             return@LaunchedEffect
         }
         if (selectedDocument == null || !isContentWidgetVisible || isAnyTtsPlaying || speakerAsrState.isRecording) {
-            shouldResumeContentAsrAfterPlayback = false
             return@LaunchedEffect
         }
-        shouldResumeContentAsrAfterPlayback = false
         startContentAsrIfPossible()
     }
 
@@ -298,6 +291,9 @@ fun SpeakerScreen(
     fun toggleSpeakerAsr(target: SpeakerAsrTarget) {
         if (speakerAsrState.isRecording) {
             if (activeAsrTarget == target) {
+                if (target == SpeakerAsrTarget.CONTENT) {
+                    isContentSpeechModeEnabled = false
+                }
                 speakerAsrController.stop()
             }
             return
@@ -312,7 +308,10 @@ fun SpeakerScreen(
             activeAsrTarget = target
             when (target) {
                 SpeakerAsrTarget.EXPLORER -> explorerAsrText = ""
-                SpeakerAsrTarget.CONTENT -> speakerViewModel.updateContentAsrText("")
+                SpeakerAsrTarget.CONTENT -> {
+                    isContentSpeechModeEnabled = true
+                    speakerViewModel.updateContentAsrText("")
+                }
             }
             speakerAsrController.start(userSettings)
         }
@@ -588,7 +587,7 @@ fun SpeakerScreen(
                 onEditingTextChange = { speakerViewModel.onEditingTextChange(it) },
                 onLocalAsrClick = { toggleSpeakerAsr(SpeakerAsrTarget.CONTENT) },
                 onSpeakLine = { lineIndex, line ->
-                    shouldResumeContentAsrAfterPlayback = false
+                    isContentSpeechModeEnabled = false
                     resetContentSemanticUi()
                     when (playLineWithAsrStop(selectedDocument, lineIndex, line)) {
                         SpeakerPlaybackResult.NOT_READY -> {
@@ -611,7 +610,7 @@ fun SpeakerScreen(
                     }
                 },
                 onPlay = {
-                    shouldResumeContentAsrAfterPlayback = false
+                    isContentSpeechModeEnabled = false
                     resetContentSemanticUi()
                     when (playDocumentWithAsrStop(selectedDocument)) {
                         SpeakerPlaybackResult.NOT_READY -> {
@@ -634,25 +633,25 @@ fun SpeakerScreen(
                     }
                 },
                 onPause = {
-                    shouldResumeContentAsrAfterPlayback = false
+                    isContentSpeechModeEnabled = false
                     resetContentSemanticUi()
                     playbackController.pause(selectedDocument.id)
                 },
                 onStop = {
-                    shouldResumeContentAsrAfterPlayback = false
+                    isContentSpeechModeEnabled = false
                     resetContentSemanticUi()
                     playbackController.stop()
                 },
                 onPreviousDocument = {
                     val targetDocument = previousDocument ?: return@SpeakerContentScreen
-                    shouldResumeContentAsrAfterPlayback = false
+                    isContentSpeechModeEnabled = false
                     resetContentSemanticUi()
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
                 },
                 onNextDocument = {
                     val targetDocument = nextDocument ?: return@SpeakerContentScreen
-                    shouldResumeContentAsrAfterPlayback = false
+                    isContentSpeechModeEnabled = false
                     resetContentSemanticUi()
                     playbackController.stop()
                     speakerViewModel.onDocumentSelected(targetDocument.id)
@@ -660,13 +659,13 @@ fun SpeakerScreen(
                 isPreviousDocumentEnabled = previousDocument != null,
                 isNextDocumentEnabled = nextDocument != null,
                 onEdit = {
-                    shouldResumeContentAsrAfterPlayback = false
+                    isContentSpeechModeEnabled = false
                     resetContentSemanticUi()
                     playbackController.stop()
                     speakerViewModel.startEditing()
                 },
                 onSave = {
-                    shouldResumeContentAsrAfterPlayback = false
+                    isContentSpeechModeEnabled = false
                     resetContentSemanticUi()
                     speakerViewModel.saveEditing { saved ->
                         Toast.makeText(
