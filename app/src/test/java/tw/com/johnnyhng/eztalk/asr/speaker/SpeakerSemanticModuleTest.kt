@@ -109,10 +109,10 @@ class SpeakerSemanticModuleTest {
             lines = lines
         )
 
-        assertTrue(decision is SpeakerSemanticDecision.Candidate)
-        val candidate = decision as SpeakerSemanticDecision.Candidate
-        assertEquals(2, candidate.lineIndex)
-        assertEquals("closing line", candidate.result.matchedText)
+        assertTrue(decision is SpeakerSemanticDecision.AutoPlay)
+        val autoplay = decision as SpeakerSemanticDecision.AutoPlay
+        assertEquals(2, autoplay.lineIndex)
+        assertEquals("closing line", autoplay.result.matchedText)
     }
 
     @Test
@@ -127,6 +127,40 @@ class SpeakerSemanticModuleTest {
             lines = lines
         )
 
-        assertTrue(decision is SpeakerSemanticDecision.AutoPlay)
+        assertTrue(decision is SpeakerSemanticDecision.Command)
+        val command = decision as SpeakerSemanticDecision.Command
+        assertEquals(SpeakerContentCommand.Play, command.command)
+    }
+
+    @Test
+    fun parseLlmResponse_acceptsStructuredActionPauseAsCommand() {
+        val response = LlmResponse(
+            rawText = """{"action":"pause","confidence":0.92,"reason":"pause intent"}"""
+        )
+
+        val decision = module.parseLlmResponse(
+            response = response,
+            rankedResults = rankedResults,
+            lines = lines
+        )
+
+        assertTrue(decision is SpeakerSemanticDecision.Command)
+        val command = decision as SpeakerSemanticDecision.Command
+        assertEquals(SpeakerContentCommand.Pause, command.command)
+    }
+
+    @Test
+    fun parseLlmResponse_rejectsLowConfidenceStructuredAction() {
+        val response = LlmResponse(
+            rawText = """{"action":"play_line","lineIndex":1,"confidence":0.20,"reason":"weak guess"}"""
+        )
+
+        val decision = module.parseLlmResponse(
+            response = response,
+            rankedResults = rankedResults,
+            lines = lines
+        )
+
+        assertEquals(SpeakerSemanticDecision.NoMatch, decision)
     }
 }

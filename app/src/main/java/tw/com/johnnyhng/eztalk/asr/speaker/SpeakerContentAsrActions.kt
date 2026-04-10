@@ -151,6 +151,11 @@ internal suspend fun handleSpeakerContentAsr(
         contentLines = contentLines,
         indexedChunks = indexedChunks,
         isLlmFallbackEnabled = isLlmFallbackEnabled,
+        isSelectedDocumentPlaying = isSelectedDocumentPlaying,
+        isSelectedDocumentPaused = isSelectedDocumentPaused,
+        pauseDocument = pauseDocument,
+        stopPlayback = stopPlayback,
+        playDocumentWithAsrStop = playDocumentWithAsrStop,
         playLineWithAsrStop = playLineWithAsrStop,
         updateCandidateLineIndex = updateCandidateLineIndex,
         updateLlmFallbackState = updateLlmFallbackState
@@ -166,6 +171,11 @@ internal suspend fun handleSpeakerSemanticResolution(
     contentLines: List<String>,
     indexedChunks: List<SpeakerIndexedChunk>,
     isLlmFallbackEnabled: Boolean,
+    isSelectedDocumentPlaying: Boolean,
+    isSelectedDocumentPaused: Boolean,
+    pauseDocument: (String) -> Unit,
+    stopPlayback: () -> Unit,
+    playDocumentWithAsrStop: (SpeakerDocumentUi) -> SpeakerPlaybackResult,
     playLineWithAsrStop: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult,
     updateCandidateLineIndex: (Int?) -> Unit,
     updateLlmFallbackState: (SpeakerLlmFallbackState?) -> Unit
@@ -205,7 +215,12 @@ internal suspend fun handleSpeakerSemanticResolution(
                     document = document,
                     decision = noMatchOutcome.llmFallbackResult?.getOrNull(),
                     contentLines = contentLines,
+                    isSelectedDocumentPlaying = isSelectedDocumentPlaying,
+                    isSelectedDocumentPaused = isSelectedDocumentPaused,
+                    playDocumentWithAsrStop = playDocumentWithAsrStop,
                     playLineWithAsrStop = playLineWithAsrStop,
+                    pauseDocument = pauseDocument,
+                    stopPlayback = stopPlayback,
                     updateCandidateLineIndex = updateCandidateLineIndex
                 )
             ) {
@@ -229,7 +244,12 @@ internal suspend fun handleSpeakerSemanticResolution(
                 document = document,
                 decision = decision,
                 contentLines = contentLines,
+                isSelectedDocumentPlaying = isSelectedDocumentPlaying,
+                isSelectedDocumentPaused = isSelectedDocumentPaused,
+                playDocumentWithAsrStop = playDocumentWithAsrStop,
                 playLineWithAsrStop = playLineWithAsrStop,
+                pauseDocument = pauseDocument,
+                stopPlayback = stopPlayback,
                 updateCandidateLineIndex = updateCandidateLineIndex
             )
         }
@@ -242,7 +262,33 @@ internal suspend fun handleSpeakerSemanticResolution(
                 document = document,
                 decision = decision,
                 contentLines = contentLines,
+                isSelectedDocumentPlaying = isSelectedDocumentPlaying,
+                isSelectedDocumentPaused = isSelectedDocumentPaused,
+                playDocumentWithAsrStop = playDocumentWithAsrStop,
                 playLineWithAsrStop = playLineWithAsrStop,
+                pauseDocument = pauseDocument,
+                stopPlayback = stopPlayback,
+                updateCandidateLineIndex = updateCandidateLineIndex
+            )
+        }
+
+        is SpeakerSemanticDecision.Command -> {
+            updateLlmFallbackState(null)
+            Log.i(
+                TAG,
+                "Speaker semantic command command=${decision.command} confidence=${"%.4f".format(decision.confidence)} reason=${decision.reason.orEmpty()}"
+            )
+            applySpeakerSemanticDecision(
+                context = context,
+                document = document,
+                decision = decision,
+                contentLines = contentLines,
+                isSelectedDocumentPlaying = isSelectedDocumentPlaying,
+                isSelectedDocumentPaused = isSelectedDocumentPaused,
+                playDocumentWithAsrStop = playDocumentWithAsrStop,
+                playLineWithAsrStop = playLineWithAsrStop,
+                pauseDocument = pauseDocument,
+                stopPlayback = stopPlayback,
                 updateCandidateLineIndex = updateCandidateLineIndex
             )
         }

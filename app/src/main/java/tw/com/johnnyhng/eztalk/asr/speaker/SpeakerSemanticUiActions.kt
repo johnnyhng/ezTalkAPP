@@ -9,10 +9,62 @@ internal fun applySpeakerSemanticDecision(
     document: SpeakerDocumentUi,
     decision: SpeakerSemanticDecision?,
     contentLines: List<String>,
+    isSelectedDocumentPlaying: Boolean,
+    isSelectedDocumentPaused: Boolean,
+    playDocumentWithAsrStop: (SpeakerDocumentUi) -> SpeakerPlaybackResult,
     playLineWithAsrStop: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult,
+    pauseDocument: (String) -> Unit,
+    stopPlayback: () -> Unit,
     updateCandidateLineIndex: (Int?) -> Unit
 ): Boolean {
     return when (decision) {
+        is SpeakerSemanticDecision.Command -> {
+            when (decision.command) {
+                SpeakerContentCommand.Play -> {
+                    when (playDocumentWithAsrStop(document)) {
+                        SpeakerPlaybackResult.NOT_READY -> {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_tts_not_ready),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        SpeakerPlaybackResult.EMPTY_TEXT -> {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_empty_text_file),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        SpeakerPlaybackResult.STARTED -> updateCandidateLineIndex(null)
+                    }
+                    true
+                }
+
+                SpeakerContentCommand.Pause -> {
+                    if (isSelectedDocumentPlaying) {
+                        pauseDocument(document.id)
+                        true
+                    } else {
+                        false
+                    }
+                }
+
+                SpeakerContentCommand.Stop -> {
+                    if (isSelectedDocumentPlaying || isSelectedDocumentPaused) {
+                        stopPlayback()
+                        true
+                    } else {
+                        false
+                    }
+                }
+
+                is SpeakerContentCommand.PlayLine -> false
+            }
+        }
+
         is SpeakerSemanticDecision.Candidate -> {
             updateCandidateLineIndex(decision.lineIndex)
             Toast.makeText(

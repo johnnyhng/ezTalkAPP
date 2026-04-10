@@ -109,22 +109,61 @@ internal class SpeakerSemanticModule(
 
         when (payload.action) {
             "play_line" -> {
+                val confidence = payload.confidence ?: 0f
+                if (confidence < llmCandidateConfidenceThreshold) return SpeakerSemanticDecision.NoMatch
                 val lineIndex = payload.lineIndex?.takeIf { it in lines.indices }
                     ?: return SpeakerSemanticDecision.NoMatch
-                return SpeakerSemanticDecision.Candidate(
-                    lineIndex = lineIndex,
-                    result = resultForLineIndex(lines, rankedResults, lineIndex)
-                )
+                val result = resultForLineIndex(lines, rankedResults, lineIndex)
+                return if (confidence >= llmAutoplayConfidenceThreshold) {
+                    SpeakerSemanticDecision.AutoPlay(
+                        lineIndex = lineIndex,
+                        result = result
+                    )
+                } else {
+                    SpeakerSemanticDecision.Candidate(
+                        lineIndex = lineIndex,
+                        result = result
+                    )
+                }
             }
 
             "play_document" -> {
-                return SpeakerSemanticDecision.AutoPlay(
-                    lineIndex = 0,
-                    result = rankedResults.firstOrNull() ?: syntheticDocumentResult(lines)
+                val confidence = payload.confidence ?: 0f
+                if (confidence < llmCommandConfidenceThreshold) return SpeakerSemanticDecision.NoMatch
+                return SpeakerSemanticDecision.Command(
+                    command = SpeakerContentCommand.Play,
+                    confidence = confidence,
+                    reason = payload.reason
                 )
             }
 
-            "pause", "stop", "no_action" -> {
+            "pause" -> {
+                val confidence = payload.confidence ?: 0f
+                return if (confidence >= llmCommandConfidenceThreshold) {
+                    SpeakerSemanticDecision.Command(
+                        command = SpeakerContentCommand.Pause,
+                        confidence = confidence,
+                        reason = payload.reason
+                    )
+                } else {
+                    SpeakerSemanticDecision.NoMatch
+                }
+            }
+
+            "stop" -> {
+                val confidence = payload.confidence ?: 0f
+                return if (confidence >= llmCommandConfidenceThreshold) {
+                    SpeakerSemanticDecision.Command(
+                        command = SpeakerContentCommand.Stop,
+                        confidence = confidence,
+                        reason = payload.reason
+                    )
+                } else {
+                    SpeakerSemanticDecision.NoMatch
+                }
+            }
+
+            "no_action" -> {
                 return SpeakerSemanticDecision.NoMatch
             }
         }
@@ -321,18 +360,6 @@ internal class SpeakerSemanticModule(
             )
     }
 
-    private fun syntheticDocumentResult(lines: List<String>): SpeakerSearchResult {
-        return SpeakerSearchResult(
-            documentId = "",
-            lineStart = 0,
-            lineEnd = (lines.lastIndex).coerceAtLeast(0),
-            matchedText = lines.joinToString(separator = "\n"),
-            semanticScore = 0f,
-            lexicalScore = 0f,
-            finalScore = 0f
-        )
-    }
-
     private fun resolveMatchedLineIndex(
         lines: List<String>,
         result: SpeakerSearchResult
@@ -366,5 +393,9 @@ internal class SpeakerSemanticModule(
             "stop",
             "no_action"
         )
+
+        const val llmCandidateConfidenceThreshold = 0.55f
+        const val llmAutoplayConfidenceThreshold = 0.82f
+        const val llmCommandConfidenceThreshold = 0.80f
     }
 }

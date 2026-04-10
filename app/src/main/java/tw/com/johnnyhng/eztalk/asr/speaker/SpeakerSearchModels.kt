@@ -33,6 +33,12 @@ internal data class SpeakerSemanticSearchConfig(
 )
 
 internal sealed interface SpeakerSemanticDecision {
+    data class Command(
+        val command: SpeakerContentCommand,
+        val confidence: Float = 0f,
+        val reason: String? = null
+    ) : SpeakerSemanticDecision
+
     data class AutoPlay(
         val lineIndex: Int,
         val result: SpeakerSearchResult
