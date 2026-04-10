@@ -44,7 +44,8 @@ internal class GoogleSignInManager {
     private fun GoogleSignInAccount.toSession(): GoogleAccountSession {
         return GoogleAccountSession(
             email = email.orEmpty(),
-            displayName = displayName
+            displayName = displayName,
+            photoUrl = photoUrl?.toString()
         )
     }
 }
