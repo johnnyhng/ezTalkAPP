@@ -1,16 +1,22 @@
 package tw.com.johnnyhng.eztalk.asr
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,14 +32,26 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +67,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
+import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 import tw.com.johnnyhng.eztalk.asr.screens.DataCollectScreen
@@ -59,6 +80,8 @@ import tw.com.johnnyhng.eztalk.asr.screens.SettingsScreen
 import tw.com.johnnyhng.eztalk.asr.screens.TranslateScreen
 import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerScreen
 import tw.com.johnnyhng.eztalk.asr.ui.theme.SimulateStreamingAsrTheme
+import java.io.File
+import java.net.URL
 import java.util.Locale
 
 const val TAG = "eztalk"
@@ -135,9 +158,42 @@ fun MainScreen(
     initialEntryRoute: String = NavRoutes.Home.route,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val homeViewModel: HomeViewModel = viewModel()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
+    val signInManager = remember { GoogleSignInManager() }
+    val googleSignInClient = remember { signInManager.getSignInClient(context) }
+    var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            signInManager.getSessionFromIntent(result.data)
+                .onSuccess { session ->
+                    googleSession = session
+                    homeViewModel.updateUserId(session.email)
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.google_account_status, session.email),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                .onFailure { error ->
+                    Log.w(TAG, "Google sign in failed", error)
+                    Toast.makeText(context, "Google sign in failed", Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
+    LaunchedEffect(signInManager, context) {
+        val session = signInManager.getCurrentSession(context)
+        googleSession = session
+    }
+    val profilePhoto = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, googleSession?.email, googleSession?.photoUrl) {
+        value = googleSession?.let { loadCachedGoogleProfilePhoto(context, it) }
+    }
 
     if (isAsrModelLoading) {
         AlertDialog(
@@ -166,11 +222,58 @@ fun MainScreen(
                     titleContentColor = colorScheme.primary,
                 ),
                 navigationIcon = {
-                    IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Help.route) }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                            contentDescription = stringResource(R.string.help)
-                        )
+                    androidx.compose.foundation.layout.Row {
+                        IconButton(
+                            onClick = {
+                                if (googleSession == null) {
+                                    googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                } else {
+                                    signInManager.signOut(context) { result ->
+                                        result
+                                            .onSuccess {
+                                                googleSession = null
+                                                homeViewModel.updateUserId("user@example.com")
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.sign_out),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                            .onFailure { error ->
+                                                Log.w(TAG, "Google sign out failed", error)
+                                                Toast.makeText(context, "Google sign out failed", Toast.LENGTH_SHORT).show()
+                                            }
+                                    }
+                                }
+                            }
+                        ) {
+                            if (googleSession != null && profilePhoto.value != null) {
+                                Image(
+                                    bitmap = profilePhoto.value!!,
+                                    contentDescription = stringResource(R.string.sign_out),
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (googleSession == null) {
+                                        Icons.Outlined.AccountCircle
+                                    } else {
+                                        Icons.Filled.AccountCircle
+                                    },
+                                    contentDescription = stringResource(
+                                        if (googleSession == null) R.string.sign_in_with_google else R.string.sign_out
+                                    )
+                                )
+                            }
+                        }
+                        IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Help.route) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                                contentDescription = stringResource(R.string.help)
+                            )
+                        }
                     }
                 },
                 title = {
@@ -209,6 +312,27 @@ fun MainScreen(
             BottomNavigationBar(navController = navController)
         }
     )
+}
+
+private suspend fun loadCachedGoogleProfilePhoto(
+    context: android.content.Context,
+    session: GoogleAccountSession
+): androidx.compose.ui.graphics.ImageBitmap? = withContext(Dispatchers.IO) {
+    val photoUrl = session.photoUrl ?: return@withContext null
+    val cacheDir = File(context.cacheDir, "google-profile").apply { mkdirs() }
+    val cacheKey = "${session.email}_${photoUrl}".hashCode().toString(16)
+    val cacheFile = File(cacheDir, "$cacheKey.img")
+
+    runCatching {
+        if (!cacheFile.exists()) {
+            URL(photoUrl).openStream().use { input ->
+                cacheFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }
+        BitmapFactory.decodeFile(cacheFile.absolutePath)?.asImageBitmap()
+    }.getOrNull()
 }
 
 @Composable
