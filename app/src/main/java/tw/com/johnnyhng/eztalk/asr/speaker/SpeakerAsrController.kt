@@ -31,7 +31,9 @@ internal data class SpeakerAsrState(
     val countdownProgress: Float = 0f,
     val partialText: String = "",
     val finalText: String = "",
-    val finalTextVersion: Int = 0
+    val finalTextVersion: Int = 0,
+    val currentUtteranceVariants: List<String> = emptyList(),
+    val finalUtteranceBundle: SpeakerAsrUtteranceBundle? = null
 )
 
 internal class SpeakerAsrController(
@@ -45,6 +47,7 @@ internal class SpeakerAsrController(
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
     private val flushChannel = Channel<Unit>(Channel.CONFLATED)
+    private val utteranceBuffer = SpeakerAsrUtteranceBuffer()
 
     fun currentState(): SpeakerAsrState = state
 
@@ -58,7 +61,9 @@ internal class SpeakerAsrController(
                 isRecognizingSpeech = false,
                 countdownProgress = 0f,
                 partialText = "",
-                finalText = ""
+                finalText = "",
+                currentUtteranceVariants = emptyList(),
+                finalUtteranceBundle = null
             )
         }
 
@@ -102,7 +107,8 @@ internal class SpeakerAsrController(
                     it.copy(
                         isRecording = false,
                         isRecognizingSpeech = false,
-                        countdownProgress = 0f
+                        countdownProgress = 0f,
+                        currentUtteranceVariants = emptyList()
                     )
                 }
                 recordingJob = null
@@ -167,12 +173,15 @@ internal class SpeakerAsrController(
                 offset += windowSize
                 if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
                     isSpeechStarted = true
+                    utteranceBuffer.reset()
                     updateState {
                         it.copy(
                             isRecognizingSpeech = true,
                             countdownProgress = 0f,
                             partialText = "",
-                            finalText = ""
+                            finalText = "",
+                            currentUtteranceVariants = emptyList(),
+                            finalUtteranceBundle = null
                         )
                     }
                     startTime = System.currentTimeMillis()
@@ -188,8 +197,12 @@ internal class SpeakerAsrController(
                         stream.acceptWaveform(buffer.subList(startOffset, offset).toFloatArray(), sampleRateInHz)
                         SimulateStreamingAsr.recognizer.decode(stream)
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                        utteranceBuffer.add(result.text)
                         updateState {
-                            it.copy(partialText = result.text)
+                            it.copy(
+                                partialText = result.text,
+                                currentUtteranceVariants = utteranceBuffer.variants()
+                            )
                         }
                     } finally {
                         stream.release()
@@ -217,12 +230,17 @@ internal class SpeakerAsrController(
                         stream.acceptWaveform(concatenated, sampleRateInHz)
                         SimulateStreamingAsr.recognizer.decode(stream)
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                        utteranceBuffer.add(result.text)
+                        val nextVersion = state.finalTextVersion + 1
+                        val finalUtteranceBundle = utteranceBuffer.build(nextVersion)
                         Log.i(TAG, "Speaker ASR final result: ${result.text}")
                         updateState {
                             it.copy(
                                 partialText = result.text,
                                 finalText = result.text,
-                                finalTextVersion = it.finalTextVersion + 1
+                                finalTextVersion = nextVersion,
+                                currentUtteranceVariants = utteranceBuffer.variants(),
+                                finalUtteranceBundle = finalUtteranceBundle
                             )
                         }
                     } catch (error: Exception) {
@@ -232,6 +250,7 @@ internal class SpeakerAsrController(
                     }
 
                     utteranceSegments.clear()
+                    utteranceBuffer.reset()
                     isSpeechStarted = false
                     buffer = arrayListOf()
                     offset = 0

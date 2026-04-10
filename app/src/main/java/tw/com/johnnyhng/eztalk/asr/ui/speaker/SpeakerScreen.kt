@@ -276,13 +276,21 @@ fun SpeakerScreen(
 
         val document = selectedDocument ?: return@LaunchedEffect
         val contentLines = buildSpeakerContentLines(document.fullText)
-        val finalText = speakerAsrState.finalText
-        Log.i(TAG, "Speaker content ASR text: $finalText")
+        val utterance = speakerAsrState.finalUtteranceBundle
+            ?: run {
+                Log.i(
+                    TAG,
+                    "Speaker content ASR final skipped because utterance bundle is null version=${speakerAsrState.finalTextVersion}"
+                )
+                return@LaunchedEffect
+            }
+        Log.i(TAG, "Speaker content ASR text: ${utterance.primaryText}")
+        Log.i(TAG, "Speaker content ASR variants: ${utterance.variants}")
 
         handleSpeakerContentAsr(
             context = context,
             semanticModule = semanticModule,
-            finalText = finalText,
+            utterance = utterance,
             document = document,
             contentLines = contentLines,
             indexedChunks = indexedSelectedDocumentChunks,

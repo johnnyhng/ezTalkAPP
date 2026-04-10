@@ -108,7 +108,7 @@ internal fun handleSpeakerContentCommand(
 internal suspend fun handleSpeakerContentAsr(
     context: Context,
     semanticModule: SpeakerSemanticModule,
-    finalText: String,
+    utterance: SpeakerAsrUtteranceBundle,
     document: SpeakerDocumentUi,
     contentLines: List<String>,
     indexedChunks: List<SpeakerIndexedChunk>,
@@ -123,6 +123,7 @@ internal suspend fun handleSpeakerContentAsr(
     updateCandidateLineIndex: (Int?) -> Unit,
     updateLlmFallbackState: (SpeakerLlmFallbackState?) -> Unit
 ) {
+    val finalText = utterance.primaryText
     if (
         handleSpeakerContentCommand(
             context = context,
