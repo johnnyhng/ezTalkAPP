@@ -28,7 +28,9 @@ internal data class SpeakerPlaybackState(
     val playbackLineIndexes: List<Int> = emptyList(),
     val playbackSegmentIndex: Int = 0,
     val currentPlayingLineIndex: Int? = null,
-    val isPlaybackPaused: Boolean = false
+    val isPlaybackPaused: Boolean = false,
+    val completedDocumentId: String? = null,
+    val completionVersion: Int = 0
 )
 
 internal class SpeakerPlaybackController(
@@ -73,7 +75,7 @@ internal class SpeakerPlaybackController(
                             if (nextIndex < state.playbackSegments.size) {
                                 speakSegment(parsed.documentId, nextIndex)
                             } else {
-                                reset()
+                                completeNaturally(parsed.documentId)
                             }
                         }
                     }
@@ -214,6 +216,22 @@ internal class SpeakerPlaybackController(
                 playbackSegmentIndex = 0,
                 currentPlayingLineIndex = null,
                 isPlaybackPaused = false
+            )
+        }
+    }
+
+    private fun completeNaturally(documentId: String) {
+        updateState {
+            it.copy(
+                currentPlayingDocumentId = null,
+                playbackDocumentId = null,
+                playbackSegments = emptyList(),
+                playbackLineIndexes = emptyList(),
+                playbackSegmentIndex = 0,
+                currentPlayingLineIndex = null,
+                isPlaybackPaused = false,
+                completedDocumentId = documentId,
+                completionVersion = it.completionVersion + 1
             )
         }
     }
