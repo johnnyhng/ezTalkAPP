@@ -145,6 +145,7 @@ internal suspend fun handleSpeakerContentAsr(
     handleSpeakerSemanticResolution(
         context = context,
         semanticModule = semanticModule,
+        utterance = utterance,
         queryText = finalText,
         document = document,
         contentLines = contentLines,
@@ -159,6 +160,7 @@ internal suspend fun handleSpeakerContentAsr(
 internal suspend fun handleSpeakerSemanticResolution(
     context: Context,
     semanticModule: SpeakerSemanticModule,
+    utterance: SpeakerAsrUtteranceBundle,
     queryText: String,
     document: SpeakerDocumentUi,
     contentLines: List<String>,
@@ -186,7 +188,7 @@ internal suspend fun handleSpeakerSemanticResolution(
             updateCandidateLineIndex(null)
             Log.i(TAG, "Speaker semantic no matched content")
             val noMatchOutcome = semanticModule.resolveNoMatchOutcome(
-                queryText = queryText,
+                utterance = utterance,
                 rankedResults = resolution.rankedResults,
                 lines = contentLines,
                 isLlmFallbackEnabled = isLlmFallbackEnabled

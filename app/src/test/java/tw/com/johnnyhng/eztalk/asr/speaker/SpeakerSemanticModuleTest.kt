@@ -96,4 +96,37 @@ class SpeakerSemanticModuleTest {
 
         assertEquals(SpeakerSemanticDecision.NoMatch, decision)
     }
+
+    @Test
+    fun parseLlmResponse_acceptsStructuredActionPlayLine() {
+        val response = LlmResponse(
+            rawText = """{"action":"play_line","lineIndex":2,"confidence":0.93,"reason":"best line match"}"""
+        )
+
+        val decision = module.parseLlmResponse(
+            response = response,
+            rankedResults = rankedResults,
+            lines = lines
+        )
+
+        assertTrue(decision is SpeakerSemanticDecision.Candidate)
+        val candidate = decision as SpeakerSemanticDecision.Candidate
+        assertEquals(2, candidate.lineIndex)
+        assertEquals("closing line", candidate.result.matchedText)
+    }
+
+    @Test
+    fun parseLlmResponse_acceptsStructuredActionPlayDocument() {
+        val response = LlmResponse(
+            rawText = """{"action":"play_document","confidence":0.88,"reason":"whole document intent"}"""
+        )
+
+        val decision = module.parseLlmResponse(
+            response = response,
+            rankedResults = rankedResults,
+            lines = lines
+        )
+
+        assertTrue(decision is SpeakerSemanticDecision.AutoPlay)
+    }
 }

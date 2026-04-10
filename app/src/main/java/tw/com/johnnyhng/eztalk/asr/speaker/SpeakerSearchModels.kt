@@ -57,7 +57,10 @@ internal data class SpeakerSemanticResolution(
 )
 
 internal data class SpeakerLlmSemanticPayload(
-    val decision: String,
+    val decision: String? = null,
+    val action: String? = null,
+    val confidence: Float? = null,
+    val lineIndex: Int? = null,
     val lineStart: Int? = null,
     val lineEnd: Int? = null,
     val reason: String? = null

@@ -5,6 +5,8 @@ import org.json.JSONObject
 import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LlmRequest
 import tw.com.johnnyhng.eztalk.asr.llm.LlmResponse
+import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerCommandPromptLine
+import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerCommandResolutionPromptBuilder
 import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerSemanticPromptBuilder
 import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerSemanticPromptCandidate
 
@@ -13,6 +15,7 @@ internal class SpeakerSemanticModule(
     private val config: SpeakerSemanticSearchConfig = SpeakerSemanticSearchConfig(),
     private val llmProvider: LlmProvider? = null,
     private val promptBuilder: SpeakerSemanticPromptBuilder = SpeakerSemanticPromptBuilder(),
+    private val commandPromptBuilder: SpeakerCommandResolutionPromptBuilder = SpeakerCommandResolutionPromptBuilder(),
     private val llmModel: String = "gemini-2.5-flash"
 ) {
     fun canUseLlmFallback(): Boolean {
@@ -54,24 +57,39 @@ internal class SpeakerSemanticModule(
     }
 
     fun buildLlmRequest(
-        queryText: String,
+        utterance: SpeakerAsrUtteranceBundle,
         rankedResults: List<SpeakerSearchResult>,
+        lines: List<String>,
         maxCandidates: Int = 5
     ): LlmRequest? {
-        if (queryText.isBlank() || rankedResults.isEmpty()) return null
+        if (utterance.variants.isEmpty()) return null
 
-        val prompt = promptBuilder.build(
-            asrText = queryText,
-            candidates = rankedResults
-                .take(maxCandidates.coerceAtLeast(1))
-                .map { result ->
-                    SpeakerSemanticPromptCandidate(
-                        lineStart = result.lineStart,
-                        lineEnd = result.lineEnd,
-                        text = result.matchedText
+        val prompt = if (lines.isNotEmpty()) {
+            commandPromptBuilder.build(
+                utteranceVariants = utterance.variants,
+                commandOptions = listOf("play_document", "play_line", "pause", "stop", "no_action"),
+                lines = lines.mapIndexed { index, text ->
+                    SpeakerCommandPromptLine(
+                        lineIndex = index,
+                        text = text
                     )
                 }
-        )
+            )
+        } else {
+            if (rankedResults.isEmpty()) return null
+            promptBuilder.build(
+                asrText = utterance.primaryText,
+                candidates = rankedResults
+                    .take(maxCandidates.coerceAtLeast(1))
+                    .map { result ->
+                        SpeakerSemanticPromptCandidate(
+                            lineStart = result.lineStart,
+                            lineEnd = result.lineEnd,
+                            text = result.matchedText
+                        )
+                    }
+            )
+        }
 
         return LlmRequest(
             model = llmModel,
@@ -89,7 +107,29 @@ internal class SpeakerSemanticModule(
     ): SpeakerSemanticDecision {
         val payload = parseSemanticPayload(response.rawText) ?: return SpeakerSemanticDecision.NoMatch
 
-        return when (payload.decision.lowercase()) {
+        when (payload.action) {
+            "play_line" -> {
+                val lineIndex = payload.lineIndex?.takeIf { it in lines.indices }
+                    ?: return SpeakerSemanticDecision.NoMatch
+                return SpeakerSemanticDecision.Candidate(
+                    lineIndex = lineIndex,
+                    result = resultForLineIndex(lines, rankedResults, lineIndex)
+                )
+            }
+
+            "play_document" -> {
+                return SpeakerSemanticDecision.AutoPlay(
+                    lineIndex = 0,
+                    result = rankedResults.firstOrNull() ?: syntheticDocumentResult(lines)
+                )
+            }
+
+            "pause", "stop", "no_action" -> {
+                return SpeakerSemanticDecision.NoMatch
+            }
+        }
+
+        return when (payload.decision?.lowercase()) {
             "match", "candidate" -> {
                 val matched = findMatchingResult(payload, rankedResults)
                 if (matched == null) {
@@ -125,7 +165,7 @@ internal class SpeakerSemanticModule(
     }
 
     suspend fun tryLlmFallback(
-        queryText: String,
+        utterance: SpeakerAsrUtteranceBundle,
         rankedResults: List<SpeakerSearchResult>,
         lines: List<String>,
         maxCandidates: Int = 5
@@ -135,8 +175,9 @@ internal class SpeakerSemanticModule(
         )
 
         val request = buildLlmRequest(
-            queryText = queryText,
+            utterance = utterance,
             rankedResults = rankedResults,
+            lines = lines,
             maxCandidates = maxCandidates
         ) ?: return Result.failure(
             IllegalArgumentException("Unable to build LLM request for fallback")
@@ -152,20 +193,21 @@ internal class SpeakerSemanticModule(
     }
 
     suspend fun resolveNoMatchOutcome(
-        queryText: String,
+        utterance: SpeakerAsrUtteranceBundle,
         rankedResults: List<SpeakerSearchResult>,
         lines: List<String>,
         isLlmFallbackEnabled: Boolean,
         maxCandidates: Int = 5
     ): SpeakerNoMatchOutcome {
         val llmRequest = buildLlmRequest(
-            queryText = queryText,
+            utterance = utterance,
             rankedResults = rankedResults,
+            lines = lines,
             maxCandidates = maxCandidates
         )
         val llmFallbackResult = if (isLlmFallbackEnabled) {
             tryLlmFallback(
-                queryText = queryText,
+                utterance = utterance,
                 rankedResults = rankedResults,
                 lines = lines,
                 maxCandidates = maxCandidates
@@ -203,10 +245,17 @@ internal class SpeakerSemanticModule(
             .trim()
             .lowercase()
             .takeIf { it in allowedDecisions }
-            ?: return null
+        val action = json.optString("action")
+            .trim()
+            .lowercase()
+            .takeIf { it in allowedActions }
+        if (decision == null && action == null) return null
 
         return SpeakerLlmSemanticPayload(
             decision = decision,
+            action = action,
+            confidence = json.optNullableDouble("confidence")?.toFloat(),
+            lineIndex = json.optNullableInt("lineIndex"),
             lineStart = json.optNullableInt("lineStart"),
             lineEnd = json.optNullableInt("lineEnd"),
             reason = json.optString("reason").takeIf { it.isNotBlank() }
@@ -250,6 +299,40 @@ internal class SpeakerSemanticModule(
         return optInt(key)
     }
 
+    private fun JSONObject.optNullableDouble(key: String): Double? {
+        if (!has(key) || isNull(key)) return null
+        return optDouble(key)
+    }
+
+    private fun resultForLineIndex(
+        lines: List<String>,
+        rankedResults: List<SpeakerSearchResult>,
+        lineIndex: Int
+    ): SpeakerSearchResult {
+        return rankedResults.firstOrNull { lineIndex in it.lineStart..it.lineEnd }
+            ?: SpeakerSearchResult(
+                documentId = rankedResults.firstOrNull()?.documentId ?: "",
+                lineStart = lineIndex,
+                lineEnd = lineIndex,
+                matchedText = lines.getOrNull(lineIndex).orEmpty(),
+                semanticScore = 0f,
+                lexicalScore = 0f,
+                finalScore = 0f
+            )
+    }
+
+    private fun syntheticDocumentResult(lines: List<String>): SpeakerSearchResult {
+        return SpeakerSearchResult(
+            documentId = "",
+            lineStart = 0,
+            lineEnd = (lines.lastIndex).coerceAtLeast(0),
+            matchedText = lines.joinToString(separator = "\n"),
+            semanticScore = 0f,
+            lexicalScore = 0f,
+            finalScore = 0f
+        )
+    }
+
     private fun resolveMatchedLineIndex(
         lines: List<String>,
         result: SpeakerSearchResult
@@ -274,6 +357,14 @@ internal class SpeakerSemanticModule(
             "play",
             "ambiguous",
             "no_match"
+        )
+
+        val allowedActions = setOf(
+            "play_document",
+            "play_line",
+            "pause",
+            "stop",
+            "no_action"
         )
     }
 }
