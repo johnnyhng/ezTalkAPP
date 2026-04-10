@@ -301,5 +301,7 @@ private fun SpeakerPlaybackAction(
 private fun buildSpeakerContentLines(text: String): List<String> {
     return text
         .replace("\r\n", "\n")
-        .split('\n')
+        .split(Regex("[\\n。.]"))
+        .map(String::trim)
+        .filter(String::isNotBlank)
 }
