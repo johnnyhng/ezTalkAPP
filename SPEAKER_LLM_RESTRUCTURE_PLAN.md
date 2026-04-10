@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Last updated: 2026-04-09
+Last updated: 2026-04-11
 
 Overall status:
 
@@ -11,6 +11,7 @@ Overall status:
 - Phase 3: Completed
 - Phase 4: Completed
 - Phase 5: Partially Completed
+- Phase 6: Planned
 
 Repo state snapshot:
 
@@ -20,6 +21,7 @@ Repo state snapshot:
 - `prompt/` package exists and is already used by `SpeakerSemanticModule.buildLlmRequest(...)`.
 - `SpeakerSemanticModule` exists and acts as the semantic entry point.
 - `Speaker` semantic behavior is still lexical-first, but the LLM fallback path now executes through the provider hook.
+- Content command resolution now uses a small deterministic command set plus lightweight example-based semantic intent matching.
 - `GeminiLlmProvider` now performs real OAuth-backed Gemini HTTP calls with provider-side `401` invalidate/retry.
 - `SettingsScreen` now surfaces Google account status, Gemini OAuth readiness, consent recovery, and scope diagnostics.
 - Gemini model selection is now settings-backed instead of hard-coded in `SpeakerScreen`.
@@ -78,6 +80,8 @@ Files not yet present:
 - runtime/viewmodel ownership of the remaining fallback orchestration that still lives in `SpeakerScreen`
 - broader provider integration tests beyond the current success / `401` / malformed-payload coverage
 - end-to-end automated coverage for the real Gemini HTTP fallback path
+- utterance-window ASR variant aggregation for countdown-based LLM resolution
+- confidence-scored command-or-line LLM decisions with `no_action`
 
 ## Goal
 
@@ -92,7 +96,7 @@ Restructure `Speaker` semantic search and future Gemini integration so that:
 This plan assumes:
 
 - `MediaPipe` is removed from runtime for 16 KB page-size safety.
-- Current `Speaker` semantic behavior remains lexical-only until a safe Gemini path is added.
+- Current `Speaker` semantic behavior remains lexical-first with LLM fallback until a stronger aggregated-ASR Gemini path is added.
 
 ## Target Package Layout
 
@@ -264,6 +268,44 @@ Target flow:
    - `Ambiguous(candidates)`
 7. UI updates highlight / scroll / playback state.
 
+## New Requirement: Countdown-Window Aggregated LLM Resolution
+
+The next LLM upgrade should stop treating content ASR as a single final string.
+
+Current weakness:
+
+- local ASR runs in a streaming mode
+- the same utterance can produce several nearby final variants during the linger/countdown window
+- current fallback prompt only sees one final text plus top lexical candidates
+- the LLM has no direct knowledge of:
+  - alternate ASR phrasings observed during the same utterance
+  - explicit control-command choices
+  - the full list of visible content lines
+  - a `no_action` outcome with confidence
+
+Target behavior:
+
+1. While content ASR is active and the utterance is still inside the countdown window, collect recognized transcript variants for that utterance.
+2. Store them in a normalized `LinkedHashSet`-style structure so order is stable and duplicates collapse.
+3. When the countdown expires, send the aggregated utterance context to the LLM instead of only one transcript string.
+4. Give the LLM the full action space:
+   - control commands
+   - every visible line with line number
+   - `no_action`
+5. Require the LLM to return:
+   - chosen action type
+   - chosen line index when applicable
+   - confidence score
+   - short reason
+6. Apply action only if confidence passes a runtime threshold; otherwise keep it as candidate or no-op.
+
+### Why This Is Better
+
+- it makes the prompt robust to streaming ASR instability
+- it reduces overfitting to a single mistaken final transcript
+- it lets the LLM arbitrate between command intent and content-line intent in one pass
+- it creates a path to confidence-based gating instead of unconditional fallback execution
+
 ## Proposed New Types
 
 ### In `speaker/`
@@ -285,6 +327,24 @@ Target flow:
   - `matchedText`
   - `score`
 
+- `SpeakerAsrUtteranceBuffer`
+  - owns transcript collection during one content-ASR countdown window
+  - stores normalized unique transcript variants
+  - exposes a finalized utterance bundle on countdown completion
+
+- `SpeakerAsrUtteranceBundle`
+  - `primaryText`
+  - `variants`
+  - `finalTextVersion`
+  - optional timing/debug metadata
+
+- `SpeakerResolvedAction`
+  - `PlayDocument`
+  - `PlayLine`
+  - `Pause`
+  - `Stop`
+  - `NoAction`
+
 ### In `llm/`
 
 - `LlmRequest`
@@ -292,6 +352,7 @@ Target flow:
   - `systemInstruction`
   - `userPrompt`
   - `expectedFormat`
+  - Phase 6 usage should populate a strict JSON schema hint
 
 - `LlmResponse`
   - `rawText`
@@ -306,6 +367,14 @@ Target flow:
     - current ASR text
     - current document chunks
     - strict instruction to choose from candidates only
+
+- `SpeakerCommandResolutionPromptBuilder`
+  - builds prompt using:
+    - aggregated ASR transcript variants
+    - current control-command list
+    - every visible content line with line number
+    - strict `no_action` option
+    - strict confidence field in JSON output
 
 ## Migration Plan
 
@@ -412,6 +481,56 @@ Current repo state:
 - parser behavior and provider retry behavior are both covered by unit tests
 - remaining gaps are moving more fallback orchestration out of `SpeakerScreen`, adding model config, and expanding automated coverage around the real fallback path
 
+### Phase 6
+
+Status: Planned
+
+Replace single-transcript fallback with aggregated utterance resolution:
+
+- extend `SpeakerAsrState` to expose utterance-scoped transcript variants for the current countdown window
+- add a small `SpeakerAsrUtteranceBuffer` so transcript collection logic is not embedded directly in UI effects
+- finalize the buffer when linger/countdown completes
+- thread the finalized utterance bundle through content ASR handling
+- add `SpeakerCommandResolutionPromptBuilder`
+- provide the LLM with:
+  - all collected transcript variants
+  - supported control commands
+  - every visible line as `lineIndex + text`
+  - `no_action`
+- require JSON output such as:
+
+```json
+{
+  "action": "play_line | play_document | pause | stop | no_action",
+  "lineIndex": 3,
+  "confidence": 0.91,
+  "reason": "short explanation"
+}
+```
+
+- apply runtime gating rules:
+  - execute immediately only above a high-confidence threshold
+  - optionally map medium confidence to candidate highlighting
+  - map low confidence to `NoAction`
+- add logs for:
+  - aggregated ASR variants
+  - chosen prompt action space size
+  - parsed LLM decision
+  - confidence threshold outcome
+
+Suggested implementation order:
+
+1. Add utterance aggregation data types and unit tests.
+2. Teach `SpeakerAsrController` to emit finalized variant bundles.
+3. Update content ASR handling to consume the bundle.
+4. Add new prompt builder and response parser.
+5. Introduce confidence-based decision gating.
+6. Add documentation and log coverage.
+
+Key design rule:
+
+- do not let the LLM infer the action space from free text alone; always provide an explicit enumerated command set plus numbered lines
+
 ## Gemini-Specific Rules
 
 Do not hardcode a preview model inside UI or domain code.
@@ -456,13 +575,14 @@ It also prevents `screens/` from becoming the default dumping ground for:
 
 ## Immediate Recommendation
 
-Before adding Gemini:
+Before considering Phase 6 complete:
 
 1. Validate the Android OAuth flow on device, especially scope consent and `UserRecoverableAuthException` recovery
 2. Continue shrinking screen-local orchestration so fallback behavior lives in runtime/viewmodel instead of `SpeakerScreen`
-3. Add config/settings-backed Gemini model selection
-4. Expand provider and semantic fallback test coverage beyond the current parser / retry happy-path set
-5. Add automated coverage around the real Gemini HTTP fallback path where feasible
-6. Keep Gemini auth OAuth-based; do not introduce API-key-based auth for this flow
+3. Add utterance-window transcript aggregation before changing the prompt
+4. Add the explicit command-or-line prompt with `no_action` and `confidence`
+5. Expand provider and semantic fallback test coverage beyond the current parser / retry happy-path set
+6. Add automated coverage around the real Gemini HTTP fallback path where feasible
+7. Keep Gemini auth OAuth-based; do not introduce API-key-based auth for this flow
 
-Only after that should Phase 5 be considered complete.
+Only after that should Phase 6 be considered complete.

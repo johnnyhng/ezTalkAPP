@@ -32,6 +32,15 @@ class SpeakerCommandResolverTest {
         assertEquals(SpeakerContentCommand.PlayLine(2), resolveSpeakerContentCommand("第三航", lines))
         assertEquals(SpeakerContentCommand.PlayLine(1), resolveSpeakerContentCommand("第2號", lines))
         assertEquals(SpeakerContentCommand.PlayLine(0), resolveSpeakerContentCommand("第一項", lines))
+        assertEquals(SpeakerContentCommand.PlayLine(1), resolveSpeakerContentCommand("第2段", lines))
+        assertEquals(SpeakerContentCommand.PlayLine(2), resolveSpeakerContentCommand("第三句", lines))
+    }
+
+    @Test
+    fun resolvesSemanticCommandPhrasesWithoutExactKeywords() {
+        assertEquals(SpeakerContentCommand.Play, resolveSpeakerContentCommand("念給我聽", lines))
+        assertEquals(SpeakerContentCommand.Pause, resolveSpeakerContentCommand("先停一下", lines))
+        assertEquals(SpeakerContentCommand.Stop, resolveSpeakerContentCommand("不要播了", lines))
     }
 
     @Test
