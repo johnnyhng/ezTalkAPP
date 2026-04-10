@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
-import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerDocumentUi
 
 class SpeakerSemanticSearchTest {
     @Test

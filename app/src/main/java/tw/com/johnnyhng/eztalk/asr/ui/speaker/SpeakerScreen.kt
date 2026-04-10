@@ -257,8 +257,18 @@ fun SpeakerScreen(
         isSelectedDocumentPlaying,
         isSelectedDocumentPaused
     ) {
-        if (activeAsrTarget != SpeakerAsrTarget.CONTENT) return@LaunchedEffect
+        if (activeAsrTarget != SpeakerAsrTarget.CONTENT) {
+            Log.i(
+                TAG,
+                "Speaker content ASR final skipped because active target is $activeAsrTarget version=${speakerAsrState.finalTextVersion}"
+            )
+            return@LaunchedEffect
+        }
         if (speakerAsrState.finalTextVersion == 0 || speakerAsrState.finalTextVersion == lastHandledContentFinalVersion) {
+            Log.i(
+                TAG,
+                "Speaker content ASR final skipped because version=${speakerAsrState.finalTextVersion} lastHandled=$lastHandledContentFinalVersion"
+            )
             return@LaunchedEffect
         }
         lastHandledContentFinalVersion = speakerAsrState.finalTextVersion

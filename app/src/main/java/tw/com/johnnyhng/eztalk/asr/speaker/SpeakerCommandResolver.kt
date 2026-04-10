@@ -11,7 +11,7 @@ internal fun resolveSpeakerContentCommand(
     commandText: String,
     availableLines: List<String>
 ): SpeakerContentCommand? {
-    val normalized = commandText.trim().replace("\\s+".toRegex(), "")
+    val normalized = normalizeSpeakerCommandText(commandText)
     if (normalized.isBlank()) return null
 
     val requestedLineIndex = resolveRequestedLineIndex(normalized)
@@ -28,30 +28,30 @@ internal fun resolveSpeakerContentCommand(
     }
 
     return when {
-        normalized.contains("暫停") -> SpeakerContentCommand.Pause
-        normalized.contains("停止") || normalized.contains("停播") -> SpeakerContentCommand.Stop
-        normalized.contains("播放") || normalized.contains("繼續") -> SpeakerContentCommand.Play
+        matchesAnyCommandKeyword(normalized, PAUSE_COMMAND_KEYWORDS) -> SpeakerContentCommand.Pause
+        matchesAnyCommandKeyword(normalized, STOP_COMMAND_KEYWORDS) -> SpeakerContentCommand.Stop
+        matchesAnyCommandKeyword(normalized, PLAY_COMMAND_KEYWORDS) -> SpeakerContentCommand.Play
         else -> null
     }
 }
 
 private fun resolveRequestedLineIndex(text: String): Int? {
-    val explicitDigitMatch = Regex("第(\\d+)行").find(text)
+    val explicitDigitMatch = LINE_REQUEST_DIGIT_REGEX.find(text)
     if (explicitDigitMatch != null) {
         return explicitDigitMatch.groupValues[1].toIntOrNull()
     }
 
-    val explicitChineseMatch = Regex("第([零一二兩三四五六七八九十百]+)行").find(text)
+    val explicitChineseMatch = LINE_REQUEST_CHINESE_REGEX.find(text)
     if (explicitChineseMatch != null) {
         return parseSimpleChineseNumber(explicitChineseMatch.groupValues[1])
     }
 
-    val bareDigitMatch = Regex("(\\d+)行").find(text)
+    val bareDigitMatch = BARE_LINE_REQUEST_DIGIT_REGEX.find(text)
     if (bareDigitMatch != null) {
         return bareDigitMatch.groupValues[1].toIntOrNull()
     }
 
-    val bareChineseMatch = Regex("([零一二兩三四五六七八九十百]+)行").find(text)
+    val bareChineseMatch = BARE_LINE_REQUEST_CHINESE_REGEX.find(text)
     if (bareChineseMatch != null) {
         return parseSimpleChineseNumber(bareChineseMatch.groupValues[1])
     }
@@ -100,3 +100,70 @@ private fun parseSimpleChineseNumber(text: String): Int? {
         .map { digitMap[it] ?: return null }
         .fold(0) { acc, value -> acc * 10 + value }
 }
+
+private fun normalizeSpeakerCommandText(text: String): String {
+    return text
+        .trim()
+        .replace("\\s+".toRegex(), "")
+        .replace("[，。、「」？！：；,.!?]".toRegex(), "")
+        .replace('撥', '播')
+        .replace('拨', '播')
+        .replace('續', '续')
+        .replace('繼', '继')
+        .replace('暫', '暂')
+        .let { normalized ->
+            normalized.map { char ->
+                LINE_SUFFIX_NORMALIZATION[char] ?: char
+            }.joinToString("")
+        }
+}
+
+private fun matchesAnyCommandKeyword(
+    normalizedText: String,
+    keywords: Set<String>
+): Boolean {
+    return keywords.any(normalizedText::contains)
+}
+
+private val PLAY_COMMAND_KEYWORDS = setOf(
+    "播放",
+    "播",
+    "继续",
+    "繼續",
+    "續播",
+    "开始播放",
+    "開始播放",
+    "开始",
+    "開始"
+)
+
+private val PAUSE_COMMAND_KEYWORDS = setOf(
+    "暂停",
+    "暫停",
+    "暂停播放",
+    "暫停播放"
+)
+
+private val STOP_COMMAND_KEYWORDS = setOf(
+    "停止",
+    "停播",
+    "停止播放",
+    "停下来",
+    "停下來"
+)
+
+private val LINE_SUFFIX_NORMALIZATION = mapOf(
+    '航' to '行',
+    '杭' to '行',
+    '型' to '行',
+    '項' to '行',
+    '项' to '行',
+    '橫' to '行',
+    '横' to '行',
+    '号' to '行',
+    '號' to '行'
+)
+private val LINE_REQUEST_DIGIT_REGEX = Regex("第(\\d+)行")
+private val LINE_REQUEST_CHINESE_REGEX = Regex("第([零一二兩三四五六七八九十百]+)行")
+private val BARE_LINE_REQUEST_DIGIT_REGEX = Regex("(\\d+)行")
+private val BARE_LINE_REQUEST_CHINESE_REGEX = Regex("([零一二兩三四五六七八九十百]+)行")

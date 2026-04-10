@@ -19,7 +19,12 @@ internal fun handleSpeakerContentCommand(
     playDocumentWithAsrStop: (SpeakerDocumentUi) -> SpeakerPlaybackResult,
     playLineWithAsrStop: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult
 ): Boolean {
-    return when (val command = resolveSpeakerContentCommand(finalText, contentLines)) {
+    val command = resolveSpeakerContentCommand(finalText, contentLines)
+    Log.i(
+        TAG,
+        "Speaker content command resolve text=$finalText command=$command isPlaying=$isSelectedDocumentPlaying isPaused=$isSelectedDocumentPaused"
+    )
+    return when (command) {
         SpeakerContentCommand.Play -> {
             resetContentSemanticUi()
             Log.i(TAG, "Speaker content command matched: Play")
@@ -50,6 +55,8 @@ internal fun handleSpeakerContentCommand(
             Log.i(TAG, "Speaker content command matched: Pause")
             if (isSelectedDocumentPlaying) {
                 pauseDocument(document.id)
+            } else {
+                Log.i(TAG, "Speaker content command Pause ignored because document is not currently playing")
             }
             true
         }
@@ -59,6 +66,8 @@ internal fun handleSpeakerContentCommand(
             Log.i(TAG, "Speaker content command matched: Stop")
             if (isSelectedDocumentPlaying || isSelectedDocumentPaused) {
                 stopPlayback()
+            } else {
+                Log.i(TAG, "Speaker content command Stop ignored because document is neither playing nor paused")
             }
             true
         }
@@ -89,7 +98,10 @@ internal fun handleSpeakerContentCommand(
             true
         }
 
-        null -> false
+        null -> {
+            Log.i(TAG, "Speaker content command not matched; continuing to semantic resolution")
+            false
+        }
     }
 }
 

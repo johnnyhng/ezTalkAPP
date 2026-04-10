@@ -53,8 +53,12 @@ internal class SpeakerAsrController(
         if (state.isRecording || recordingJob?.isActive == true) return
 
         updateState {
-            SpeakerAsrState(
-                isRecording = true
+            it.copy(
+                isRecording = true,
+                isRecognizingSpeech = false,
+                countdownProgress = 0f,
+                partialText = "",
+                finalText = ""
             )
         }
 
