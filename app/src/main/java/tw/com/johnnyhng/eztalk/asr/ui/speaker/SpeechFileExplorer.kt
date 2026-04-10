@@ -43,14 +43,9 @@ internal fun SpeechFileExplorer(
     directories: List<SpeakerDirectoryUi>,
     selectedDocumentId: String?,
     isLoading: Boolean,
-    localAsrText: String = "",
-    isLocalAsrRecording: Boolean = false,
-    localAsrCountdownProgress: Float = 0f,
-    isLocalAsrEnabled: Boolean = true,
     isImportEnabled: Boolean,
     isDirectoryDeleteEnabled: Boolean,
     isDocumentDeleteEnabled: Boolean,
-    onLocalAsrClick: () -> Unit = {},
     onCreateFolder: () -> Unit,
     onGoogleDriveImport: () -> Unit,
     onToggleExpand: (SpeakerDirectoryUi) -> Unit,
@@ -61,8 +56,6 @@ internal fun SpeechFileExplorer(
     onDocumentSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shouldShowLocalAsrWidget = directories.any { it.isExpanded }
-
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
@@ -119,17 +112,6 @@ internal fun SpeechFileExplorer(
                         }
                     }
                 }
-            }
-            if (shouldShowLocalAsrWidget) {
-                SpeakerDivider()
-                LocalASRWidget(
-                    recognizedText = localAsrText,
-                    isRecording = isLocalAsrRecording,
-                    countdownProgress = localAsrCountdownProgress,
-                    isEnabled = isLocalAsrEnabled,
-                    onMicClick = onLocalAsrClick,
-                    modifier = Modifier.padding(12.dp)
-                )
             }
         }
     }
