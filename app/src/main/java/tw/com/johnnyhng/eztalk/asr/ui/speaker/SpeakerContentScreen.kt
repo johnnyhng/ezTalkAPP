@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import tw.com.johnnyhng.eztalk.asr.speaker.buildSpeakerContentLines
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
 
@@ -296,12 +297,4 @@ private fun SpeakerPlaybackAction(
     ) {
         Icon(imageVector = icon, contentDescription = contentDescription)
     }
-}
-
-private fun buildSpeakerContentLines(text: String): List<String> {
-    return text
-        .replace("\r\n", "\n")
-        .split(Regex("[\\n。.]"))
-        .map(String::trim)
-        .filter(String::isNotBlank)
 }

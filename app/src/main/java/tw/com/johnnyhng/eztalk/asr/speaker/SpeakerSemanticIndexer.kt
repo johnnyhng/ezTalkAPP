@@ -9,9 +9,7 @@ internal class SpeakerSemanticIndexer(
     private val config: SpeakerSemanticSearchConfig = SpeakerSemanticSearchConfig()
 ) {
     fun indexDocument(document: SpeakerDocumentUi): List<SpeakerIndexedChunk> {
-        val lines = document.fullText
-            .replace("\r\n", "\n")
-            .split('\n')
+        val lines = buildSpeakerContentLines(document.fullText)
 
         return buildChunkWindows(lines, config.chunkLineWindow).map { window ->
             val chunkText = window.lines

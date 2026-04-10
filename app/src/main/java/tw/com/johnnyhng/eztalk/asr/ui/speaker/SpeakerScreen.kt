@@ -65,6 +65,7 @@ import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSearchResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticIndexer
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
+import tw.com.johnnyhng.eztalk.asr.speaker.buildSpeakerContentLines
 import tw.com.johnnyhng.eztalk.asr.speaker.handleSpeakerContentAsr
 import tw.com.johnnyhng.eztalk.asr.speaker.importTextUrisIntoSpeakerFolder
 import tw.com.johnnyhng.eztalk.asr.speaker.rememberSpeakerAsrController
@@ -274,7 +275,7 @@ fun SpeakerScreen(
         lastHandledContentFinalVersion = speakerAsrState.finalTextVersion
 
         val document = selectedDocument ?: return@LaunchedEffect
-        val contentLines = document.fullText.replace("\r\n", "\n").split('\n')
+        val contentLines = buildSpeakerContentLines(document.fullText)
         val finalText = speakerAsrState.finalText
         Log.i(TAG, "Speaker content ASR text: $finalText")
 
