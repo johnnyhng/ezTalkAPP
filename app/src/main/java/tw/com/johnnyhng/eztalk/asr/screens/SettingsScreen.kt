@@ -103,8 +103,16 @@ fun SettingsScreen(
     val selectedModel = homeViewModel.selectedModel
     var modelMenuExpanded by remember { mutableStateOf(false) }
     var entryScreenMenuExpanded by remember { mutableStateOf(false) }
+    var geminiModelMenuExpanded by remember { mutableStateOf(false) }
     var backendUrl by remember(userSettings.backendUrl) { mutableStateOf(userSettings.backendUrl) }
-    var geminiModel by remember(userSettings.geminiModel) { mutableStateOf(userSettings.geminiModel) }
+    val geminiModelOptions = listOf(
+        "none" to context.getString(R.string.gemini_model_option_none),
+        "gemini-2.5-flash" to context.getString(R.string.gemini_model_option_flash_default)
+    )
+    val selectedGeminiModelLabel = geminiModelOptions
+        .firstOrNull { it.first == userSettings.geminiModel }
+        ?.second
+        ?: userSettings.geminiModel
     val isDownloading by homeViewModel.isDownloadingFlow.collectAsState()
     val downloadProgress by homeViewModel.downloadProgressFlow.collectAsState()
     val canDeleteModel = homeViewModel.canDeleteModel
@@ -121,9 +129,6 @@ fun SettingsScreen(
 
     val signInManager = remember { GoogleSignInManager() }
     val tokenProvider = remember(appContext) { GoogleAuthGeminiAccessTokenProvider(appContext) }
-    val googleSignInClient = remember {
-        signInManager.getSignInClient(context)
-    }
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
     var geminiAuthStatus by remember { mutableStateOf<GeminiAuthStatus>(GeminiAuthStatus.NotSignedIn) }
     lateinit var refreshGeminiAuthStatus: (GoogleAccountSession?) -> Unit
@@ -178,29 +183,7 @@ fun SettingsScreen(
         }
     }
 
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            signInManager.getSessionFromIntent(result.data)
-                .onSuccess { session ->
-                    googleSession = session
-                    homeViewModel.updateUserId(session.email)
-                    refreshGeminiAuthStatus(session)
-                    Toast.makeText(
-                        context,
-                        "Signed in as ${session.email}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                .onFailure { error ->
-                    Log.w(TAG, "Google sign in failed", error)
-                    Toast.makeText(context, "Google sign in failed", Toast.LENGTH_SHORT).show()
-                }
-        }
-    }
-
-    LaunchedEffect(signInManager, context) {
+    LaunchedEffect(signInManager, context, userSettings.userId) {
         val session = signInManager.getCurrentSession(context)
         googleSession = session
         if (session != null && userSettings.userId != session.email) {
@@ -230,66 +213,72 @@ fun SettingsScreen(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = stringResource(
-                R.string.google_account_status,
-                googleSession?.email ?: stringResource(R.string.google_account_not_signed_in)
-            )
-        )
-        Text(text = stringResource(R.string.current_user_id, userSettings.userId))
-        Text(
-            text = when (val status = geminiAuthStatus) {
-                GeminiAuthStatus.NotSignedIn -> stringResource(R.string.gemini_oauth_status_not_signed_in)
-                GeminiAuthStatus.Checking -> stringResource(R.string.gemini_oauth_status_checking)
-                GeminiAuthStatus.Ready -> stringResource(R.string.gemini_oauth_status_ready)
-                is GeminiAuthStatus.Error -> stringResource(
-                    R.string.gemini_oauth_status_error,
-                    status.message
+        googleSession?.let { session ->
+            Text(
+                text = stringResource(
+                    R.string.welcome_logged_in_user,
+                    session.displayName?.takeIf { it.isNotBlank() } ?: session.email
                 )
-            },
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Row {
-            Button(onClick = { launcher.launch(googleSignInClient.signInIntent) }, enabled = !isDownloading) {
-                Text(text = stringResource(R.string.sign_in_with_google))
+            )
+            Text(
+                text = when (val status = geminiAuthStatus) {
+                    GeminiAuthStatus.NotSignedIn -> stringResource(R.string.gemini_oauth_status_not_signed_in)
+                    GeminiAuthStatus.Checking -> stringResource(R.string.gemini_oauth_status_checking)
+                    GeminiAuthStatus.Ready -> stringResource(R.string.gemini_oauth_status_ready)
+                    is GeminiAuthStatus.Error -> stringResource(
+                        R.string.gemini_oauth_status_error,
+                        status.message
+                    )
+                },
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Button(
+                onClick = { refreshGeminiAuthStatus(googleSession) },
+                enabled = !isDownloading && geminiAuthStatus != GeminiAuthStatus.Checking
+            ) {
+                Text(stringResource(R.string.check_gemini_access))
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Button(onClick = {
-                signInManager.signOut(context) { result ->
-                    result
-                        .onSuccess {
-                            googleSession = null
-                            geminiAuthStatus = GeminiAuthStatus.NotSignedIn
-                            homeViewModel.updateUserId("user@example.com")
-                            Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show()
-                        }
-                        .onFailure { error ->
-                            Log.w(TAG, "Google sign out failed", error)
-                            Toast.makeText(context, "Google sign out failed", Toast.LENGTH_SHORT).show()
-                        }
-                }
-            }, enabled = !isDownloading) {
-                Text(stringResource(R.string.sign_out))
-            }
-        }
-        Button(
-            onClick = { refreshGeminiAuthStatus(googleSession) },
-            enabled = !isDownloading && googleSession != null && geminiAuthStatus != GeminiAuthStatus.Checking
-        ) {
-            Text(stringResource(R.string.check_gemini_access))
         }
 
-        OutlinedTextField(
-            value = geminiModel,
-            onValueChange = {
-                geminiModel = it
-                homeViewModel.updateGeminiModel(it)
+        ExposedDropdownMenuBox(
+            expanded = geminiModelMenuExpanded,
+            onExpandedChange = {
+                if (!isDownloading) {
+                    geminiModelMenuExpanded = !geminiModelMenuExpanded
+                }
             },
-            label = { Text(stringResource(R.string.gemini_model_label)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            enabled = !isDownloading
-        )
+        ) {
+            OutlinedTextField(
+                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                readOnly = true,
+                value = selectedGeminiModelLabel,
+                onValueChange = {},
+                label = { Text(stringResource(R.string.gemini_model_label)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = geminiModelMenuExpanded) },
+                enabled = !isDownloading
+            )
+            ExposedDropdownMenu(
+                expanded = geminiModelMenuExpanded,
+                onDismissRequest = { geminiModelMenuExpanded = false },
+                modifier = Modifier.exposedDropdownSize()
+            ) {
+                geminiModelOptions.forEach { (value, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = {
+                            homeViewModel.updateGeminiModel(value)
+                            geminiModelMenuExpanded = false
+                        },
+                        leadingIcon = {
+                            RadioButton(
+                                selected = value == userSettings.geminiModel,
+                                onClick = null
+                            )
+                        }
+                    )
+                }
+            }
+        }
 
         OutlinedTextField(
             value = backendUrl,
