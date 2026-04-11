@@ -265,25 +265,18 @@ fun SpeakerScreen(
             )
             return@LaunchedEffect
         }
-        if (speakerAsrState.finalTextVersion == 0 || speakerAsrState.finalTextVersion == lastHandledContentFinalVersion) {
+        val utterance = speakerAsrState.finalUtteranceBundle ?: return@LaunchedEffect
+        if (utterance.finalTextVersion == 0 || utterance.finalTextVersion == lastHandledContentFinalVersion) {
             Log.i(
                 TAG,
-                "Speaker content ASR final skipped because version=${speakerAsrState.finalTextVersion} lastHandled=$lastHandledContentFinalVersion"
+                "Speaker content ASR final skipped because version=${utterance.finalTextVersion} lastHandled=$lastHandledContentFinalVersion"
             )
             return@LaunchedEffect
         }
-        lastHandledContentFinalVersion = speakerAsrState.finalTextVersion
+        lastHandledContentFinalVersion = utterance.finalTextVersion
 
         val document = selectedDocument ?: return@LaunchedEffect
         val contentLines = buildSpeakerContentLines(document.fullText)
-        val utterance = speakerAsrState.finalUtteranceBundle
-            ?: run {
-                Log.i(
-                    TAG,
-                    "Speaker content ASR final skipped because utterance bundle is null version=${speakerAsrState.finalTextVersion}"
-                )
-                return@LaunchedEffect
-            }
         Log.i(TAG, "Speaker content ASR text: ${utterance.primaryText}")
         Log.i(TAG, "Speaker content ASR variants: ${utterance.variants}")
 
