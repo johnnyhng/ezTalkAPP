@@ -268,7 +268,7 @@ private data class SpeakerUtteranceId(
     val segmentIndex: Int
 )
 
-private data class SpeakerPlaybackPlan(
+internal data class SpeakerPlaybackPlan(
     val segments: List<String>,
     val lineIndexes: List<Int>
 )
@@ -303,8 +303,8 @@ private fun segmentTextForTts(text: String): List<String> {
         .flatMap { chunkTextForTts(it) }
 }
 
-private fun buildSpeakerPlaybackPlan(text: String): SpeakerPlaybackPlan {
-    val lines = text.replace("\r\n", "\n").split('\n')
+internal fun buildSpeakerPlaybackPlan(text: String): SpeakerPlaybackPlan {
+    val lines = buildSpeakerContentLines(text)
     val segments = mutableListOf<String>()
     val lineIndexes = mutableListOf<Int>()
 
