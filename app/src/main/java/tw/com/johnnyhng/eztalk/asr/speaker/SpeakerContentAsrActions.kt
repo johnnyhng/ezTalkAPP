@@ -8,7 +8,7 @@ import tw.com.johnnyhng.eztalk.asr.TAG
 
 internal fun handleSpeakerContentCommand(
     context: Context,
-    finalText: String,
+    utterance: SpeakerAsrUtteranceBundle,
     document: SpeakerDocumentUi,
     contentLines: List<String>,
     isSelectedDocumentPlaying: Boolean,
@@ -19,10 +19,14 @@ internal fun handleSpeakerContentCommand(
     playDocumentWithAsrStop: (SpeakerDocumentUi) -> SpeakerPlaybackResult,
     playLineWithAsrStop: (SpeakerDocumentUi, Int, String) -> SpeakerPlaybackResult
 ): Boolean {
-    val command = resolveSpeakerContentCommand(finalText, contentLines)
+    val resolved = resolveSpeakerContentCommandFromUtterance(
+        utterance = utterance,
+        contentLines = contentLines
+    )
+    val command = resolved?.command
     Log.i(
         TAG,
-        "Speaker content command resolve text=$finalText command=$command isPlaying=$isSelectedDocumentPlaying isPaused=$isSelectedDocumentPaused"
+        "Speaker content command resolve primary=${utterance.primaryText} matchedVariant=${resolved?.matchedVariant} command=$command isPlaying=$isSelectedDocumentPlaying isPaused=$isSelectedDocumentPaused"
     )
     return when (command) {
         SpeakerContentCommand.Play -> {
@@ -99,8 +103,35 @@ internal fun handleSpeakerContentCommand(
         }
 
         null -> {
-            Log.i(TAG, "Speaker content command not matched; continuing to semantic resolution")
+            Log.i(
+                TAG,
+                "Speaker content command not matched across utterance variants=${utterance.variants}; continuing to semantic resolution"
+            )
             false
+        }
+    }
+}
+
+private data class SpeakerResolvedUtteranceCommand(
+    val matchedVariant: String,
+    val command: SpeakerContentCommand
+)
+
+private fun resolveSpeakerContentCommandFromUtterance(
+    utterance: SpeakerAsrUtteranceBundle,
+    contentLines: List<String>
+): SpeakerResolvedUtteranceCommand? {
+    val orderedVariants = buildList {
+        add(utterance.primaryText)
+        addAll(utterance.variants)
+    }.distinct()
+
+    return orderedVariants.firstNotNullOfOrNull { variant ->
+        resolveSpeakerContentCommand(variant, contentLines)?.let { command ->
+            SpeakerResolvedUtteranceCommand(
+                matchedVariant = variant,
+                command = command
+            )
         }
     }
 }
@@ -127,7 +158,7 @@ internal suspend fun handleSpeakerContentAsr(
     if (
         handleSpeakerContentCommand(
             context = context,
-            finalText = finalText,
+            utterance = utterance,
             document = document,
             contentLines = contentLines,
             isSelectedDocumentPlaying = isSelectedDocumentPlaying,
