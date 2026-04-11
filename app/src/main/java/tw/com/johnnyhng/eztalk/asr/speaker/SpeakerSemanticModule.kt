@@ -42,12 +42,14 @@ internal class SpeakerSemanticModule(
         val decision = if (bestResult.finalScore >= config.autoPlayScoreThreshold) {
             SpeakerSemanticDecision.AutoPlay(
                 lineIndex = matchedLineIndex,
-                result = bestResult
+                result = bestResult,
+                source = SpeakerDecisionSource.SEMANTIC
             )
         } else {
             SpeakerSemanticDecision.Candidate(
                 lineIndex = matchedLineIndex,
-                result = bestResult
+                result = bestResult,
+                source = SpeakerDecisionSource.SEMANTIC
             )
         }
 
@@ -126,12 +128,14 @@ internal class SpeakerSemanticModule(
                 return if (confidence >= llmAutoplayConfidenceThreshold) {
                     SpeakerSemanticDecision.AutoPlay(
                         lineIndex = lineIndex,
-                        result = result
+                        result = result,
+                        source = SpeakerDecisionSource.LLM
                     )
                 } else {
                     SpeakerSemanticDecision.Candidate(
                         lineIndex = lineIndex,
-                        result = result
+                        result = result,
+                        source = SpeakerDecisionSource.LLM
                     )
                 }
             }
@@ -141,6 +145,7 @@ internal class SpeakerSemanticModule(
                 if (confidence < llmCommandConfidenceThreshold) return SpeakerSemanticDecision.NoMatch
                 return SpeakerSemanticDecision.Command(
                     command = SpeakerContentCommand.Play,
+                    source = SpeakerDecisionSource.LLM,
                     confidence = confidence,
                     reason = payload.reason
                 )
@@ -151,6 +156,7 @@ internal class SpeakerSemanticModule(
                 return if (confidence >= llmCommandConfidenceThreshold) {
                     SpeakerSemanticDecision.Command(
                         command = SpeakerContentCommand.Pause,
+                        source = SpeakerDecisionSource.LLM,
                         confidence = confidence,
                         reason = payload.reason
                     )
@@ -164,6 +170,7 @@ internal class SpeakerSemanticModule(
                 return if (confidence >= llmCommandConfidenceThreshold) {
                     SpeakerSemanticDecision.Command(
                         command = SpeakerContentCommand.Stop,
+                        source = SpeakerDecisionSource.LLM,
                         confidence = confidence,
                         reason = payload.reason
                     )
@@ -185,7 +192,8 @@ internal class SpeakerSemanticModule(
                 } else {
                     SpeakerSemanticDecision.Candidate(
                         lineIndex = resolveMatchedLineIndex(lines, matched),
-                        result = matched
+                        result = matched,
+                        source = SpeakerDecisionSource.LLM
                     )
                 }
             }
@@ -197,7 +205,8 @@ internal class SpeakerSemanticModule(
                 } else {
                     SpeakerSemanticDecision.AutoPlay(
                         lineIndex = resolveMatchedLineIndex(lines, matched),
-                        result = matched
+                        result = matched,
+                        source = SpeakerDecisionSource.LLM
                     )
                 }
             }

@@ -23,6 +23,12 @@ internal data class SpeakerSearchResult(
     val finalScore: Float
 )
 
+internal enum class SpeakerDecisionSource {
+    RESOLVER,
+    SEMANTIC,
+    LLM
+}
+
 internal data class SpeakerSemanticSearchConfig(
     val chunkLineWindow: Int = 3,
     val semanticWeight: Float = 0.7f,
@@ -35,18 +41,21 @@ internal data class SpeakerSemanticSearchConfig(
 internal sealed interface SpeakerSemanticDecision {
     data class Command(
         val command: SpeakerContentCommand,
+        val source: SpeakerDecisionSource = SpeakerDecisionSource.LLM,
         val confidence: Float = 0f,
         val reason: String? = null
     ) : SpeakerSemanticDecision
 
     data class AutoPlay(
         val lineIndex: Int,
-        val result: SpeakerSearchResult
+        val result: SpeakerSearchResult,
+        val source: SpeakerDecisionSource = SpeakerDecisionSource.SEMANTIC
     ) : SpeakerSemanticDecision
 
     data class Candidate(
         val lineIndex: Int,
-        val result: SpeakerSearchResult
+        val result: SpeakerSearchResult,
+        val source: SpeakerDecisionSource = SpeakerDecisionSource.SEMANTIC
     ) : SpeakerSemanticDecision
 
     data class Ambiguous(

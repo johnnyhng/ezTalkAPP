@@ -307,7 +307,7 @@ internal suspend fun handleSpeakerSemanticResolution(
             updateLlmFallbackState(null)
             Log.i(
                 TAG,
-                "Speaker semantic command command=${decision.command} confidence=${"%.4f".format(decision.confidence)} reason=${decision.reason.orEmpty()}"
+                "Speaker semantic command source=${decision.source} command=${decision.command} confidence=${"%.4f".format(decision.confidence)} reason=${decision.reason.orEmpty()}"
             )
             applySpeakerSemanticDecision(
                 context = context,
@@ -337,6 +337,11 @@ private fun logSpeakerSemanticDecision(
         is SpeakerSemanticDecision.AutoPlay -> decision.result
         else -> return
     }
+    val source = when (decision) {
+        is SpeakerSemanticDecision.Candidate -> decision.source
+        is SpeakerSemanticDecision.AutoPlay -> decision.source
+        else -> return
+    }
     val lineIndex = when (decision) {
         is SpeakerSemanticDecision.Candidate -> decision.lineIndex
         is SpeakerSemanticDecision.AutoPlay -> decision.lineIndex
@@ -344,6 +349,6 @@ private fun logSpeakerSemanticDecision(
     }
     Log.i(
         TAG,
-        "Speaker semantic $label line=$lineIndex score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
+        "Speaker semantic $label source=$source line=$lineIndex score=${"%.4f".format(result.finalScore)} semantic=${"%.4f".format(result.semanticScore)} lexical=${"%.4f".format(result.lexicalScore)} lines=${result.lineStart}-${result.lineEnd} text=${result.matchedText.oneLineForLog()}"
     )
 }
