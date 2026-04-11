@@ -54,6 +54,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
+import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
 import tw.com.johnnyhng.eztalk.asr.llm.GoogleAuthGeminiAccessTokenProvider
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
@@ -217,7 +218,7 @@ fun SettingsScreen(
             Text(
                 text = stringResource(
                     R.string.welcome_logged_in_user,
-                    session.displayName?.takeIf { it.isNotBlank() } ?: session.email
+                    session.displayLabel()
                 )
             )
             Text(

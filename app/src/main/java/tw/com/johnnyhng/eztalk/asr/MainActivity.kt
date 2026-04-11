@@ -70,6 +70,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
+import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 import tw.com.johnnyhng.eztalk.asr.screens.DataCollectScreen
@@ -176,7 +177,7 @@ fun MainScreen(
                     homeViewModel.updateUserId(session.email)
                     Toast.makeText(
                         context,
-                        context.getString(R.string.google_account_status, session.email),
+                        context.getString(R.string.google_account_status, session.displayLabel()),
                         Toast.LENGTH_SHORT
                     ).show()
                 }

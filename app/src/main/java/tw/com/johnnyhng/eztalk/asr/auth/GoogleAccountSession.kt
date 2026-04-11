@@ -5,3 +5,12 @@ internal data class GoogleAccountSession(
     val displayName: String? = null,
     val photoUrl: String? = null
 )
+
+internal fun GoogleAccountSession.displayLabel(): String {
+    val resolvedName = displayName?.trim().orEmpty()
+    return if (resolvedName.isNotBlank() && resolvedName != email) {
+        "$resolvedName ($email)"
+    } else {
+        email
+    }
+}
