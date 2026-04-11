@@ -438,3 +438,80 @@ If you want to change semantic/LLM fallback behavior, start here:
 - [SpeakerSemanticPromptBuilder.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/prompt/SpeakerSemanticPromptBuilder.kt)
 - [SpeakerCommandResolutionPromptBuilder.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/prompt/SpeakerCommandResolutionPromptBuilder.kt)
 - [GeminiLlmProvider.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/llm/GeminiLlmProvider.kt)
+
+## 11. Recent Bug: LLM Returned `play_line` But Runtime Dropped It
+
+Observed device log pattern:
+
+- Gemini returned HTTP `200`
+- parser logged:
+  - `action=play_line`
+  - `lineIndex=9`
+  - `confidence=0.0`
+  - empty `reason`
+- runtime then rejected the result because `play_line` requires confidence above the minimum threshold
+
+Example symptom:
+
+```text
+Speaker LLM payload parsed action=play_line decision= lineIndex=9 lineRange=null-null confidence=0.0 reason=
+```
+
+### Root Cause
+
+There were two practical issues:
+
+1. The command-resolution prompt strongly suggested the desired schema, but it was not strict enough about mandatory numeric `confidence`.
+2. The parser only trusted native numeric JSON fields, so responses such as:
+   - missing `confidence`
+   - `"confidence": "0.93"`
+   - `"lineIndex": "9"`
+   could degrade into a parsed confidence of `0.0` or null-like behavior.
+
+There was also a logging annoyance:
+
+- the same LLM request could be built twice in one no-match flow, so `Speaker LLM request built ...` appeared twice.
+
+### Applied Fix
+
+Prompt-side fix:
+
+- [SpeakerCommandResolutionPromptBuilder.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/prompt/SpeakerCommandResolutionPromptBuilder.kt)
+  now explicitly requires:
+  - all JSON fields to be present
+  - `confidence` to be numeric and between `0.0` and `1.0`
+  - `reason` to be non-empty
+  - `lineIndex` to be integer for `play_line`
+  - `lineIndex = null` for non-line actions
+
+Parser-side fix:
+
+- [SpeakerSemanticModule.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/speaker/SpeakerSemanticModule.kt)
+  now accepts flexible field encodings:
+  - numeric JSON values
+  - string-encoded numbers for `confidence`
+  - string-encoded integers for `lineIndex`, `lineStart`, `lineEnd`
+
+Flow fix:
+
+- the fallback path now builds the LLM request once and reuses it, removing duplicate
+  `Speaker LLM request built ...` logs for the same utterance.
+
+Logging fix:
+
+- [GeminiLlmProvider.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/llm/GeminiLlmProvider.kt)
+  now logs a short `rawTextPreview` on successful parse, so the exact Gemini payload shape is visible in logcat.
+
+### Expected Result After Fix
+
+If Gemini returns any of these:
+
+```json
+{"action":"play_line","lineIndex":9,"confidence":0.93,"reason":"closest line"}
+```
+
+```json
+{"action":"play_line","lineIndex":"9","confidence":"0.93","reason":"closest line"}
+```
+
+the runtime should now parse the same intent correctly and pass confidence gating.

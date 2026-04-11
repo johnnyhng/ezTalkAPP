@@ -222,22 +222,12 @@ internal class SpeakerSemanticModule(
     }
 
     suspend fun tryLlmFallback(
-        utterance: SpeakerAsrUtteranceBundle,
+        request: LlmRequest,
         rankedResults: List<SpeakerSearchResult>,
-        lines: List<String>,
-        maxCandidates: Int = 5
+        lines: List<String>
     ): Result<SpeakerSemanticDecision> {
         val provider = llmProvider ?: return Result.failure(
             IllegalStateException("LLM provider is not configured")
-        )
-
-        val request = buildLlmRequest(
-            utterance = utterance,
-            rankedResults = rankedResults,
-            lines = lines,
-            maxCandidates = maxCandidates
-        ) ?: return Result.failure(
-            IllegalArgumentException("Unable to build LLM request for fallback")
         )
 
         return provider.generate(request).map { response ->
@@ -263,11 +253,14 @@ internal class SpeakerSemanticModule(
             maxCandidates = maxCandidates
         )
         val llmFallbackResult = if (isLlmFallbackEnabled) {
-            tryLlmFallback(
-                utterance = utterance,
-                rankedResults = rankedResults,
-                lines = lines,
-                maxCandidates = maxCandidates
+            llmRequest?.let { request ->
+                tryLlmFallback(
+                    request = request,
+                    rankedResults = rankedResults,
+                    lines = lines
+                )
+            } ?: Result.failure(
+                IllegalArgumentException("Unable to build LLM request for fallback")
             )
         } else {
             null
@@ -311,10 +304,10 @@ internal class SpeakerSemanticModule(
         return SpeakerLlmSemanticPayload(
             decision = decision,
             action = action,
-            confidence = json.optNullableDouble("confidence")?.toFloat(),
-            lineIndex = json.optNullableInt("lineIndex"),
-            lineStart = json.optNullableInt("lineStart"),
-            lineEnd = json.optNullableInt("lineEnd"),
+            confidence = json.optFlexibleDouble("confidence")?.toFloat(),
+            lineIndex = json.optFlexibleInt("lineIndex"),
+            lineStart = json.optFlexibleInt("lineStart"),
+            lineEnd = json.optFlexibleInt("lineEnd"),
             reason = json.optString("reason").takeIf { it.isNotBlank() }
         )
     }
@@ -359,6 +352,26 @@ internal class SpeakerSemanticModule(
     private fun JSONObject.optNullableDouble(key: String): Double? {
         if (!has(key) || isNull(key)) return null
         return optDouble(key)
+    }
+
+    private fun JSONObject.optFlexibleInt(key: String): Int? {
+        if (!has(key) || isNull(key)) return null
+        val raw = opt(key)
+        return when (raw) {
+            is Number -> raw.toInt()
+            is String -> raw.trim().toIntOrNull()
+            else -> null
+        }
+    }
+
+    private fun JSONObject.optFlexibleDouble(key: String): Double? {
+        if (!has(key) || isNull(key)) return null
+        val raw = opt(key)
+        return when (raw) {
+            is Number -> raw.toDouble()
+            is String -> raw.trim().toDoubleOrNull()
+            else -> null
+        }
     }
 
     private fun resultForLineIndex(

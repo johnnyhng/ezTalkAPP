@@ -163,4 +163,21 @@ class SpeakerSemanticModuleTest {
 
         assertEquals(SpeakerSemanticDecision.NoMatch, decision)
     }
+
+    @Test
+    fun parseLlmResponse_acceptsStringConfidenceAndLineIndex() {
+        val response = LlmResponse(
+            rawText = """{"action":"play_line","lineIndex":"2","confidence":"0.93","reason":"string encoded fields"}"""
+        )
+
+        val decision = module.parseLlmResponse(
+            response = response,
+            rankedResults = rankedResults,
+            lines = lines
+        )
+
+        assertTrue(decision is SpeakerSemanticDecision.AutoPlay)
+        val autoplay = decision as SpeakerSemanticDecision.AutoPlay
+        assertEquals(2, autoplay.lineIndex)
+    }
 }

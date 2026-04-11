@@ -189,7 +189,7 @@ internal class GeminiLlmProvider(
             onSuccess = {
                 Log.i(
                     TAG,
-                    "Gemini response parsed successfully rawTextLength=${it.rawText.length} finishReason=${it.finishReason}"
+                    "Gemini response parsed successfully rawTextLength=${it.rawText.length} finishReason=${it.finishReason} rawTextPreview=${it.rawText.take(200)}"
                 )
                 Result.success(it)
             },

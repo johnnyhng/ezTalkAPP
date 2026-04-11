@@ -37,6 +37,11 @@ internal class SpeakerCommandResolutionPromptBuilder {
 
                 Use only the provided action space and numbered lines.
                 If the intent is uncertain or unsupported, return no_action.
+                All JSON fields are mandatory.
+                Always return confidence as a number between 0.0 and 1.0.
+                For play_line, lineIndex must be an integer from the provided lines.
+                For actions other than play_line, set lineIndex to null.
+                Reason must be a short non-empty string.
                 Return JSON only.
             """.trimIndent(),
             userPrompt = """
@@ -53,8 +58,8 @@ internal class SpeakerCommandResolutionPromptBuilder {
                 {
                   "action": "play_document | play_line | pause | stop | no_action",
                   "lineIndex": 0,
-                  "confidence": 0.0,
-                  "reason": "short explanation"
+                  "confidence": 0.92,
+                  "reason": "matched line 9 from repeated utterance variants"
                 }
             """.trimIndent()
         )
