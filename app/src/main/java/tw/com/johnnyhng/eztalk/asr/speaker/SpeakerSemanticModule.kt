@@ -1,7 +1,9 @@
 package tw.com.johnnyhng.eztalk.asr.speaker
 
+import android.util.Log
 import org.json.JSONException
 import org.json.JSONObject
+import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LlmRequest
 import tw.com.johnnyhng.eztalk.asr.llm.LlmResponse
@@ -97,7 +99,11 @@ internal class SpeakerSemanticModule(
             userPrompt = prompt.userPrompt,
             outputFormat = tw.com.johnnyhng.eztalk.asr.llm.LlmOutputFormat.JSON,
             schemaHint = prompt.expectedResponseSchema
-        )
+        ).also {
+            safeLog(
+                "Speaker LLM request built variants=${utterance.variants.size} lines=${lines.size} rankedCandidates=${rankedResults.take(maxCandidates).size} model=${it.model}"
+            )
+        }
     }
 
     fun parseLlmResponse(
@@ -106,6 +112,9 @@ internal class SpeakerSemanticModule(
         lines: List<String>
     ): SpeakerSemanticDecision {
         val payload = parseSemanticPayload(response.rawText) ?: return SpeakerSemanticDecision.NoMatch
+        safeLog(
+            "Speaker LLM payload parsed action=${payload.action.orEmpty()} decision=${payload.decision.orEmpty()} lineIndex=${payload.lineIndex} lineRange=${payload.lineStart}-${payload.lineEnd} confidence=${payload.confidence ?: 0f} reason=${payload.reason.orEmpty()}"
+        )
 
         when (payload.action) {
             "play_line" -> {
@@ -374,6 +383,10 @@ internal class SpeakerSemanticModule(
                 lexicalSimilarity(result.matchedText, lines[index])
             }
             ?: candidateIndices.first()
+    }
+
+    private fun safeLog(message: String) {
+        runCatching { Log.i(TAG, message) }
     }
 
     private companion object {
