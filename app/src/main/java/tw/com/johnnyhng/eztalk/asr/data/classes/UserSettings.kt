@@ -12,7 +12,11 @@ data class UserSettings(
     val enableTtsFeedback: Boolean = true,
     val selectedModelName: String = "",
     val entryScreenRoute: String = "home",
-    val geminiModel: String = "gemini-2.5-flash"
+    val geminiModel: String = "gemini-2.5-flash",
+    val preferredAudioInputDeviceId: Int? = null,
+    val preferredAudioOutputDeviceId: Int? = null,
+    val allowAppAudioCapture: Boolean = false,
+    val preferCommunicationDeviceRouting: Boolean = true
 ) {
     val effectiveRecognitionUrl: String
         get() = BackendEndpoints.processAudio(backendUrl)

@@ -14,6 +14,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
+import tw.com.johnnyhng.eztalk.asr.audio.AudioRoutingRepository
+import tw.com.johnnyhng.eztalk.asr.audio.AudioRoutingStatus
 import tw.com.johnnyhng.eztalk.asr.sanitizeEntryScreenRoute
 import tw.com.johnnyhng.eztalk.asr.data.classes.Model
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
@@ -31,12 +33,15 @@ class HomeViewModel @JvmOverloads constructor(
     private val remoteModelRepository: RemoteModelRepository = DirectUrlRemoteModelRepository
 ) : AndroidViewModel(application) {
     private val settingsManager = SettingsManager(application)
+    private val audioRoutingRepository = AudioRoutingRepository(application)
     
     val userSettings: StateFlow<UserSettings> = settingsManager.userSettings.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         UserSettings()
     )
+    private val _audioRoutingStatus = MutableStateFlow(AudioRoutingStatus())
+    val audioRoutingStatus = _audioRoutingStatus.asStateFlow()
 
     // Model Management
     private val _models = mutableStateListOf<Model>()
@@ -110,6 +115,10 @@ class HomeViewModel @JvmOverloads constructor(
                         _selectedModel.value = model
                     }
                 }
+                _audioRoutingStatus.value = audioRoutingRepository.getStatus(
+                    selectedInputDeviceId = settings.preferredAudioInputDeviceId,
+                    selectedOutputDeviceId = settings.preferredAudioOutputDeviceId
+                )
             }
         }
     }
@@ -276,6 +285,24 @@ class HomeViewModel @JvmOverloads constructor(
     }
     fun updateGeminiModel(v: String) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(geminiModel = v))
+    }
+    fun updatePreferredAudioInputDeviceId(v: Int?) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(preferredAudioInputDeviceId = v))
+    }
+    fun updatePreferredAudioOutputDeviceId(v: Int?) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(preferredAudioOutputDeviceId = v))
+    }
+    fun updateAllowAppAudioCapture(v: Boolean) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(allowAppAudioCapture = v))
+    }
+    fun updatePreferCommunicationDeviceRouting(v: Boolean) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(preferCommunicationDeviceRouting = v))
+    }
+    fun refreshAudioRoutingStatus() {
+        _audioRoutingStatus.value = audioRoutingRepository.getStatus(
+            selectedInputDeviceId = userSettings.value.preferredAudioInputDeviceId,
+            selectedOutputDeviceId = userSettings.value.preferredAudioOutputDeviceId
+        )
     }
 
     private fun markUpdateAvailability(

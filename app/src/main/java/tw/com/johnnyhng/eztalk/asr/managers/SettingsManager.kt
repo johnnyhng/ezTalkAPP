@@ -21,6 +21,11 @@ private val enableTtsFeedbackKey = booleanPreferencesKey("enable_tts_feedback")
 private val selectedModelNameKey = stringPreferencesKey("selected_model_name")
 private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
 private val geminiModelKey = stringPreferencesKey("gemini_model")
+private val preferredAudioInputDeviceIdKey = intPreferencesKey("preferred_audio_input_device_id")
+private val preferredAudioOutputDeviceIdKey = intPreferencesKey("preferred_audio_output_device_id")
+private val allowAppAudioCaptureKey = booleanPreferencesKey("allow_app_audio_capture")
+private val preferCommunicationDeviceRoutingKey =
+    booleanPreferencesKey("prefer_communication_device_routing")
 private val defaultUserSettings = UserSettings()
 
 internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
@@ -36,7 +41,13 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         entryScreenRoute = sanitizeEntryScreenRoute(
             preferences[entryScreenRouteKey] ?: defaultUserSettings.entryScreenRoute
         ),
-        geminiModel = preferences[geminiModelKey] ?: defaultUserSettings.geminiModel
+        geminiModel = preferences[geminiModelKey] ?: defaultUserSettings.geminiModel,
+        preferredAudioInputDeviceId = preferences[preferredAudioInputDeviceIdKey],
+        preferredAudioOutputDeviceId = preferences[preferredAudioOutputDeviceIdKey],
+        allowAppAudioCapture = preferences[allowAppAudioCaptureKey]
+            ?: defaultUserSettings.allowAppAudioCapture,
+        preferCommunicationDeviceRouting = preferences[preferCommunicationDeviceRoutingKey]
+            ?: defaultUserSettings.preferCommunicationDeviceRouting
     )
 }
 
@@ -51,6 +62,18 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[selectedModelNameKey] = settings.selectedModelName
     preferences[entryScreenRouteKey] = sanitizeEntryScreenRoute(settings.entryScreenRoute)
     preferences[geminiModelKey] = settings.geminiModel
+    if (settings.preferredAudioInputDeviceId != null) {
+        preferences[preferredAudioInputDeviceIdKey] = settings.preferredAudioInputDeviceId
+    } else {
+        preferences.remove(preferredAudioInputDeviceIdKey)
+    }
+    if (settings.preferredAudioOutputDeviceId != null) {
+        preferences[preferredAudioOutputDeviceIdKey] = settings.preferredAudioOutputDeviceId
+    } else {
+        preferences.remove(preferredAudioOutputDeviceIdKey)
+    }
+    preferences[allowAppAudioCaptureKey] = settings.allowAppAudioCapture
+    preferences[preferCommunicationDeviceRoutingKey] = settings.preferCommunicationDeviceRouting
 }
 
 class SettingsManager(context: Context) {

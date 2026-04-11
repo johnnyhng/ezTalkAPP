@@ -2,6 +2,7 @@ package tw.com.johnnyhng.eztalk.asr.managers
 
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import org.junit.Assert.assertEquals
@@ -24,6 +25,10 @@ class SettingsManagerTest {
         assertEquals("https://120.126.151.159:56432/api/v2", settings.backendUrl)
         assertTrue(settings.enableTtsFeedback)
         assertEquals("", settings.selectedModelName)
+        assertEquals(null, settings.preferredAudioInputDeviceId)
+        assertEquals(null, settings.preferredAudioOutputDeviceId)
+        assertFalse(settings.allowAppAudioCapture)
+        assertTrue(settings.preferCommunicationDeviceRouting)
     }
 
     @Test
@@ -44,7 +49,11 @@ class SettingsManagerTest {
             booleanPreferencesKey("inline_edit") to false,
             stringPreferencesKey("backend_url") to "https://example.com",
             booleanPreferencesKey("enable_tts_feedback") to true,
-            stringPreferencesKey("selected_model_name") to "demo-model"
+            stringPreferencesKey("selected_model_name") to "demo-model",
+            intPreferencesKey("preferred_audio_input_device_id") to 101,
+            intPreferencesKey("preferred_audio_output_device_id") to 202,
+            booleanPreferencesKey("allow_app_audio_capture") to true,
+            booleanPreferencesKey("prefer_communication_device_routing") to false
         )
 
         val settings = preferencesToUserSettings(preferences)
@@ -57,6 +66,10 @@ class SettingsManagerTest {
         assertEquals("https://example.com", settings.backendUrl)
         assertTrue(settings.enableTtsFeedback)
         assertEquals("demo-model", settings.selectedModelName)
+        assertEquals(101, settings.preferredAudioInputDeviceId)
+        assertEquals(202, settings.preferredAudioOutputDeviceId)
+        assertTrue(settings.allowAppAudioCapture)
+        assertFalse(settings.preferCommunicationDeviceRouting)
     }
 
     @Test
@@ -70,7 +83,11 @@ class SettingsManagerTest {
             inlineEdit = false,
             backendUrl = "https://backend.example.com",
             enableTtsFeedback = true,
-            selectedModelName = "model-a"
+            selectedModelName = "model-a",
+            preferredAudioInputDeviceId = 303,
+            preferredAudioOutputDeviceId = 404,
+            allowAppAudioCapture = true,
+            preferCommunicationDeviceRouting = false
         )
 
         writeUserSettings(preferences, settings)
@@ -83,5 +100,28 @@ class SettingsManagerTest {
         assertEquals("https://backend.example.com", preferences[stringPreferencesKey("backend_url")])
         assertEquals(true, preferences[booleanPreferencesKey("enable_tts_feedback")])
         assertEquals("model-a", preferences[stringPreferencesKey("selected_model_name")])
+        assertEquals(303, preferences[intPreferencesKey("preferred_audio_input_device_id")])
+        assertEquals(404, preferences[intPreferencesKey("preferred_audio_output_device_id")])
+        assertEquals(true, preferences[booleanPreferencesKey("allow_app_audio_capture")])
+        assertEquals(false, preferences[booleanPreferencesKey("prefer_communication_device_routing")])
+    }
+
+    @Test
+    fun writeUserSettingsRemovesNullAudioRoutingSelections() {
+        val preferences = mutablePreferencesOf(
+            intPreferencesKey("preferred_audio_input_device_id") to 303,
+            intPreferencesKey("preferred_audio_output_device_id") to 404
+        )
+
+        writeUserSettings(
+            preferences,
+            UserSettings(
+                preferredAudioInputDeviceId = null,
+                preferredAudioOutputDeviceId = null
+            )
+        )
+
+        assertEquals(null, preferences[intPreferencesKey("preferred_audio_input_device_id")])
+        assertEquals(null, preferences[intPreferencesKey("preferred_audio_output_device_id")])
     }
 }
