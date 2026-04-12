@@ -61,7 +61,9 @@ import tw.com.johnnyhng.eztalk.asr.utils.resolveLocalCandidateTranscript
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.persistTranscriptJsonl
 import tw.com.johnnyhng.eztalk.asr.utils.syncTranscriptCandidatesFromJsonl
+import tw.com.johnnyhng.eztalk.asr.workflow.applyTranslateFeedbackResult
 import tw.com.johnnyhng.eztalk.asr.workflow.awaitCandidateFetchBeforeFeedback
+import tw.com.johnnyhng.eztalk.asr.workflow.createTranslateTranscript
 import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldCompleteTranslateCapture
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
@@ -419,11 +421,9 @@ fun TranslateScreen(
                                         filename = filename
                                     )
 
-                                    val newTranscript = Transcript(
+                                    val newTranscript = createTranslateTranscript(
                                         recognizedText = result.text,
-                                        wavFilePath = wavPath ?: "",
-                                        modifiedText = result.text,
-                                        localCandidates = listOf(result.text)
+                                        wavFilePath = wavPath ?: ""
                                     )
 
                                     withContext(Main) {
@@ -524,12 +524,10 @@ fun TranslateScreen(
                                 )
                             }
                             if (success) {
-                                val updatedTranscript = reduceTranscriptAfterConfirmation(
+                                val updatedTranscript = applyTranslateFeedbackResult(
                                     transcript = transcript,
                                     newText = textInput,
-                                    lockTranscript = true
-                                ).copy(
-                                    localCandidates = transcript.localCandidates,
+                                    lockTranscript = true,
                                     remoteCandidates = remoteCandidates
                                 )
                                 currentTranscript = updatedTranscript
@@ -545,10 +543,11 @@ fun TranslateScreen(
                             }
                         }
                     } else {
-                        val updatedTranscript = reduceTranscriptAfterConfirmation(
+                        val updatedTranscript = applyTranslateFeedbackResult(
                             transcript = transcript,
                             newText = textInput,
-                            lockTranscript = userSettings.enableTtsFeedback
+                            lockTranscript = userSettings.enableTtsFeedback,
+                            remoteCandidates = transcript.remoteCandidates
                         )
                         currentTranscript = updatedTranscript
                         coroutineScope.launch(IO) {
