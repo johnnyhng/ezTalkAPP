@@ -11,6 +11,7 @@ internal class SpeakerSyncService(
     suspend fun uploadAllToCloud(
         localUserId: String,
         cloudUserId: String,
+        ownerEmail: String,
         onProgress: (SpeakerSyncProgress) -> Unit = {}
     ): SpeakerUploadSummary {
         val localFolders = localRepository.listLocalFolders(localUserId)
@@ -21,6 +22,7 @@ internal class SpeakerSyncService(
         allDocuments.forEachIndexed { index, document ->
             cloudRepository.uploadDocument(
                 userId = cloudUserId,
+                ownerEmail = ownerEmail,
                 folderName = document.folderName,
                 fileName = document.fileName,
                 fullText = document.fullText,
@@ -40,6 +42,46 @@ internal class SpeakerSyncService(
             uploadedFolders = localFolders.size,
             uploadedDocuments = uploadedDocuments,
             skippedDocuments = skippedDocuments
+        )
+    }
+
+    suspend fun uploadFolderToCloud(
+        localUserId: String,
+        cloudUserId: String,
+        ownerEmail: String,
+        folderName: String,
+        onProgress: (SpeakerSyncProgress) -> Unit = {}
+    ): SpeakerUploadSummary {
+        val localFolder = localRepository.listLocalFolders(localUserId)
+            .firstOrNull { it.folderName == folderName }
+            ?: return SpeakerUploadSummary(
+                uploadedFolders = 0,
+                uploadedDocuments = 0,
+                skippedDocuments = 0
+            )
+
+        localFolder.documents.forEachIndexed { index, document ->
+            cloudRepository.uploadDocument(
+                userId = cloudUserId,
+                ownerEmail = ownerEmail,
+                folderName = document.folderName,
+                fileName = document.fileName,
+                fullText = document.fullText,
+                contentHash = document.contentHash
+            )
+            onProgress(
+                SpeakerSyncProgress(
+                    current = index + 1,
+                    total = localFolder.documents.size,
+                    targetName = document.folderName
+                )
+            )
+        }
+
+        return SpeakerUploadSummary(
+            uploadedFolders = 1,
+            uploadedDocuments = localFolder.documents.size,
+            skippedDocuments = 0
         )
     }
 

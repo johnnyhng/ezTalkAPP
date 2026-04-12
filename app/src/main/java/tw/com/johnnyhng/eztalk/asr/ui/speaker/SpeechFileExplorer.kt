@@ -52,8 +52,8 @@ internal fun SpeechFileExplorer(
     isDocumentDeleteEnabled: Boolean,
     onCreateFolder: () -> Unit,
     onFilePickerImport: () -> Unit,
-    onCloudUploadAll: () -> Unit,
     onCloudImport: () -> Unit,
+    onUploadDirectoryToCloud: (SpeakerDirectoryUi) -> Unit,
     onToggleExpand: (SpeakerDirectoryUi) -> Unit,
     onRefresh: () -> Unit,
     onImportIntoDirectory: (SpeakerDirectoryUi) -> Unit,
@@ -71,7 +71,6 @@ internal fun SpeechFileExplorer(
             SpeakerOverviewHeader(
                 onCreateFolder = onCreateFolder,
                 onFilePickerImport = onFilePickerImport,
-                onCloudUploadAll = onCloudUploadAll,
                 onCloudImport = onCloudImport,
                 isImportEnabled = isImportEnabled,
                 isCloudSyncEnabled = isCloudSyncEnabled,
@@ -112,7 +111,9 @@ internal fun SpeechFileExplorer(
                                 onToggleExpand = { onToggleExpand(directory) },
                                 onRefresh = onRefresh,
                                 onImport = { onImportIntoDirectory(directory) },
+                                onUploadToCloud = { onUploadDirectoryToCloud(directory) },
                                 isImportEnabled = isImportEnabled,
+                                isCloudSyncEnabled = isCloudSyncEnabled,
                                 onRemove = { onRemoveDirectory(directory) },
                                 isDirectoryDeleteEnabled = isDirectoryDeleteEnabled,
                                 onRemoveDocument = onRemoveDocument,
@@ -163,7 +164,6 @@ internal fun SpeakerDivider() {
 private fun SpeakerOverviewHeader(
     onCreateFolder: () -> Unit,
     onFilePickerImport: () -> Unit,
-    onCloudUploadAll: () -> Unit,
     onCloudImport: () -> Unit,
     isImportEnabled: Boolean,
     isCloudSyncEnabled: Boolean,
@@ -204,15 +204,6 @@ private fun SpeakerOverviewHeader(
                 )
             }
             IconButton(
-                onClick = onCloudUploadAll,
-                enabled = isCloudSyncEnabled
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CloudUpload,
-                    contentDescription = stringResource(R.string.speaker_cloud_upload_all)
-                )
-            }
-            IconButton(
                 onClick = onCloudImport,
                 enabled = isCloudSyncEnabled
             ) {
@@ -232,7 +223,9 @@ private fun SpeakerDirectorySection(
     onToggleExpand: () -> Unit,
     onRefresh: () -> Unit,
     onImport: () -> Unit,
+    onUploadToCloud: () -> Unit,
     isImportEnabled: Boolean,
+    isCloudSyncEnabled: Boolean,
     onRemove: () -> Unit,
     isDirectoryDeleteEnabled: Boolean,
     onRemoveDocument: (SpeakerDocumentUi) -> Unit,
@@ -282,6 +275,16 @@ private fun SpeakerDirectorySection(
                 Icon(
                     imageVector = Icons.Filled.ArrowUpward,
                     contentDescription = stringResource(R.string.speaker_import_txt)
+                )
+            }
+            IconButton(
+                onClick = onUploadToCloud,
+                enabled = isCloudSyncEnabled,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CloudUpload,
+                    contentDescription = stringResource(R.string.speaker_cloud_upload)
                 )
             }
             IconButton(

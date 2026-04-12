@@ -111,6 +111,8 @@ fun SpeakerScreen(
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var isContentSpeechModeEnabled by rememberSaveable { mutableStateOf(false) }
     var selectedRemoteFolderIds by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var isImportProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var isSyncProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
     val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
@@ -183,6 +185,18 @@ fun SpeakerScreen(
 
     LaunchedEffect(userSettings.userId) {
         speakerViewModel.setUserId(userSettings.userId)
+    }
+
+    LaunchedEffect(uiState.isImporting) {
+        if (uiState.isImporting) {
+            isImportProgressDialogVisible = true
+        }
+    }
+
+    LaunchedEffect(uiState.isSyncing) {
+        if (uiState.isSyncing) {
+            isSyncProgressDialogVisible = true
+        }
     }
 
     LaunchedEffect(speakerAsrState.partialText, speakerAsrState.finalText, activeAsrTarget) {
@@ -386,6 +400,18 @@ fun SpeakerScreen(
         ).show()
     }
 
+    fun showFolderUploadSummaryToast(folderName: String, uploadedDocumentCount: Int) {
+        Toast.makeText(
+            context,
+            context.getString(
+                R.string.speaker_cloud_upload_folder_success,
+                folderName,
+                uploadedDocumentCount
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
     fun showCloudImportSummaryToast(importedFolderCount: Int, importedDocumentCount: Int) {
         Toast.makeText(
             context,
@@ -481,9 +507,9 @@ fun SpeakerScreen(
             )
         }
 
-        if (uiState.isImporting) {
+        if (uiState.isImporting && isImportProgressDialogVisible) {
             AlertDialog(
-                onDismissRequest = { },
+                onDismissRequest = { isImportProgressDialogVisible = false },
                 title = {
                     Text(text = stringResource(R.string.speaker_importing_title))
                 },
@@ -515,9 +541,9 @@ fun SpeakerScreen(
             )
         }
 
-        if (uiState.isSyncing) {
+        if (uiState.isSyncing && isSyncProgressDialogVisible) {
             AlertDialog(
-                onDismissRequest = { },
+                onDismissRequest = { isSyncProgressDialogVisible = false },
                 title = {
                     Text(
                         text = stringResource(
@@ -705,12 +731,12 @@ fun SpeakerScreen(
                 isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
                 onFilePickerImport = { speakerViewModel.showDriveImportDialog() },
-                onCloudUploadAll = {
+                onUploadDirectoryToCloud = { directory ->
                     scope.launch {
-                        val result = speakerViewModel.uploadAllToCloud()
+                        val result = speakerViewModel.uploadFolderToCloud(directory.displayName)
                         result.onSuccess { summary ->
-                            showUploadSummaryToast(
-                                uploadedFolderCount = summary.uploadedFolders,
+                            showFolderUploadSummaryToast(
+                                folderName = directory.displayName,
                                 uploadedDocumentCount = summary.uploadedDocuments
                             )
                         }.onFailure {
@@ -933,7 +959,7 @@ private fun RemoteFolderRow(
                 .padding(start = 8.dp)
         ) {
             Text(
-                text = folder.folderName,
+                text = folder.remoteDisplayName,
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(

@@ -385,6 +385,8 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         val cloudUserId = requireCloudUserId()
             ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
         val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        val ownerEmail = requireOwnerEmail()
+            ?: return Result.failure(IllegalStateException("Signed-in email unavailable"))
         uiState = uiState.copy(
             isSyncing = true,
             syncDirection = SpeakerSyncDirection.UPLOAD,
@@ -397,7 +399,8 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             withContext(Dispatchers.IO) {
                 syncService.uploadAllToCloud(
                     localUserId = localUserId,
-                    cloudUserId = cloudUserId
+                    cloudUserId = cloudUserId,
+                    ownerEmail = ownerEmail
                 ) { progress ->
                     uiState = uiState.copy(
                         syncProgressCurrent = progress.current,
@@ -411,6 +414,48 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             Log.i(TAG, "Speaker cloud upload completed with uid=$cloudUserId localUserId=$localUserId")
         }.onFailure { error ->
             Log.w(TAG, "Speaker cloud upload failed with uid=$cloudUserId", error)
+        }
+        uiState = uiState.copy(
+            isSyncing = false,
+            cloudSyncError = result.exceptionOrNull()?.message
+        )
+        return result
+    }
+
+    suspend fun uploadFolderToCloud(folderName: String): Result<SpeakerUploadSummary> {
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        val ownerEmail = requireOwnerEmail()
+            ?: return Result.failure(IllegalStateException("Signed-in email unavailable"))
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncDirection = SpeakerSyncDirection.UPLOAD,
+            syncProgressCurrent = 0,
+            syncProgressTotal = 0,
+            syncProgressTargetName = folderName,
+            cloudSyncError = null
+        )
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.uploadFolderToCloud(
+                    localUserId = localUserId,
+                    cloudUserId = cloudUserId,
+                    ownerEmail = ownerEmail,
+                    folderName = folderName
+                ) { progress ->
+                    uiState = uiState.copy(
+                        syncProgressCurrent = progress.current,
+                        syncProgressTotal = progress.total,
+                        syncProgressTargetName = progress.targetName
+                    )
+                }
+            }
+        }
+        result.onSuccess {
+            Log.i(TAG, "Speaker cloud folder upload completed with uid=$cloudUserId localUserId=$localUserId folder=$folderName")
+        }.onFailure { error ->
+            Log.w(TAG, "Speaker cloud folder upload failed with uid=$cloudUserId folder=$folderName", error)
         }
         uiState = uiState.copy(
             isSyncing = false,
@@ -475,6 +520,22 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             )
         }
         return cloudUserId
+    }
+
+    private fun requireOwnerEmail(): String? {
+        val email = firebaseAuth.currentUser?.email?.trim()
+        if (!email.isNullOrBlank()) {
+            return email
+        }
+        val fallback = currentUserId?.trim()
+        if (!fallback.isNullOrBlank()) {
+            return fallback
+        }
+        val context = getApplication<Application>()
+        uiState = uiState.copy(
+            cloudSyncError = context.getString(R.string.speaker_cloud_email_required)
+        )
+        return null
     }
 
     override fun onCleared() {

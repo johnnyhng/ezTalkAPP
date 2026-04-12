@@ -21,6 +21,8 @@ internal data class SpeakerLocalDocument(
 internal data class SpeakerRemoteFolder(
     val id: String,
     val folderName: String,
+    val remoteDisplayName: String,
+    val ownerEmail: String?,
     val documentCount: Int,
     val updatedAtEpochMillis: Long
 )

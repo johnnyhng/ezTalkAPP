@@ -158,13 +158,16 @@
     <string name="speaker_importing_target">目標目錄：%1$s</string>
     <string name="speaker_importing_progress">%1$d / %2$d</string>
     <string name="speaker_cloud_upload_all">全部上傳</string>
+    <string name="speaker_cloud_upload">上傳資料夾</string>
     <string name="speaker_cloud_import">從雲端匯入</string>
     <string name="speaker_cloud_empty">找不到雲端資料夾。</string>
     <string name="speaker_cloud_upload_success">已上傳 %1$d 個資料夾與 %2$d 個 txt 檔</string>
+    <string name="speaker_cloud_upload_folder_success">已從 %1$s 上傳 %2$d 個 txt 檔</string>
     <string name="speaker_cloud_import_success">已匯入 %1$d 個資料夾與 %2$d 個 txt 檔</string>
     <string name="speaker_cloud_upload_failed">上傳 speaker 檔案失敗。</string>
     <string name="speaker_cloud_import_failed">從雲端匯入檔案失敗。</string>
     <string name="speaker_cloud_sign_in_required">使用雲端同步前，請先完成 Firebase 登入。</string>
+    <string name="speaker_cloud_email_required">目前無法取得登入 email。</string>
     <string name="speaker_cloud_status_signed_in">雲端：已登入（%1$s）</string>
     <string name="speaker_cloud_status_signed_out">雲端：尚未登入</string>
     <string name="speaker_cloud_folder_count">%1$d 個 txt 檔</string>
