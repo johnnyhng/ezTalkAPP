@@ -493,134 +493,6 @@ fun SettingsScreen(
                 enabled = !isDownloading
             )
         }
-        Column(modifier = Modifier.padding(vertical = 16.dp)) {
-            Text(stringResource(R.string.audio_routing_title), style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = stringResource(
-                    R.string.audio_routing_detected_counts,
-                    audioRoutingStatus.inputs.size,
-                    audioRoutingStatus.outputs.size
-                ),
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Button(
-                onClick = { homeViewModel.refreshAudioRoutingStatus() },
-                enabled = !isDownloading
-            ) {
-                Text(stringResource(R.string.audio_routing_refresh))
-            }
-        }
-
-        AudioRoutingDropdown(
-            label = stringResource(R.string.audio_routing_input_label),
-            expanded = audioInputMenuExpanded,
-            selectedLabel = audioRoutingStatus.selectedInputLabel
-                ?: stringResource(R.string.audio_routing_system_default),
-            devices = audioRoutingStatus.inputs,
-            enabled = !isDownloading,
-            onExpandedChange = { audioInputMenuExpanded = it },
-            onSystemDefaultSelected = {
-                homeViewModel.updatePreferredAudioInputDeviceId(null)
-                audioInputMenuExpanded = false
-            },
-            onDeviceSelected = { device ->
-                homeViewModel.updatePreferredAudioInputDeviceId(device.id)
-                audioInputMenuExpanded = false
-            },
-            selectedDeviceId = userSettings.preferredAudioInputDeviceId
-        )
-
-        AudioRoutingDropdown(
-            label = stringResource(R.string.audio_routing_output_label),
-            expanded = audioOutputMenuExpanded,
-            selectedLabel = audioRoutingStatus.selectedOutputLabel
-                ?: stringResource(R.string.audio_routing_system_default),
-            devices = audioRoutingStatus.outputs,
-            enabled = !isDownloading,
-            onExpandedChange = { audioOutputMenuExpanded = it },
-            onSystemDefaultSelected = {
-                homeViewModel.updatePreferredAudioOutputDeviceId(null)
-                audioOutputMenuExpanded = false
-            },
-            onDeviceSelected = { device ->
-                homeViewModel.updatePreferredAudioOutputDeviceId(device.id)
-                audioOutputMenuExpanded = false
-            },
-            selectedDeviceId = userSettings.preferredAudioOutputDeviceId
-        )
-
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text(
-                text = stringResource(
-                    R.string.audio_routing_selected_input,
-                    audioRoutingStatus.selectedInputLabel
-                        ?: context.getString(R.string.audio_routing_system_default)
-                )
-            )
-            Text(
-                text = stringResource(
-                    R.string.audio_routing_selected_output,
-                    audioRoutingStatus.selectedOutputLabel
-                        ?: context.getString(R.string.audio_routing_system_default)
-                )
-            )
-            Text(
-                text = stringResource(
-                    R.string.audio_routing_active_output,
-                    audioRoutingStatus.activeOutputLabel
-                        ?: context.getString(R.string.audio_routing_unavailable)
-                )
-            )
-            Text(
-                text = if (audioRoutingStatus.apiLevelSupportsCommunicationDevice) {
-                    stringResource(R.string.audio_routing_comm_device_supported)
-                } else {
-                    stringResource(R.string.audio_routing_comm_device_unsupported)
-                }
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = stringResource(R.string.audio_routing_allow_capture))
-            Spacer(modifier = Modifier.width(8.dp))
-            Switch(
-                checked = userSettings.allowAppAudioCapture,
-                onCheckedChange = { homeViewModel.updateAllowAppAudioCapture(it) },
-                enabled = !isDownloading
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = stringResource(R.string.audio_routing_prefer_comm_device))
-            Spacer(modifier = Modifier.width(8.dp))
-            Switch(
-                checked = userSettings.preferCommunicationDeviceRouting,
-                onCheckedChange = { homeViewModel.updatePreferCommunicationDeviceRouting(it) },
-                enabled = !isDownloading
-            )
-        }
-
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text(
-                text = stringResource(R.string.audio_routing_note_preferred_not_guaranteed),
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = stringResource(R.string.audio_routing_note_bluetooth_sco),
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-
         Column(modifier = Modifier.padding(vertical = 8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -643,6 +515,134 @@ fun SettingsScreen(
             }
 
             if (advancedSettingsExpanded) {
+                Column(modifier = Modifier.padding(top = 8.dp)) {
+                    Text(stringResource(R.string.audio_routing_title), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = stringResource(
+                            R.string.audio_routing_detected_counts,
+                            audioRoutingStatus.inputs.size,
+                            audioRoutingStatus.outputs.size
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(
+                        onClick = { homeViewModel.refreshAudioRoutingStatus() },
+                        enabled = !isDownloading
+                    ) {
+                        Text(stringResource(R.string.audio_routing_refresh))
+                    }
+                }
+
+                AudioRoutingDropdown(
+                    label = stringResource(R.string.audio_routing_input_label),
+                    expanded = audioInputMenuExpanded,
+                    selectedLabel = audioRoutingStatus.selectedInputLabel
+                        ?: stringResource(R.string.audio_routing_system_default),
+                    devices = audioRoutingStatus.inputs,
+                    enabled = !isDownloading,
+                    onExpandedChange = { audioInputMenuExpanded = it },
+                    onSystemDefaultSelected = {
+                        homeViewModel.updatePreferredAudioInputDeviceId(null)
+                        audioInputMenuExpanded = false
+                    },
+                    onDeviceSelected = { device ->
+                        homeViewModel.updatePreferredAudioInputDeviceId(device.id)
+                        audioInputMenuExpanded = false
+                    },
+                    selectedDeviceId = userSettings.preferredAudioInputDeviceId
+                )
+
+                AudioRoutingDropdown(
+                    label = stringResource(R.string.audio_routing_output_label),
+                    expanded = audioOutputMenuExpanded,
+                    selectedLabel = audioRoutingStatus.selectedOutputLabel
+                        ?: stringResource(R.string.audio_routing_system_default),
+                    devices = audioRoutingStatus.outputs,
+                    enabled = !isDownloading,
+                    onExpandedChange = { audioOutputMenuExpanded = it },
+                    onSystemDefaultSelected = {
+                        homeViewModel.updatePreferredAudioOutputDeviceId(null)
+                        audioOutputMenuExpanded = false
+                    },
+                    onDeviceSelected = { device ->
+                        homeViewModel.updatePreferredAudioOutputDeviceId(device.id)
+                        audioOutputMenuExpanded = false
+                    },
+                    selectedDeviceId = userSettings.preferredAudioOutputDeviceId
+                )
+
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        text = stringResource(
+                            R.string.audio_routing_selected_input,
+                            audioRoutingStatus.selectedInputLabel
+                                ?: context.getString(R.string.audio_routing_system_default)
+                        )
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.audio_routing_selected_output,
+                            audioRoutingStatus.selectedOutputLabel
+                                ?: context.getString(R.string.audio_routing_system_default)
+                        )
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.audio_routing_active_output,
+                            audioRoutingStatus.activeOutputLabel
+                                ?: context.getString(R.string.audio_routing_unavailable)
+                        )
+                    )
+                    Text(
+                        text = if (audioRoutingStatus.apiLevelSupportsCommunicationDevice) {
+                            stringResource(R.string.audio_routing_comm_device_supported)
+                        } else {
+                            stringResource(R.string.audio_routing_comm_device_unsupported)
+                        }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = stringResource(R.string.audio_routing_allow_capture))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = userSettings.allowAppAudioCapture,
+                        onCheckedChange = { homeViewModel.updateAllowAppAudioCapture(it) },
+                        enabled = !isDownloading
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = stringResource(R.string.audio_routing_prefer_comm_device))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = userSettings.preferCommunicationDeviceRouting,
+                        onCheckedChange = { homeViewModel.updatePreferCommunicationDeviceRouting(it) },
+                        enabled = !isDownloading
+                    )
+                }
+
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        text = stringResource(R.string.audio_routing_note_preferred_not_guaranteed),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = stringResource(R.string.audio_routing_note_bluetooth_sco),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
