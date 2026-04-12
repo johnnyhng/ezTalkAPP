@@ -8,7 +8,8 @@ import java.io.File
 import java.io.FileOutputStream
 
 object ModelManager {
-    private const val DEFAULT_MODEL_DIR = "custom-sense-voice"
+    private const val DEFAULT_MODEL_DIR = "mobile"
+    private const val DEFAULT_MODEL_ASSET_DIR = "custom-sense-voice"
 
     fun listModels(context: Context, userId: String): List<Model> {
         val userModelsDir = File(context.filesDir, "models/$userId")
@@ -44,8 +45,8 @@ object ModelManager {
 
         try {
             val assetManager = context.assets
-            val modelAssetPath = "$DEFAULT_MODEL_DIR/model.int8.onnx"
-            val tokensAssetPath = "$DEFAULT_MODEL_DIR/tokens.txt"
+            val modelAssetPath = "$DEFAULT_MODEL_ASSET_DIR/model.int8.onnx"
+            val tokensAssetPath = "$DEFAULT_MODEL_ASSET_DIR/tokens.txt"
 
             assetManager.open(modelAssetPath).use { input ->
                 FileOutputStream(File(targetDir, "model.int8.onnx")).use { output ->
@@ -58,7 +59,10 @@ object ModelManager {
                     input.copyTo(output)
                 }
             }
-            Log.i(TAG, "Copied default model '$DEFAULT_MODEL_DIR' for user $userId")
+            Log.i(
+                TAG,
+                "Copied default model '$DEFAULT_MODEL_DIR' from asset '$DEFAULT_MODEL_ASSET_DIR' for user $userId"
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Error copying default model from assets", e)
         }

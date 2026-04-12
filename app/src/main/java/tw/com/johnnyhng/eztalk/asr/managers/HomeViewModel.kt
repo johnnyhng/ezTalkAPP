@@ -222,7 +222,7 @@ class HomeViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             try {
                 val selectedRemoteModelName = selectedModel?.name
-                    ?: userSettings.value.selectedModelName.ifBlank { "custom-sense-voice" }
+                    ?: userSettings.value.selectedModelName.ifBlank { "mobile" }
                 val remoteModelResult = withContext(Dispatchers.IO) {
                     val fetchedResult = remoteModelRepository.listRemoteModels(
                         modelApiBaseUrl = userSettings.value.backendUrl,

@@ -76,13 +76,13 @@ class ModelManagerTest {
             deleteRecursively()
             mkdirs()
         }
-        createModelDir(userDir, "custom-sense-voice", withModel = true, withTokens = true)
+        createModelDir(userDir, "mobile", withModel = true, withTokens = true)
         createModelDir(userDir, "custom-model", withModel = true, withTokens = true)
 
-        val deleted = ModelManager.deleteModel(context, userId, "custom-sense-voice")
+        val deleted = ModelManager.deleteModel(context, userId, "mobile")
 
         assertTrue(deleted)
-        assertFalse(File(userDir, "custom-sense-voice").exists())
+        assertFalse(File(userDir, "mobile").exists())
     }
 
     @Test
