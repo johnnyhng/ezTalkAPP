@@ -2,12 +2,20 @@ package tw.com.johnnyhng.eztalk.asr.utils
 
 import android.content.Context
 import android.util.Log
-import tw.com.johnnyhng.eztalk.asr.TAG
-import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import java.io.File
+
+internal data class TranslateCandidateLoadResult(
+    val transcript: Transcript,
+    val localCandidate: String?,
+    val remoteCandidates: List<String>
+)
 
 internal data class RemoteCandidateMetadata(
     val originalText: String,
@@ -186,6 +194,89 @@ internal suspend fun resolveLocalCandidateTranscript(
         transcript = updatedTranscript
     )
     return updatedTranscript
+}
+
+internal suspend fun loadTranslateCandidates(
+    context: Context,
+    userId: String,
+    transcript: Transcript,
+    recognitionUrl: String,
+    allowInsecureTls: Boolean,
+    audioReader: (String) -> FloatArray?,
+    recognizerBlock: (FloatArray) -> String,
+    localTranscriptBlock: suspend (Transcript) -> Transcript? = { currentTranscript ->
+        resolveLocalCandidateTranscript(
+            context = context,
+            userId = userId,
+            transcript = currentTranscript,
+            audioReader = audioReader,
+            recognizerBlock = recognizerBlock
+        )
+    },
+    readJsonlBlock: (String) -> JSONObject? = ::readJsonl,
+    remoteCandidatesBlock: suspend (
+        wavFilePath: String,
+        userId: String,
+        recognitionUrl: String,
+        allowInsecureTls: Boolean,
+        originalText: String,
+        currentText: String
+    ) -> List<String> = { wavFilePath, remoteUserId, remoteRecognitionUrl, insecureTls, originalText, currentText ->
+        getRemoteCandidates(
+            context = context,
+            wavFilePath = wavFilePath,
+            userId = remoteUserId,
+            recognitionUrl = remoteRecognitionUrl,
+            allowInsecureTls = insecureTls,
+            originalText = originalText,
+            currentText = currentText
+        )
+    }
+): TranslateCandidateLoadResult = coroutineScope {
+    val localDeferred = async(Dispatchers.IO) {
+        if (transcript.localCandidates.isEmpty()) {
+            localTranscriptBlock(transcript)
+        } else {
+            null
+        }
+    }
+    val remoteDeferred = async(Dispatchers.IO) {
+        if (recognitionUrl.isBlank()) {
+            emptyList()
+        } else {
+            remoteCandidatesBlock(
+                transcript.wavFilePath,
+                userId,
+                recognitionUrl,
+                allowInsecureTls,
+                transcript.recognizedText,
+                transcript.modifiedText
+            )
+        }
+    }
+
+    val transcriptAfterLocal = localDeferred.await() ?: transcript
+    val fetchedRemoteCandidates = remoteDeferred.await()
+    val syncedTranscript = syncTranscriptCandidatesFromJsonl(
+        transcript = transcriptAfterLocal,
+        readJsonlBlock = readJsonlBlock
+    )
+    val finalRemoteCandidates = if (syncedTranscript.remoteCandidates.isNotEmpty()) {
+        syncedTranscript.remoteCandidates
+    } else {
+        fetchedRemoteCandidates
+    }
+    val finalTranscript = if (finalRemoteCandidates != syncedTranscript.remoteCandidates) {
+        syncedTranscript.copy(remoteCandidates = finalRemoteCandidates)
+    } else {
+        syncedTranscript
+    }
+
+    TranslateCandidateLoadResult(
+        transcript = finalTranscript,
+        localCandidate = finalTranscript.localCandidates.firstOrNull(),
+        remoteCandidates = finalRemoteCandidates
+    )
 }
 
 suspend fun getRemoteCandidates(

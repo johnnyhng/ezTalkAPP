@@ -160,4 +160,93 @@ class TranslateWorkflowTest {
 
         assertTrue(audio.isEmpty())
     }
+
+    @Test
+    fun submitTranslateFeedbackWaitsForFetchAndReturnsFeedbackUpdatedTranscript() = runBlocking {
+        val transcript = Transcript(
+            recognizedText = "orig",
+            modifiedText = "orig",
+            wavFilePath = "/tmp/sample.wav",
+            localCandidates = listOf("local-1")
+        )
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val fetchJob = async {
+            started.complete(Unit)
+            release.await()
+        }
+
+        started.await()
+
+        val submission = async {
+            submitTranslateFeedback(
+                transcript = transcript,
+                newText = "confirmed",
+                enableTtsFeedback = true,
+                remoteCandidates = listOf("remote-1"),
+                fetchJob = fetchJob,
+                feedbackBlock = { true }
+            )
+        }
+
+        delay(50)
+        assertFalse(submission.isCompleted)
+
+        release.complete(Unit)
+        val result = submission.await() as TranslateFeedbackSubmission.Success
+
+        assertEquals("confirmed", result.transcript.modifiedText)
+        assertEquals(listOf("remote-1"), result.transcript.remoteCandidates)
+        assertTrue(result.transcript.checked)
+    }
+
+    @Test
+    fun submitTranslateFeedbackSkipsBackendWhenFeedbackIsDisabled() = runBlocking {
+        val transcript = Transcript(
+            recognizedText = "orig",
+            modifiedText = "orig",
+            wavFilePath = "/tmp/sample.wav",
+            localCandidates = listOf("local-1"),
+            remoteCandidates = listOf("existing-remote")
+        )
+        var feedbackCalls = 0
+
+        val result = submitTranslateFeedback(
+            transcript = transcript,
+            newText = "edited",
+            enableTtsFeedback = false,
+            remoteCandidates = listOf("new-remote"),
+            fetchJob = null,
+            feedbackBlock = {
+                feedbackCalls += 1
+                true
+            }
+        ) as TranslateFeedbackSubmission.Success
+
+        assertEquals(0, feedbackCalls)
+        assertEquals("edited", result.transcript.modifiedText)
+        assertEquals(listOf("existing-remote"), result.transcript.remoteCandidates)
+        assertTrue(result.transcript.checked)
+        assertTrue(result.transcript.mutable)
+    }
+
+    @Test
+    fun submitTranslateFeedbackReturnsFailedWhenBackendFeedbackFails() = runBlocking {
+        val transcript = Transcript(
+            recognizedText = "orig",
+            modifiedText = "orig",
+            wavFilePath = "/tmp/sample.wav"
+        )
+
+        val result = submitTranslateFeedback(
+            transcript = transcript,
+            newText = "edited",
+            enableTtsFeedback = true,
+            remoteCandidates = emptyList(),
+            fetchJob = null,
+            feedbackBlock = { false }
+        )
+
+        assertTrue(result is TranslateFeedbackSubmission.Failed)
+    }
 }

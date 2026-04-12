@@ -1,12 +1,18 @@
 package tw.com.johnnyhng.eztalk.asr.utils
 
+import android.content.ContextWrapper
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
+import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 
 class RecognitionUtilsOrchestrationTest {
+    private val unusedContext = ContextWrapper(null)
+
     @Test
     fun resolveRemoteCandidatesReturnsCachedCandidatesWithoutCallingNetworkOrSave() {
         var postCalls = 0
@@ -179,5 +185,71 @@ class RecognitionUtilsOrchestrationTest {
 
         assertEquals(emptyList<String>(), result)
         assertNull(savedMetadata)
+    }
+
+    @Test
+    fun loadTranslateCandidatesCombinesLocalUpdateAndFetchedRemoteCandidates() = runBlocking {
+        val transcript = Transcript(
+            recognizedText = "orig",
+            modifiedText = "orig",
+            wavFilePath = "/tmp/sample.wav"
+        )
+
+        val result = loadTranslateCandidates(
+            context = unusedContext,
+            userId = "tester@example.com",
+            transcript = transcript,
+            recognitionUrl = "https://example.com/process_audio",
+            allowInsecureTls = true,
+            audioReader = { floatArrayOf(1f, 2f, 3f) },
+            recognizerBlock = { "local-rerun" },
+            localTranscriptBlock = {
+                transcript.copy(localCandidates = listOf("local-rerun"))
+            },
+            readJsonlBlock = { null },
+            remoteCandidatesBlock = { _, _, _, _, _, _ -> listOf("remote-1", "remote-2") }
+        )
+
+        assertEquals(listOf("local-rerun"), result.transcript.localCandidates)
+        assertEquals("local-rerun", result.localCandidate)
+        assertEquals(listOf("remote-1", "remote-2"), result.remoteCandidates)
+        assertEquals(listOf("remote-1", "remote-2"), result.transcript.remoteCandidates)
+    }
+
+    @Test
+    fun loadTranslateCandidatesPrefersJsonlSyncedCandidatesOverFetchedValues() = runBlocking {
+        val transcript = Transcript(
+            recognizedText = "orig",
+            modifiedText = "orig",
+            wavFilePath = "/tmp/sample.wav",
+            localCandidates = listOf("existing-local")
+        )
+
+        val result = loadTranslateCandidates(
+            context = unusedContext,
+            userId = "tester@example.com",
+            transcript = transcript,
+            recognitionUrl = "https://example.com/process_audio",
+            allowInsecureTls = false,
+            audioReader = { error("audioReader should not run") },
+            recognizerBlock = { error("recognizerBlock should not run") },
+            localTranscriptBlock = { error("localTranscriptBlock should not run") },
+            readJsonlBlock = {
+                JSONObject().apply {
+                    put(
+                        "remote_candidates",
+                        JSONArray().apply {
+                            put("jsonl-remote")
+                        }
+                    )
+                }
+            },
+            remoteCandidatesBlock = { _, _, _, _, _, _ -> listOf("fetched-remote") }
+        )
+
+        assertEquals(listOf("existing-local"), result.transcript.localCandidates)
+        assertEquals(listOf("jsonl-remote"), result.remoteCandidates)
+        assertEquals(listOf("jsonl-remote"), result.transcript.remoteCandidates)
+        assertTrue(result.localCandidate == "existing-local")
     }
 }

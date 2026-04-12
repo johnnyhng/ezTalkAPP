@@ -43,7 +43,6 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,22 +53,21 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
 import tw.com.johnnyhng.eztalk.asr.utils.feedbackToBackend
-import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
+import tw.com.johnnyhng.eztalk.asr.utils.loadTranslateCandidates
 import tw.com.johnnyhng.eztalk.asr.utils.optStringList
 import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
-import tw.com.johnnyhng.eztalk.asr.utils.resolveLocalCandidateTranscript
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.persistTranscriptJsonl
 import tw.com.johnnyhng.eztalk.asr.utils.syncTranscriptCandidatesFromJsonl
 import tw.com.johnnyhng.eztalk.asr.workflow.applyTranslateFeedbackResult
 import tw.com.johnnyhng.eztalk.asr.workflow.appendTranslateSamples
-import tw.com.johnnyhng.eztalk.asr.workflow.awaitCandidateFetchBeforeFeedback
 import tw.com.johnnyhng.eztalk.asr.workflow.buildTranslateFinalAudio
 import tw.com.johnnyhng.eztalk.asr.workflow.createTranslateTranscript
 import tw.com.johnnyhng.eztalk.asr.workflow.markTranslateVadSegmentDetected
 import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldCompleteTranslateCapture
-import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
+import tw.com.johnnyhng.eztalk.asr.workflow.submitTranslateFeedback
+import tw.com.johnnyhng.eztalk.asr.workflow.TranslateFeedbackSubmission
 import tw.com.johnnyhng.eztalk.asr.workflow.TranslateCaptureState
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import java.io.File
@@ -176,62 +174,31 @@ fun TranslateScreen(
                 localCandidate = transcript.localCandidates.firstOrNull()
                 remoteCandidates = emptyList()
 
-                coroutineScope {
-                    // Local re-recognition
-                    if (transcript.localCandidates.isEmpty()) {
-                        launch(IO) {
-                            try {
-                                val updatedTranscript = resolveLocalCandidateTranscript(
-                                    context = context,
-                                    userId = userSettings.userId,
-                                    transcript = transcript,
-                                    audioReader = ::readWavFileToFloatArray,
-                                    recognizerBlock = { audioData ->
-                                        val recognizer = SimulateStreamingAsr.recognizer
-                                        val stream = recognizer.createStream()
-                                        try {
-                                            stream.acceptWaveform(audioData, sampleRateInHz)
-                                            recognizer.decode(stream)
-                                            recognizer.getResult(stream).text
-                                        } finally {
-                                            stream.release()
-                                        }
-                                    }
-                                )
-                                if (updatedTranscript != null) {
-                                    val localResultText = updatedTranscript.localCandidates.firstOrNull()
-                                    if (!localResultText.isNullOrBlank()) {
-                                        logTranslateJsonlUpdate("local_rerecognition", updatedTranscript)
-                                        withContext(Main) {
-                                            currentTranscript = updatedTranscript
-                                            localCandidate = localResultText
-                                        }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Local re-recognition failed", e)
-                            }
+                val loaded = loadTranslateCandidates(
+                    context = context,
+                    userId = userSettings.userId,
+                    transcript = transcript,
+                    recognitionUrl = userSettings.effectiveRecognitionUrl,
+                    allowInsecureTls = userSettings.allowInsecureTls,
+                    audioReader = ::readWavFileToFloatArray,
+                    recognizerBlock = { audioData ->
+                        val recognizer = SimulateStreamingAsr.recognizer
+                        val stream = recognizer.createStream()
+                        try {
+                            stream.acceptWaveform(audioData, sampleRateInHz)
+                            recognizer.decode(stream)
+                            recognizer.getResult(stream).text
+                        } finally {
+                            stream.release()
                         }
                     }
-
-                    // Remote recognition
-                    if (userSettings.effectiveRecognitionUrl.isNotBlank()) {
-                        launch(IO) {
-                            val sentences = getRemoteCandidates(
-                                context = context,
-                                wavFilePath = transcript.wavFilePath,
-                                userId = userSettings.userId,
-                                recognitionUrl = userSettings.effectiveRecognitionUrl,
-                                allowInsecureTls = userSettings.allowInsecureTls,
-                                originalText = transcript.recognizedText,
-                                currentText = transcript.modifiedText
-                            )
-                            withContext(Main) {
-                                remoteCandidates = sentences
-                            }
-                        }
-                    }
+                )
+                if (loaded.transcript.localCandidates != transcript.localCandidates) {
+                    logTranslateJsonlUpdate("local_rerecognition", loaded.transcript)
                 }
+                currentTranscript = loaded.transcript
+                localCandidate = loaded.localCandidate
+                remoteCandidates = loaded.remoteCandidates
             } finally {
                 isFetchingCandidates = false
             }
@@ -504,49 +471,42 @@ fun TranslateScreen(
                 tts?.speak(textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
 
                 currentTranscript?.let { transcript ->
-                    val shouldRunFeedback = shouldAttemptFeedback(transcript, userSettings.enableTtsFeedback)
-                    if (shouldRunFeedback) {
-                        coroutineScope.launch {
-                            awaitCandidateFetchBeforeFeedback(fetchJob)
-                            
-                            val success = withContext(IO) {
-                                feedbackToBackend(
-                                    userSettings.backendUrl,
-                                    transcript.wavFilePath,
-                                    userSettings.userId,
-                                    allowInsecureTls = userSettings.allowInsecureTls
-                                )
-                            }
-                            if (success) {
-                                val updatedTranscript = applyTranslateFeedbackResult(
-                                    transcript = transcript,
-                                    newText = textInput,
-                                    lockTranscript = true,
-                                    remoteCandidates = remoteCandidates
-                                )
-                                currentTranscript = updatedTranscript
-
-                                withContext(IO) {
-                                    logTranslateJsonlUpdate("tts_feedback_success", updatedTranscript)
-                                    persistTranscriptJsonl(context, userId, updatedTranscript)
+                    coroutineScope.launch {
+                        when (
+                            val result = submitTranslateFeedback(
+                                transcript = transcript,
+                                newText = textInput,
+                                enableTtsFeedback = userSettings.enableTtsFeedback,
+                                remoteCandidates = remoteCandidates,
+                                fetchJob = fetchJob,
+                                feedbackBlock = { currentTranscriptForFeedback ->
+                                    withContext(IO) {
+                                        feedbackToBackend(
+                                            userSettings.backendUrl,
+                                            currentTranscriptForFeedback.wavFilePath,
+                                            userSettings.userId,
+                                            allowInsecureTls = userSettings.allowInsecureTls
+                                        )
+                                    }
                                 }
-                            } else {
+                            )
+                        ) {
+                            is TranslateFeedbackSubmission.Success -> {
+                                currentTranscript = result.transcript
+                                withContext(IO) {
+                                    val reason = if (result.sentBackendFeedback) "tts_feedback_success" else "tts_without_feedback"
+                                    logTranslateJsonlUpdate(reason, result.transcript)
+                                    persistTranscriptJsonl(context, userId, result.transcript)
+                                }
+                            }
+
+                            TranslateFeedbackSubmission.Failed -> {
                                 withContext(Main) {
                                     Toast.makeText(context, R.string.feedback_failed, Toast.LENGTH_SHORT).show()
                                 }
                             }
-                        }
-                    } else {
-                        val updatedTranscript = applyTranslateFeedbackResult(
-                            transcript = transcript,
-                            newText = textInput,
-                            lockTranscript = userSettings.enableTtsFeedback,
-                            remoteCandidates = transcript.remoteCandidates
-                        )
-                        currentTranscript = updatedTranscript
-                        coroutineScope.launch(IO) {
-                            logTranslateJsonlUpdate("tts_without_feedback", updatedTranscript)
-                            persistTranscriptJsonl(context, userId, updatedTranscript)
+
+                            TranslateFeedbackSubmission.Skipped -> Unit
                         }
                     }
                 }
