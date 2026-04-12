@@ -18,6 +18,16 @@ internal data class RemoteModelListResponse(
     val models: List<String>
 )
 
+internal data class RemoteModelListResult(
+    val models: List<String>,
+    val errorMessage: String? = null
+)
+
+internal data class ModelDownloadResult(
+    val success: Boolean,
+    val errorMessage: String? = null
+)
+
 internal fun buildListModelsUrl(baseUrl: String, userId: String): String =
     BackendEndpoints.listModels(baseUrl, userId)
 
@@ -64,26 +74,38 @@ internal fun listRemoteModels(
     baseUrl: String,
     userId: String
 ): List<String> {
+    return listRemoteModelsResult(baseUrl, userId).models
+}
+
+internal fun listRemoteModelsResult(
+    baseUrl: String,
+    userId: String
+): RemoteModelListResult {
     return try {
         val connection = executeRequestWithRedirects(
             endpoint = buildListModelsUrl(baseUrl, userId),
             method = "GET",
             connectTimeoutMs = 15000,
             readTimeoutMs = 15000
-        ) ?: return emptyList()
+        ) ?: return RemoteModelListResult(emptyList(), "Unable to create remote model request")
 
         val responseCode = connection.responseCode
         if (!isSuccessfulResponse(responseCode)) {
             Log.e(TAG, "listRemoteModels failed. Response code: $responseCode, message: ${connection.responseMessage}")
             Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
-            return emptyList()
+            return RemoteModelListResult(
+                models = emptyList(),
+                errorMessage = "Remote model request failed with HTTP $responseCode"
+            )
         }
 
-        val responseBody = readStreamText(connection.inputStream) ?: return emptyList()
-        parseRemoteModelList(responseBody).models
+        val responseBody = readStreamText(connection.inputStream)
+            ?: return RemoteModelListResult(emptyList(), "Remote model response was empty")
+        RemoteModelListResult(parseRemoteModelList(responseBody).models)
     } catch (e: Exception) {
-        Log.e(TAG, "Exception during listRemoteModels", e)
-        emptyList()
+        val detail = TLSExpireResolver.resolveMessage(e, "listRemoteModels failed")
+        Log.e(TAG, "Exception during listRemoteModels: $detail", e)
+        RemoteModelListResult(emptyList(), detail)
     }
 }
 
@@ -110,7 +132,8 @@ internal fun checkModelUpdate(
         val responseBody = readStreamText(connection.inputStream) ?: return null
         parseRemoteModelUpdate(responseBody, modelName)
     } catch (e: Exception) {
-        Log.e(TAG, "Exception during checkModelUpdate", e)
+        val detail = TLSExpireResolver.resolveMessage(e, "checkModelUpdate failed")
+        Log.e(TAG, "Exception during checkModelUpdate: $detail", e)
         null
     }
 }
@@ -123,19 +146,40 @@ internal fun downloadModelFile(
     targetFile: File,
     onProgress: (Float?) -> Unit = {}
 ): Boolean {
+    return downloadModelFileResult(
+        baseUrl = baseUrl,
+        userId = userId,
+        modelName = modelName,
+        filename = filename,
+        targetFile = targetFile,
+        onProgress = onProgress
+    ).success
+}
+
+internal fun downloadModelFileResult(
+    baseUrl: String,
+    userId: String,
+    modelName: String,
+    filename: String,
+    targetFile: File,
+    onProgress: (Float?) -> Unit = {}
+): ModelDownloadResult {
     return try {
         val connection = executeRequestWithRedirects(
             endpoint = buildModelFileUrl(baseUrl, userId, modelName, filename),
             method = "GET",
             connectTimeoutMs = 15000,
             readTimeoutMs = 15000
-        ) ?: return false
+        ) ?: return ModelDownloadResult(false, "Unable to create model download request")
 
         val responseCode = connection.responseCode
         if (!isSuccessfulResponse(responseCode)) {
             Log.e(TAG, "downloadModelFile failed. Response code: $responseCode, message: ${connection.responseMessage}")
             Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
-            return false
+            return ModelDownloadResult(
+                success = false,
+                errorMessage = "Model download failed with HTTP $responseCode"
+            )
         }
 
         targetFile.parentFile?.mkdirs()
@@ -156,9 +200,10 @@ internal fun downloadModelFile(
                 }
             }
         }
-        true
+        ModelDownloadResult(success = true)
     } catch (e: Exception) {
-        Log.e(TAG, "Exception during downloadModelFile", e)
-        false
+        val detail = TLSExpireResolver.resolveMessage(e, "downloadModelFile failed")
+        Log.e(TAG, "Exception during downloadModelFile: $detail", e)
+        ModelDownloadResult(success = false, errorMessage = detail)
     }
 }

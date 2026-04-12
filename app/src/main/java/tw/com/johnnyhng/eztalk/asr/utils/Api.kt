@@ -714,7 +714,8 @@ fun postProcessAudio(
             false
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Exception during process_audio post", e)
+        val detail = TLSExpireResolver.resolveMessage(e, "process_audio post failed")
+        Log.e(TAG, "Exception during process_audio post: $detail", e)
         false
     }
 }
@@ -753,7 +754,8 @@ fun putForUpdates(
             false
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Exception during update", e)
+        val detail = TLSExpireResolver.resolveMessage(e, "update failed")
+        Log.e(TAG, "Exception during update: $detail", e)
         false
     }
 }
@@ -800,7 +802,8 @@ fun postTransfer(
             false
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Exception during transfer post", e)
+        val detail = TLSExpireResolver.resolveMessage(e, "transfer post failed")
+        Log.e(TAG, "Exception during transfer post: $detail", e)
         false
     }
 }
@@ -842,7 +845,8 @@ fun postForRecognition(
             null
         }
     } catch (e: Exception) {
-        Log.e(TAG, "Exception during recognition post", e)
+        val detail = TLSExpireResolver.resolveMessage(e, "recognition post failed")
+        Log.e(TAG, "Exception during recognition post: $detail", e)
         null
-    } as JSONObject?
+    }
 }

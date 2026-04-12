@@ -28,6 +28,7 @@ fun RemoteModelsManager(
     homeViewModel: HomeViewModel,
 ) {
     val remoteModels = homeViewModel.remoteModels
+    val remoteModelsErrorMessage = homeViewModel.remoteModelsErrorMessage
     var selectedModel by remember { mutableStateOf(remoteModels.firstOrNull()) }
     val isDownloading by homeViewModel.isDownloadingFlow.collectAsState()
     val downloadProgress by homeViewModel.downloadProgressFlow.collectAsState()
@@ -81,6 +82,15 @@ fun RemoteModelsManager(
                             }
                         }
                     }
+                }
+
+                if (!remoteModelsErrorMessage.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = remoteModelsErrorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

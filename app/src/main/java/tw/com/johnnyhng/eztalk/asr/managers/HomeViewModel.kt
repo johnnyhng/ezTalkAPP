@@ -66,6 +66,7 @@ class HomeViewModel @JvmOverloads constructor(
     private val _remoteModels = mutableStateListOf<RemoteModelDescriptor>()
     val remoteModels: List<RemoteModelDescriptor> get() = _remoteModels
     var isFetchingRemoteModels by mutableStateOf(false)
+    var remoteModelsErrorMessage by mutableStateOf<String?>(null)
 
     // Recognition Manager integration
     private val recognitionManager = RecognitionManager(application)
@@ -208,25 +209,32 @@ class HomeViewModel @JvmOverloads constructor(
 
     private fun fetchRemoteModels() {
         isFetchingRemoteModels = true
+        remoteModelsErrorMessage = null
         viewModelScope.launch {
             try {
                 val selectedRemoteModelName = selectedModel?.name
                     ?: userSettings.value.selectedModelName.ifBlank { "custom-sense-voice" }
-                val remoteModels = withContext(Dispatchers.IO) {
-                    val fetchedModels = remoteModelRepository.listRemoteModels(
+                val remoteModelResult = withContext(Dispatchers.IO) {
+                    val fetchedResult = remoteModelRepository.listRemoteModels(
                         modelApiBaseUrl = userSettings.value.backendUrl,
                         userId = userSettings.value.userId,
                         selectedModelName = selectedRemoteModelName
                     )
                     markUpdateAvailability(
-                        remoteModels = fetchedModels,
+                        remoteModels = fetchedResult.models,
                         backendUrl = userSettings.value.backendUrl,
                         userId = userSettings.value.userId,
                         userModelsDir = getApplication<Application>().filesDir.resolve("models/${userSettings.value.userId}")
-                    )
+                    ).let { markedModels ->
+                        RemoteModelListFetchResult(
+                            models = markedModels,
+                            errorMessage = fetchedResult.errorMessage
+                        )
+                    }
                 }
                 _remoteModels.clear()
-                _remoteModels.addAll(remoteModels)
+                _remoteModels.addAll(remoteModelResult.models)
+                remoteModelsErrorMessage = remoteModelResult.errorMessage
             } finally {
                 isFetchingRemoteModels = false
             }
