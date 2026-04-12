@@ -77,6 +77,26 @@ import java.util.*
 private var audioRecord: AudioRecord? = null
 private const val sampleRateInHz = 16000
 
+private data class TranslateUiState(
+    val textInput: String = "",
+    val transcript: Transcript? = null,
+    val localCandidate: String? = null,
+    val remoteCandidates: List<String> = emptyList(),
+    val latestAudioSamples: FloatArray = FloatArray(0),
+    val isRecognizingSpeech: Boolean = false,
+    val isFetchingCandidates: Boolean = false
+) {
+    val isMutable: Boolean
+        get() = transcript?.mutable != false
+
+    val candidates: List<String>
+        get() = (listOfNotNull(transcript?.recognizedText, localCandidate) +
+            transcript.orEmptyLocalCandidates() +
+            remoteCandidates)
+            .distinct()
+            .filter { it.isNotBlank() }
+}
+
 private fun logTranslateJsonlUpdate(reason: String, transcript: Transcript) {
     Log.d(
         TAG,
@@ -95,18 +115,8 @@ fun TranslateScreen(
 
     // UI state
     var isStarted by remember { mutableStateOf(false) }
-    var textInput by remember { mutableStateOf("") }
-    var currentTranscript by remember { mutableStateOf<Transcript?>(null) }
-
-    // Candidate states
-    var localCandidate by remember { mutableStateOf<String?>(null) }
-    var remoteCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
-    var isFetchingCandidates by remember { mutableStateOf(false) }
+    var uiState by remember { mutableStateOf(TranslateUiState()) }
     var fetchJob by remember { mutableStateOf<Job?>(null) }
-
-    // Waveform and recognition states
-    var latestAudioSamples by remember { mutableStateOf(FloatArray(0)) }
-    var isRecognizingSpeech by remember { mutableStateOf(false) }
 
     // Collect settings from the ViewModel
     val userSettings by homeViewModel.userSettings.collectAsState()
@@ -165,14 +175,16 @@ fun TranslateScreen(
     }
 
     // Fetch candidates when a new transcript is available
-    LaunchedEffect(currentTranscript?.wavFilePath) {
+    LaunchedEffect(uiState.transcript?.wavFilePath) {
         fetchJob = coroutineContext[Job] // Capture the job of this effect
-        val transcript = currentTranscript
+        val transcript = uiState.transcript
         if (transcript != null && transcript.wavFilePath.isNotEmpty()) {
             try {
-                isFetchingCandidates = true
-                localCandidate = transcript.localCandidates.firstOrNull()
-                remoteCandidates = emptyList()
+                uiState = uiState.copy(
+                    isFetchingCandidates = true,
+                    localCandidate = transcript.localCandidates.firstOrNull(),
+                    remoteCandidates = emptyList()
+                )
 
                 val loaded = loadTranslateCandidates(
                     context = context,
@@ -196,11 +208,13 @@ fun TranslateScreen(
                 if (loaded.transcript.localCandidates != transcript.localCandidates) {
                     logTranslateJsonlUpdate("local_rerecognition", loaded.transcript)
                 }
-                currentTranscript = loaded.transcript
-                localCandidate = loaded.localCandidate
-                remoteCandidates = loaded.remoteCandidates
+                uiState = uiState.copy(
+                    transcript = loaded.transcript,
+                    localCandidate = loaded.localCandidate,
+                    remoteCandidates = loaded.remoteCandidates
+                )
             } finally {
-                isFetchingCandidates = false
+                uiState = uiState.copy(isFetchingCandidates = false)
             }
         }
     }
@@ -268,7 +282,7 @@ fun TranslateScreen(
                             val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
                             samplesChannel.send(samples)
                             launch(Main) {
-                                latestAudioSamples = samples
+                                uiState = uiState.copy(latestAudioSamples = samples)
                             }
                         }
                     }
@@ -285,10 +299,12 @@ fun TranslateScreen(
 
                     // Reset UI for new recording
                     withContext(Main) {
-                        textInput = ""
-                        currentTranscript = null
-                        localCandidate = null
-                        remoteCandidates = emptyList()
+                        uiState = uiState.copy(
+                            textInput = "",
+                            transcript = null,
+                            localCandidate = null,
+                            remoteCandidates = emptyList()
+                        )
                     }
 
                     var done = false
@@ -325,7 +341,7 @@ fun TranslateScreen(
                                             val result = SimulateStreamingAsr.recognizer.getResult(stream)
                                             if (isStarted) { // check user hasn't stopped
                                                 withContext(Main) {
-                                                    textInput = result.text
+                                                    uiState = uiState.copy(textInput = result.text)
                                                 }
                                             }
                                         } finally {
@@ -355,7 +371,9 @@ fun TranslateScreen(
 
                     // Final recognition and save
                     if (captureState.isSpeechStarted && captureState.speechStartOffset != -1) {
-                        withContext(Main) { isRecognizingSpeech = true }
+                        withContext(Main) {
+                            uiState = uiState.copy(isRecognizingSpeech = true)
+                        }
 
                         val audioToRecognize = buildTranslateFinalAudio(
                             state = captureState,
@@ -388,8 +406,12 @@ fun TranslateScreen(
                                     )
 
                                     withContext(Main) {
-                                        currentTranscript = newTranscript
-                                        textInput = newTranscript.modifiedText
+                                        uiState = uiState.copy(
+                                            transcript = newTranscript,
+                                            textInput = newTranscript.modifiedText,
+                                            localCandidate = newTranscript.localCandidates.firstOrNull(),
+                                            remoteCandidates = newTranscript.remoteCandidates
+                                        )
 
                                         if (wavPath != null) {
                                             logTranslateJsonlUpdate("final_recognition", newTranscript)
@@ -401,7 +423,9 @@ fun TranslateScreen(
                                 stream.release()
                             }
                         }
-                        withContext(Main) { isRecognizingSpeech = false }
+                        withContext(Main) {
+                            uiState = uiState.copy(isRecognizingSpeech = false)
+                        }
                     }
                 }
             }
@@ -414,12 +438,12 @@ fun TranslateScreen(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val isMutable = currentTranscript?.mutable != false
+        val isMutable = uiState.isMutable
         
         if (isMutable) {
             OutlinedTextField(
-                value = textInput,
-                onValueChange = { textInput = it },
+                value = uiState.textInput,
+                onValueChange = { uiState = uiState.copy(textInput = it) },
                 label = { Text(stringResource(id = R.string.recognized_text)) },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -436,7 +460,7 @@ fun TranslateScreen(
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 Text(
-                    text = textInput,
+                    text = uiState.textInput,
                     modifier = Modifier.padding(24.dp),
                     style = TextStyle(
                         fontSize = 24.sp, 
@@ -453,31 +477,33 @@ fun TranslateScreen(
             isStarted = isStarted,
             onRecordingButtonClick = onRecordingButtonClick,
             onCopyButtonClick = {
-                if (textInput.isNotEmpty()) {
-                    clipboardManager.setText(AnnotatedString(textInput))
+                if (uiState.textInput.isNotEmpty()) {
+                    clipboardManager.setText(AnnotatedString(uiState.textInput))
                     Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(context, R.string.nothing_to_copy, Toast.LENGTH_SHORT).show()
                 }
             },
             onClearButtonClick = {
-                textInput = ""
-                currentTranscript = null
-                localCandidate = null
-                remoteCandidates = emptyList()
+                uiState = uiState.copy(
+                    textInput = "",
+                    transcript = null,
+                    localCandidate = null,
+                    remoteCandidates = emptyList()
+                )
             },
             onTtsButtonClick = {
                 val utteranceId = UUID.randomUUID().toString()
-                tts?.speak(textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                tts?.speak(uiState.textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
 
-                currentTranscript?.let { transcript ->
+                uiState.transcript?.let { transcript ->
                     coroutineScope.launch {
                         when (
                             val result = submitTranslateFeedback(
                                 transcript = transcript,
-                                newText = textInput,
+                                newText = uiState.textInput,
                                 enableTtsFeedback = userSettings.enableTtsFeedback,
-                                remoteCandidates = remoteCandidates,
+                                remoteCandidates = uiState.remoteCandidates,
                                 fetchJob = fetchJob,
                                 feedbackBlock = { currentTranscriptForFeedback ->
                                     withContext(IO) {
@@ -492,7 +518,12 @@ fun TranslateScreen(
                             )
                         ) {
                             is TranslateFeedbackSubmission.Success -> {
-                                currentTranscript = result.transcript
+                                uiState = uiState.copy(
+                                    transcript = result.transcript,
+                                    textInput = result.transcript.modifiedText,
+                                    localCandidate = result.transcript.localCandidates.firstOrNull(),
+                                    remoteCandidates = result.transcript.remoteCandidates
+                                )
                                 withContext(IO) {
                                     val reason = if (result.sentBackendFeedback) "tts_feedback_success" else "tts_without_feedback"
                                     logTranslateJsonlUpdate(reason, result.transcript)
@@ -512,7 +543,7 @@ fun TranslateScreen(
                 }
             },
             onPlaybackButtonClick = {
-                currentTranscript?.wavFilePath?.let { path ->
+                uiState.transcript?.wavFilePath?.let { path ->
                     if (currentlyPlaying == path) {
                         MediaController.stop()
                     } else {
@@ -520,16 +551,16 @@ fun TranslateScreen(
                     }
                 }
             },
-            isTtsButtonEnabled = !isStarted && !isTtsSpeaking && textInput.isNotEmpty() && currentTranscript != null,
-            isPlaybackButtonEnabled = !isStarted && !isTtsSpeaking && currentTranscript?.wavFilePath?.isNotEmpty() == true,
-            isPlaying = currentlyPlaying == currentTranscript?.wavFilePath,
+            isTtsButtonEnabled = !isStarted && !isTtsSpeaking && uiState.textInput.isNotEmpty() && uiState.transcript != null,
+            isPlaybackButtonEnabled = !isStarted && !isTtsSpeaking && uiState.transcript?.wavFilePath?.isNotEmpty() == true,
+            isPlaying = currentlyPlaying == uiState.transcript?.wavFilePath,
             isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
             isAsrModelLoading = isAsrModelLoading
         )
 
         if (isStarted) {
             WaveformDisplay(
-                samples = latestAudioSamples,
+                samples = uiState.latestAudioSamples,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(100.dp)
@@ -537,24 +568,22 @@ fun TranslateScreen(
             )
         }
 
-        LaunchedEffect(currentTranscript?.wavFilePath) {
-            val transcript = currentTranscript ?: return@LaunchedEffect
+        LaunchedEffect(uiState.transcript?.wavFilePath) {
+            val transcript = uiState.transcript ?: return@LaunchedEffect
             if (transcript.wavFilePath.isEmpty()) return@LaunchedEffect
             val syncedTranscript = syncTranscriptCandidatesFromJsonl(transcript)
             if (syncedTranscript != transcript) {
-                currentTranscript = syncedTranscript
-                localCandidate = syncedTranscript.localCandidates.firstOrNull() ?: localCandidate
-                if (syncedTranscript.remoteCandidates.isNotEmpty()) {
-                    remoteCandidates = syncedTranscript.remoteCandidates
-                }
+                uiState = uiState.copy(
+                    transcript = syncedTranscript,
+                    localCandidate = syncedTranscript.localCandidates.firstOrNull()
+                        ?: uiState.localCandidate,
+                    remoteCandidates = if (syncedTranscript.remoteCandidates.isNotEmpty()) {
+                        syncedTranscript.remoteCandidates
+                    } else {
+                        uiState.remoteCandidates
+                    }
+                )
             }
-        }
-
-        val candidates = remember(currentTranscript, localCandidate, remoteCandidates) {
-            (listOfNotNull(
-                currentTranscript?.recognizedText,
-                localCandidate
-            ) + currentTranscript.orEmptyLocalCandidates() + remoteCandidates).distinct().filter { it.isNotBlank() }
         }
 
         LazyColumn(
@@ -564,12 +593,12 @@ fun TranslateScreen(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            itemsIndexed(candidates) { index, candidate ->
+            itemsIndexed(uiState.candidates) { index, candidate ->
                 Text(
                     text = "${index + 1}: $candidate",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = isMutable) { textInput = candidate }
+                        .clickable(enabled = isMutable) { uiState = uiState.copy(textInput = candidate) }
                         .padding(vertical = 12.dp),
                     textAlign = TextAlign.Center,
                     fontSize = 20.sp
@@ -577,7 +606,7 @@ fun TranslateScreen(
             }
         }
 
-        if (isRecognizingSpeech || isFetchingCandidates) {
+        if (uiState.isRecognizingSpeech || uiState.isFetchingCandidates) {
             CircularProgressIndicator(modifier = Modifier.padding(16.dp))
         }
     }
