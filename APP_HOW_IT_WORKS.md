@@ -286,15 +286,19 @@ It:
 
 - performs recording directly in the screen instead of via `RecognitionManager`
 - stores one active `currentTranscript`
+- finalizes one `.wav` / `.jsonl` only when the user presses stop
 - fetches local and remote candidates when the active transcript changes
 - lets the user edit the text field directly
 - supports TTS confirmation and backend feedback
 
 For saved utterances in this screen:
 
+- VAD is used to trim the final saved audio range, but it does not auto-finalize on its own
+- unlike Home / `RecognitionManager`, there is no linger/countdown-driven utterance finalization loop
 - the initial local ASR text is also stored into `localCandidates`
 - later whole-file local re-recognition reuses or refreshes `local_candidates`
 - both local and remote candidates are preserved when the transcript is saved back to JSONL
+- when `enableTtsFeedback` is on, TTS feedback waits for the in-flight candidate fetch job before calling backend feedback, to avoid racing against remote-candidate persistence
 
 This screen is useful when the user wants to focus on one utterance rather than a running transcript list.
 

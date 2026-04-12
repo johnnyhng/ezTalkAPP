@@ -1,14 +1,12 @@
 package tw.com.johnnyhng.eztalk.asr.managers
 
 import android.content.Context
-import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import tw.com.johnnyhng.eztalk.asr.sanitizeEntryScreenRoute
-import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -52,19 +50,10 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
             ?: defaultUserSettings.allowAppAudioCapture,
         preferCommunicationDeviceRouting = preferences[preferCommunicationDeviceRoutingKey]
             ?: defaultUserSettings.preferCommunicationDeviceRouting
-    ).also { settings ->
-        Log.d(
-            TAG,
-            "preferencesToUserSettings: allowInsecureTls=${settings.allowInsecureTls}, backendUrl=${settings.backendUrl}"
-        )
-    }
+    )
 }
 
 internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSettings) {
-    Log.d(
-        TAG,
-        "writeUserSettings: allowInsecureTls=${settings.allowInsecureTls}, backendUrl=${settings.backendUrl}"
-    )
     preferences[userIdKey] = settings.userId
     preferences[lingerMsKey] = settings.lingerMs
     preferences[partialIntervalMsKey] = settings.partialIntervalMs

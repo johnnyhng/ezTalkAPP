@@ -3,6 +3,7 @@ package tw.com.johnnyhng.eztalk.asr.utils
 import android.content.Context
 import android.util.Log
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -114,6 +115,79 @@ internal fun resolveRemoteCandidates(
     }
 }
 
+internal fun persistTranscriptJsonl(
+    context: Context,
+    userId: String,
+    transcript: Transcript
+): String? {
+    if (transcript.wavFilePath.isBlank()) return null
+    return saveJsonl(
+        context = context,
+        userId = userId,
+        filename = File(transcript.wavFilePath).nameWithoutExtension,
+        originalText = transcript.recognizedText,
+        modifiedText = transcript.modifiedText,
+        checked = transcript.checked,
+        mutable = transcript.mutable,
+        removable = transcript.removable,
+        localCandidates = transcript.localCandidates,
+        remoteCandidates = transcript.remoteCandidates
+    )
+}
+
+internal fun syncTranscriptCandidatesFromJsonl(
+    transcript: Transcript,
+    readJsonlBlock: (String) -> JSONObject? = ::readJsonl
+): Transcript {
+    if (transcript.wavFilePath.isBlank()) return transcript
+    val json = readJsonlBlock(
+        File(transcript.wavFilePath)
+            .resolveSibling("${File(transcript.wavFilePath).nameWithoutExtension}.jsonl")
+            .absolutePath
+    ) ?: return transcript
+
+    val localCandidatesFromJson = json.optStringList("local_candidates")
+    val remoteCandidatesFromJson = json.optStringList("remote_candidates")
+    if (localCandidatesFromJson.isEmpty() && remoteCandidatesFromJson.isEmpty()) {
+        return transcript
+    }
+
+    return transcript.copy(
+        localCandidates = if (localCandidatesFromJson.isNotEmpty()) {
+            localCandidatesFromJson
+        } else {
+            transcript.localCandidates
+        },
+        remoteCandidates = if (remoteCandidatesFromJson.isNotEmpty()) {
+            remoteCandidatesFromJson
+        } else {
+            transcript.remoteCandidates
+        }
+    )
+}
+
+internal suspend fun resolveLocalCandidateTranscript(
+    context: Context,
+    userId: String,
+    transcript: Transcript,
+    audioReader: (String) -> FloatArray?,
+    recognizerBlock: (FloatArray) -> String
+): Transcript? {
+    if (transcript.wavFilePath.isBlank() || transcript.localCandidates.isNotEmpty()) return null
+
+    val audioData = audioReader(transcript.wavFilePath) ?: return null
+    val localResultText = recognizerBlock(audioData).trim()
+    if (localResultText.isBlank()) return null
+
+    val updatedTranscript = transcript.copy(localCandidates = listOf(localResultText))
+    persistTranscriptJsonl(
+        context = context,
+        userId = userId,
+        transcript = updatedTranscript
+    )
+    return updatedTranscript
+}
+
 suspend fun getRemoteCandidates(
     context: Context,
     wavFilePath: String,
@@ -123,10 +197,6 @@ suspend fun getRemoteCandidates(
     originalText: String,
     currentText: String
 ): List<String> {
-    Log.d(
-        TAG,
-        "getRemoteCandidates: allowInsecureTls=$allowInsecureTls, recognitionUrl=$recognitionUrl"
-    )
     val jsonlFile = File(wavFilePath).resolveSibling(
         File(wavFilePath).nameWithoutExtension + ".jsonl"
     )

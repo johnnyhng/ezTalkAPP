@@ -1,7 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr.managers
 
 import android.app.Application
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -15,7 +14,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
-import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.audio.AudioRoutingRepository
 import tw.com.johnnyhng.eztalk.asr.audio.AudioRoutingStatus
 import tw.com.johnnyhng.eztalk.asr.sanitizeEntryScreenRoute
@@ -293,7 +291,6 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateInlineEdit(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(inlineEdit = v)) }
     fun updateBackendUrl(v: String) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(backendUrl = v)) }
     fun updateAllowInsecureTls(v: Boolean) = viewModelScope.launch {
-        Log.d(TAG, "updateAllowInsecureTls: current=${userSettings.value.allowInsecureTls}, next=$v")
         settingsManager.updateSettings(userSettings.value.copy(allowInsecureTls = v))
     }
     fun updateEnableTtsFeedback(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(enableTtsFeedback = v)) }

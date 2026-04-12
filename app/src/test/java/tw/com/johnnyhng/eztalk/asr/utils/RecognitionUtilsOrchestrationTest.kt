@@ -17,6 +17,7 @@ class RecognitionUtilsOrchestrationTest {
             wavFilePath = "/tmp/sample.wav",
             userId = "tester@example.com",
             recognitionUrl = "https://example.com/process_audio",
+            allowInsecureTls = false,
             originalText = "original",
             currentText = "current",
             readJsonlBlock = {
@@ -30,7 +31,7 @@ class RecognitionUtilsOrchestrationTest {
                     )
                 }
             },
-            postRecognitionBlock = { _, _, _ ->
+            postRecognitionBlock = { _, _, _, _ ->
                 postCalls += 1
                 null
             },
@@ -51,10 +52,11 @@ class RecognitionUtilsOrchestrationTest {
             wavFilePath = "/tmp/sample.wav",
             userId = "tester@example.com",
             recognitionUrl = "",
+            allowInsecureTls = false,
             originalText = "original",
             currentText = "current",
             readJsonlBlock = { null },
-            postRecognitionBlock = { _, _, _ ->
+            postRecognitionBlock = { _, _, _, _ ->
                 postCalls += 1
                 null
             },
@@ -74,10 +76,11 @@ class RecognitionUtilsOrchestrationTest {
             wavFilePath = "/tmp/sample.wav",
             userId = "tester@example.com",
             recognitionUrl = "https://example.com/process_audio",
+            allowInsecureTls = false,
             originalText = "original",
             currentText = "current",
             readJsonlBlock = { null },
-            postRecognitionBlock = { _, _, _ ->
+            postRecognitionBlock = { _, _, _, _ ->
                 postCalls += 1
                 null
             },
@@ -98,6 +101,7 @@ class RecognitionUtilsOrchestrationTest {
             wavFilePath = "/tmp/sample.wav",
             userId = "tester@example.com",
             recognitionUrl = "https://example.com/process_audio",
+            allowInsecureTls = false,
             originalText = "fallback-original",
             currentText = "fallback-current",
             readJsonlBlock = {
@@ -121,7 +125,7 @@ class RecognitionUtilsOrchestrationTest {
                     }
                 }
             },
-            postRecognitionBlock = { _, _, _ ->
+            postRecognitionBlock = { _, _, _, _ ->
                 JSONObject().apply {
                     put(
                         "sentence_candidates",
@@ -155,10 +159,11 @@ class RecognitionUtilsOrchestrationTest {
             wavFilePath = "/tmp/sample.wav",
             userId = "tester@example.com",
             recognitionUrl = "https://example.com/process_audio",
+            allowInsecureTls = false,
             originalText = "original",
             currentText = "current",
             readJsonlBlock = { null },
-            postRecognitionBlock = { _, _, _ ->
+            postRecognitionBlock = { _, _, _, _ ->
                 JSONObject().apply {
                     put(
                         "sentence_candidates",
