@@ -170,7 +170,7 @@
     <string name="speaker_cloud_upload_failed">Failed to upload speaker files.</string>
     <string name="speaker_cloud_import_failed">Failed to import cloud files.</string>
     <string name="speaker_cloud_sign_in_required">Sign in to Firebase before using cloud sync.</string>
-    <string name="speaker_cloud_status_signed_in">Cloud: signed in (%1$s)</string>
+    <string name="speaker_cloud_status_signed_in">Cloud: signed in</string>
     <string name="speaker_cloud_status_signed_out">Cloud: not signed in</string>
     <string name="speaker_cloud_folder_count">%1$d txt files</string>
     <string name="speaker_sync_preparing">Preparing sync…</string>

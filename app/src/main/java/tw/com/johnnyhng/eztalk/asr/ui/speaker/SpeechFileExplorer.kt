@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -280,7 +280,7 @@ private fun SpeakerDirectorySection(
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.ArrowUpward,
+                    imageVector = Icons.AutoMirrored.Filled.NoteAdd,
                     contentDescription = stringResource(R.string.speaker_import_txt)
                 )
             }

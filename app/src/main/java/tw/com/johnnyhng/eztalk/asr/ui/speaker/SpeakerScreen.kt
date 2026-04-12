@@ -148,10 +148,7 @@ fun SpeakerScreen(
             null
         }
     val cloudStatusText = if (uiState.isCloudSignedIn) {
-        context.getString(
-            R.string.speaker_cloud_status_signed_in,
-            uiState.cloudUserId.orEmpty()
-        )
+        context.getString(R.string.speaker_cloud_status_signed_in)
     } else {
         context.getString(R.string.speaker_cloud_status_signed_out)
     }
