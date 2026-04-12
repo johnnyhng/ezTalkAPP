@@ -14,6 +14,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 
 internal data class SpeakerScreenUiState(
     val directories: List<SpeakerDirectoryUi> = emptyList(),
+    val remoteFolders: List<SpeakerRemoteFolder> = emptyList(),
     val selectedDocumentId: String? = null,
     val isLoading: Boolean = true,
     val showCreateFolderDialog: Boolean = false,
@@ -23,6 +24,13 @@ internal data class SpeakerScreenUiState(
     val driveImportFolderName: String = "",
     val driveImportDialogError: String? = null,
     val isImporting: Boolean = false,
+    val isSyncing: Boolean = false,
+    val syncDirection: SpeakerSyncDirection? = null,
+    val syncProgressCurrent: Int = 0,
+    val syncProgressTotal: Int = 0,
+    val syncProgressTargetName: String = "",
+    val showCloudImportDialog: Boolean = false,
+    val cloudSyncError: String? = null,
     val importProgressCurrent: Int = 0,
     val importProgressTotal: Int = 0,
     val importProgressFolderName: String = "",
@@ -34,7 +42,12 @@ internal data class SpeakerScreenUiState(
 )
 
 internal class SpeakerViewModel(application: Application) : AndroidViewModel(application) {
+    private val localRepository = SpeakerLocalRepository(application)
     private val repository = SpeakerRepository(application)
+    private val syncService = SpeakerSyncService(
+        localRepository = localRepository,
+        cloudRepository = FirebaseSpeakerCloudRepository()
+    )
     private var currentUserId: String? = null
 
     var uiState by mutableStateOf(SpeakerScreenUiState())
@@ -299,6 +312,118 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
 
     fun refreshDirectories() {
         reloadDirectories()
+    }
+
+    fun showCloudImportDialog() {
+        uiState = uiState.copy(
+            showCloudImportDialog = true,
+            cloudSyncError = null
+        )
+        loadRemoteFolders()
+    }
+
+    fun dismissCloudImportDialog() {
+        uiState = uiState.copy(
+            showCloudImportDialog = false,
+            cloudSyncError = null
+        )
+    }
+
+    fun loadRemoteFolders() {
+        val userId = currentUserId ?: return
+        viewModelScope.launch {
+            uiState = uiState.copy(
+                isSyncing = true,
+                syncDirection = SpeakerSyncDirection.IMPORT,
+                syncProgressCurrent = 0,
+                syncProgressTotal = 0,
+                syncProgressTargetName = "",
+                cloudSyncError = null
+            )
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    syncService.listRemoteFolders(userId)
+                }
+            }.onSuccess { folders ->
+                uiState = uiState.copy(
+                    remoteFolders = folders,
+                    isSyncing = false
+                )
+            }.onFailure { error ->
+                uiState = uiState.copy(
+                    remoteFolders = emptyList(),
+                    isSyncing = false,
+                    cloudSyncError = error.message
+                )
+            }
+        }
+    }
+
+    suspend fun uploadAllToCloud(): Result<SpeakerUploadSummary> {
+        val userId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncDirection = SpeakerSyncDirection.UPLOAD,
+            syncProgressCurrent = 0,
+            syncProgressTotal = 0,
+            syncProgressTargetName = "",
+            cloudSyncError = null
+        )
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.uploadAllToCloud(userId) { progress ->
+                    uiState = uiState.copy(
+                        syncProgressCurrent = progress.current,
+                        syncProgressTotal = progress.total,
+                        syncProgressTargetName = progress.targetName
+                    )
+                }
+            }
+        }
+        uiState = uiState.copy(
+            isSyncing = false,
+            cloudSyncError = result.exceptionOrNull()?.message
+        )
+        return result
+    }
+
+    suspend fun importRemoteFolders(
+        folders: List<SpeakerRemoteFolder>,
+        conflictPolicy: SpeakerSyncConflictPolicy = SpeakerSyncConflictPolicy.OVERWRITE
+    ): Result<SpeakerImportSummary> {
+        val userId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncDirection = SpeakerSyncDirection.IMPORT,
+            syncProgressCurrent = 0,
+            syncProgressTotal = 0,
+            syncProgressTargetName = "",
+            cloudSyncError = null
+        )
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.importRemoteFolders(
+                    userId = userId,
+                    remoteFolders = folders,
+                    conflictPolicy = conflictPolicy
+                ) { progress ->
+                    uiState = uiState.copy(
+                        syncProgressCurrent = progress.current,
+                        syncProgressTotal = progress.total,
+                        syncProgressTargetName = progress.targetName
+                    )
+                }
+            }
+        }
+        uiState = uiState.copy(
+            isSyncing = false,
+            showCloudImportDialog = false,
+            cloudSyncError = result.exceptionOrNull()?.message
+        )
+        if (result.isSuccess) {
+            reloadDirectories(userId)
+        }
+        return result
     }
 
     private fun reloadDirectories(userId: String? = currentUserId) {

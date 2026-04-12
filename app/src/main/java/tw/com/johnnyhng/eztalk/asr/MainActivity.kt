@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
@@ -163,6 +164,7 @@ fun MainScreen(
     val context = LocalContext.current
     val navController = rememberNavController()
     val homeViewModel: HomeViewModel = viewModel()
+    val scope = rememberCoroutineScope()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     val signInManager = remember { GoogleSignInManager() }
     val googleSignInClient = remember { signInManager.getSignInClient(context) }
@@ -176,6 +178,10 @@ fun MainScreen(
                 .onSuccess { session ->
                     googleSession = session
                     homeViewModel.updateUserId(session.email)
+                    scope.launch {
+                        signInManager.signInToFirebase(session)
+                            .onFailure { error -> Log.w(TAG, "Firebase sign in failed", error) }
+                    }
                     Toast.makeText(
                         context,
                         context.getString(R.string.google_account_status, session.displayLabel()),
@@ -192,6 +198,10 @@ fun MainScreen(
     LaunchedEffect(signInManager, context) {
         val session = signInManager.getCurrentSession(context)
         googleSession = session
+        if (session != null) {
+            signInManager.restoreFirebaseSession(context)
+                .onFailure { error -> Log.w(TAG, "Firebase session restore failed", error) }
+        }
     }
     val profilePhoto = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, googleSession?.email, googleSession?.photoUrl) {
         value = googleSession?.let { loadCachedGoogleProfilePhoto(context, it) }
