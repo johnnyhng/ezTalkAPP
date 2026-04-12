@@ -31,7 +31,6 @@ internal data class SpeakerRemoteDocument(
     val folderId: String,
     val folderName: String,
     val fileName: String,
-    val storagePath: String,
     val contentHash: String,
     val sizeBytes: Long,
     val updatedAtEpochMillis: Long

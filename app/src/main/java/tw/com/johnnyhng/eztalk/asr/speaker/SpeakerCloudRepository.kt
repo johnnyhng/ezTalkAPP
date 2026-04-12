@@ -1,9 +1,8 @@
 package tw.com.johnnyhng.eztalk.asr.speaker
 
 import com.google.firebase.Timestamp
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
 
 internal interface SpeakerCloudRepository {
@@ -21,8 +20,7 @@ internal interface SpeakerCloudRepository {
 }
 
 internal class FirebaseSpeakerCloudRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
-    private val storage: FirebaseStorage = FirebaseStorage.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 ) : SpeakerCloudRepository {
     override suspend fun listRemoteFolders(userId: String): List<SpeakerRemoteFolder> {
         return folderCollection(userId)
@@ -55,7 +53,6 @@ internal class FirebaseSpeakerCloudRepository(
                     folderId = folderId,
                     folderName = folderName,
                     fileName = document.getString("fileName").orEmpty(),
-                    storagePath = document.getString("storagePath").orEmpty(),
                     contentHash = document.getString("contentHash").orEmpty(),
                     sizeBytes = document.getLong("sizeBytes") ?: 0L,
                     updatedAtEpochMillis = document.getTimestamp("updatedAt")?.toDate()?.time ?: 0L
@@ -73,9 +70,10 @@ internal class FirebaseSpeakerCloudRepository(
     ): SpeakerRemoteDocument {
         val folderId = sanitizeFolderName(folderName)
         val documentId = sanitizeRemoteDocumentId(fileName)
-        val storagePath = "speaker/$userId/$folderId/$documentId"
         val bytes = fullText.toByteArray()
-        storage.reference.child(storagePath).putBytes(bytes).await()
+        require(bytes.size <= MAX_DOCUMENT_BYTES) {
+            "File $fileName is too large for Firestore-only sync (${bytes.size} bytes)."
+        }
 
         val now = Timestamp.now()
         folderCollection(userId)
@@ -84,10 +82,9 @@ internal class FirebaseSpeakerCloudRepository(
                 mapOf(
                     "folderName" to folderName,
                     "normalizedFolderName" to folderId,
-                    "updatedAt" to now,
-                    "documentCount" to FieldValue.increment(1)
+                    "updatedAt" to now
                 ),
-                com.google.firebase.firestore.SetOptions.merge()
+                SetOptions.merge()
             )
             .await()
 
@@ -99,12 +96,12 @@ internal class FirebaseSpeakerCloudRepository(
                 mapOf(
                     "fileName" to fileName,
                     "normalizedFileName" to documentId,
-                    "storagePath" to storagePath,
+                    "content" to fullText,
                     "contentHash" to contentHash,
                     "sizeBytes" to bytes.size.toLong(),
                     "updatedAt" to now
                 ),
-                com.google.firebase.firestore.SetOptions.merge()
+                SetOptions.merge()
             )
             .await()
 
@@ -130,7 +127,6 @@ internal class FirebaseSpeakerCloudRepository(
             folderId = folderId,
             folderName = folderName,
             fileName = fileName,
-            storagePath = storagePath,
             contentHash = contentHash,
             sizeBytes = bytes.size.toLong(),
             updatedAtEpochMillis = now.toDate().time
@@ -138,11 +134,13 @@ internal class FirebaseSpeakerCloudRepository(
     }
 
     override suspend fun downloadDocument(userId: String, document: SpeakerRemoteDocument): String {
-        val storagePath = document.storagePath.ifBlank {
-            "speaker/$userId/${document.folderId}/${document.id}"
-        }
-        val bytes = storage.reference.child(storagePath).getBytes(MAX_DOWNLOAD_BYTES).await()
-        return bytes.toString(Charsets.UTF_8)
+        val snapshot = folderCollection(userId)
+            .document(document.folderId)
+            .collection("documents")
+            .document(document.id)
+            .get()
+            .await()
+        return snapshot.getString("content").orEmpty()
     }
 
     private fun folderCollection(userId: String) = firestore
@@ -156,6 +154,6 @@ internal class FirebaseSpeakerCloudRepository(
     }
 
     private companion object {
-        const val MAX_DOWNLOAD_BYTES = 1024 * 1024L
+        const val MAX_DOCUMENT_BYTES = 900_000
     }
 }
