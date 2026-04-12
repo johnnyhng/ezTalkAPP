@@ -390,12 +390,18 @@ internal fun openApiConnection(
     url: String,
     method: String,
     doOutput: Boolean,
+    allowInsecureTls: Boolean,
     connectTimeoutMs: Int,
     readTimeoutMs: Int
 ): HttpURLConnection {
     val connection = URL(url).openConnection() as HttpURLConnection
-    val hostnameVerifier = HostnameVerifier { _, _ -> true }
-    (connection as? HttpsURLConnection)?.hostnameVerifier = hostnameVerifier
+    if (allowInsecureTls) {
+        val hostnameVerifier = HostnameVerifier { _, _ -> true }
+        (connection as? HttpsURLConnection)?.apply {
+            sslSocketFactory = InsecureTls.socketFactory
+            this.hostnameVerifier = hostnameVerifier
+        }
+    }
     connection.instanceFollowRedirects = false
     connection.requestMethod = method
     connection.doOutput = doOutput
@@ -408,6 +414,7 @@ internal fun executeRequestWithRedirects(
     endpoint: String,
     method: String,
     plan: UploadRequestPlan? = null,
+    allowInsecureTls: Boolean = false,
     connectTimeoutMs: Int,
     readTimeoutMs: Int,
     maxRedirects: Int = 5
@@ -418,6 +425,7 @@ internal fun executeRequestWithRedirects(
             url = currentUrl,
             method = method,
             doOutput = plan != null,
+            allowInsecureTls = allowInsecureTls,
             connectTimeoutMs = connectTimeoutMs,
             readTimeoutMs = readTimeoutMs
         )
@@ -581,12 +589,14 @@ internal fun executeFeedbackDispatch(
 fun feedbackToBackend(
     backendUrl: String,
     filePath: String,
-    userId: String
+    userId: String,
+    allowInsecureTls: Boolean = false
 ): Boolean {
     return executeFeedbackToBackend(
         backendUrl = backendUrl,
         filePath = filePath,
         userId = userId,
+        allowInsecureTls = allowInsecureTls,
         metadataReader = ::readJsonl,
         putUpdates = ::putForUpdates,
         postProcessAudioBlock = ::postProcessAudio,
@@ -598,10 +608,11 @@ internal fun executeFeedbackToBackend(
     backendUrl: String,
     filePath: String,
     userId: String,
+    allowInsecureTls: Boolean,
     metadataReader: (String) -> JSONObject?,
-    putUpdates: (String, String, String, JSONObject?) -> Boolean,
-    postProcessAudioBlock: (String, String, String, JSONObject?) -> Boolean,
-    postTransferBlock: (String, String, String) -> Boolean
+    putUpdates: (String, String, String, JSONObject?, Boolean) -> Boolean,
+    postProcessAudioBlock: (String, String, String, JSONObject?, Boolean) -> Boolean,
+    postTransferBlock: (String, String, String, Boolean) -> Boolean
 ): Boolean {
     val execution = buildFeedbackExecution(
         backendUrl = backendUrl,
@@ -620,15 +631,15 @@ internal fun executeFeedbackToBackend(
         userId = userId,
         putUpdates = { endpoint, path, id, data ->
             Log.d(TAG, "feedbackToBackend: using PUT /api/updates")
-            putUpdates(endpoint, path, id, data)
+            putUpdates(endpoint, path, id, data, allowInsecureTls)
         },
         postProcessAudioBlock = { endpoint, path, id, data ->
             Log.d(TAG, "feedbackToBackend: using POST process_audio")
-            postProcessAudioBlock(endpoint, path, id, data)
+            postProcessAudioBlock(endpoint, path, id, data, allowInsecureTls)
         },
         postTransferBlock = { endpoint, path, id ->
             Log.d(TAG, "feedbackToBackend: using POST /api/transfer")
-            postTransferBlock(endpoint, path, id)
+            postTransferBlock(endpoint, path, id, allowInsecureTls)
         }
     )
 }
@@ -675,7 +686,8 @@ fun postProcessAudio(
     filePath: String,
     userId: String,
     metadata: JSONObject? = null,
-    sendFileByJson: Boolean = true
+    sendFileByJson: Boolean = true,
+    allowInsecureTls: Boolean = false
 ): Boolean {
     return try {
         Log.d(
@@ -700,6 +712,7 @@ fun postProcessAudio(
             endpoint = processAudioUrl,
             method = "POST",
             plan = plan,
+            allowInsecureTls = allowInsecureTls,
             connectTimeoutMs = 15000,
             readTimeoutMs = 15000
         ) ?: return false
@@ -724,7 +737,8 @@ fun putForUpdates(
     updateUrl: String,
     filePath: String,
     userId: String,
-    metadata: JSONObject? = null
+    metadata: JSONObject? = null,
+    allowInsecureTls: Boolean = false
 ): Boolean {
     return try {
         Log.d(
@@ -740,6 +754,7 @@ fun putForUpdates(
             endpoint = updateUrl,
             method = "PUT",
             plan = UploadRequestPlan.Json(jsonPayload),
+            allowInsecureTls = allowInsecureTls,
             connectTimeoutMs = 5000,
             readTimeoutMs = 5000
         ) ?: return false
@@ -764,7 +779,8 @@ fun postTransfer(
     transferUrl: String,
     filePath: String,
     userId: String,
-    sendFileByJson: Boolean = true
+    sendFileByJson: Boolean = true,
+    allowInsecureTls: Boolean = false
 ): Boolean {
     return try {
         Log.d(
@@ -788,6 +804,7 @@ fun postTransfer(
             endpoint = transferUrl,
             method = "POST",
             plan = plan,
+            allowInsecureTls = allowInsecureTls,
             connectTimeoutMs = 5000,
             readTimeoutMs = 5000
         ) ?: return false
@@ -812,7 +829,8 @@ fun postForRecognition(
     recognitionUrl: String,
     filePath: String,
     userId: String,
-    sendFileByJson: Boolean = true
+    sendFileByJson: Boolean = true,
+    allowInsecureTls: Boolean = false
 ): JSONObject? {
     return try {
         val plan = when (val builtPlan = buildRecognitionRequestPlan(
@@ -832,6 +850,7 @@ fun postForRecognition(
             endpoint = recognitionUrl,
             method = "POST",
             plan = plan,
+            allowInsecureTls = allowInsecureTls,
             connectTimeoutMs = 15000,
             readTimeoutMs = 15000
         ) ?: return null

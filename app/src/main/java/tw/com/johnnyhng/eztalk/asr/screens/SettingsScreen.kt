@@ -293,6 +293,28 @@ fun SettingsScreen(
             enabled = !isDownloading
         )
 
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = stringResource(R.string.allow_insecure_tls))
+                Text(
+                    text = stringResource(R.string.allow_insecure_tls_summary),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = userSettings.allowInsecureTls,
+                onCheckedChange = { homeViewModel.updateAllowInsecureTls(it) },
+                enabled = !isDownloading
+            )
+        }
+
         Column(modifier = Modifier.padding(vertical = 16.dp)) {
             Text(stringResource(R.string.entry_screen), style = MaterialTheme.typography.titleMedium)
             ExposedDropdownMenuBox(

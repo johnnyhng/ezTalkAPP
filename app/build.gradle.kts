@@ -29,7 +29,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "ALLOW_INSECURE_TLS_BY_DEFAULT", "true")
+        }
         release {
+            buildConfigField("boolean", "ALLOW_INSECURE_TLS_BY_DEFAULT", "false")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -46,6 +50,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"

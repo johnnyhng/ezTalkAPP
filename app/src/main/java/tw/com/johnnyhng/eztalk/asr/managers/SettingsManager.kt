@@ -17,6 +17,7 @@ private val partialIntervalMsKey = floatPreferencesKey("partial_interval_ms")
 private val saveVadSegmentsOnlyKey = booleanPreferencesKey("save_vad_segments_only")
 private val inlineEditKey = booleanPreferencesKey("inline_edit")
 private val backendUrlKey = stringPreferencesKey("backend_url")
+private val allowInsecureTlsKey = booleanPreferencesKey("allow_insecure_tls")
 private val enableTtsFeedbackKey = booleanPreferencesKey("enable_tts_feedback")
 private val selectedModelNameKey = stringPreferencesKey("selected_model_name")
 private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
@@ -31,6 +32,7 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         saveVadSegmentsOnly = preferences[saveVadSegmentsOnlyKey] ?: defaultUserSettings.saveVadSegmentsOnly,
         inlineEdit = preferences[inlineEditKey] ?: defaultUserSettings.inlineEdit,
         backendUrl = preferences[backendUrlKey] ?: defaultUserSettings.backendUrl,
+        allowInsecureTls = preferences[allowInsecureTlsKey] ?: defaultUserSettings.allowInsecureTls,
         enableTtsFeedback = preferences[enableTtsFeedbackKey] ?: defaultUserSettings.enableTtsFeedback,
         selectedModelName = preferences[selectedModelNameKey] ?: defaultUserSettings.selectedModelName,
         entryScreenRoute = sanitizeEntryScreenRoute(
@@ -47,6 +49,7 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[saveVadSegmentsOnlyKey] = settings.saveVadSegmentsOnly
     preferences[inlineEditKey] = settings.inlineEdit
     preferences[backendUrlKey] = settings.backendUrl
+    preferences[allowInsecureTlsKey] = settings.allowInsecureTls
     preferences[enableTtsFeedbackKey] = settings.enableTtsFeedback
     preferences[selectedModelNameKey] = settings.selectedModelName
     preferences[entryScreenRouteKey] = sanitizeEntryScreenRoute(settings.entryScreenRoute)

@@ -23,7 +23,8 @@ interface RemoteModelRepository {
     suspend fun listRemoteModels(
         modelApiBaseUrl: String,
         userId: String,
-        selectedModelName: String
+        selectedModelName: String,
+        allowInsecureTls: Boolean
     ): RemoteModelListFetchResult
 
     suspend fun downloadModel(
@@ -31,6 +32,7 @@ interface RemoteModelRepository {
         userId: String,
         remoteModel: RemoteModelDescriptor,
         userModelsDir: File,
+        allowInsecureTls: Boolean,
         onProgress: (Float?) -> Unit
     ): Result<File>
 }
@@ -39,7 +41,8 @@ object DirectUrlRemoteModelRepository : RemoteModelRepository {
     override suspend fun listRemoteModels(
         modelApiBaseUrl: String,
         userId: String,
-        selectedModelName: String
+        selectedModelName: String,
+        allowInsecureTls: Boolean
     ): RemoteModelListFetchResult {
         if (modelApiBaseUrl.trim().isBlank() || userId.trim().isBlank()) {
             return RemoteModelListFetchResult(emptyList())
@@ -47,7 +50,8 @@ object DirectUrlRemoteModelRepository : RemoteModelRepository {
 
         val result = listRemoteModelsResult(
             baseUrl = modelApiBaseUrl,
-            userId = userId
+            userId = userId,
+            allowInsecureTls = allowInsecureTls
         )
         return RemoteModelListFetchResult(
             models = result.models.map { modelName ->
@@ -67,6 +71,7 @@ object DirectUrlRemoteModelRepository : RemoteModelRepository {
         userId: String,
         remoteModel: RemoteModelDescriptor,
         userModelsDir: File,
+        allowInsecureTls: Boolean,
         onProgress: (Float?) -> Unit
     ): Result<File> = runCatching {
         val targetDir = File(userModelsDir, remoteModel.name)
@@ -80,6 +85,7 @@ object DirectUrlRemoteModelRepository : RemoteModelRepository {
             modelName = remoteModel.name,
             filename = remoteModel.filename,
             targetFile = modelFile,
+            allowInsecureTls = allowInsecureTls,
             onProgress = onProgress
         )
         if (!modelDownload.success) {
@@ -91,7 +97,8 @@ object DirectUrlRemoteModelRepository : RemoteModelRepository {
             userId = userId,
             modelName = remoteModel.name,
             filename = "tokens.txt",
-            targetFile = tokensFile
+            targetFile = tokensFile,
+            allowInsecureTls = allowInsecureTls
         )
         if (!tokensDownload.success) {
             error(tokensDownload.errorMessage ?: "Failed to download tokens.txt")

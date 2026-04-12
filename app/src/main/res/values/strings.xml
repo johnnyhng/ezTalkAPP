@@ -36,6 +36,8 @@
     <string name="check_version">Check version</string>
     <string name="delete_model">Delete model</string>
     <string name="backend_url">backend URL</string>
+    <string name="allow_insecure_tls">Allow insecure TLS</string>
+    <string name="allow_insecure_tls_summary">Bypass certificate validation for backend requests. Short-term use only.</string>
     <string name="delay">Delay: %1$d ms</string>
     <string name="recognize_time">Recognize Time: %1$d ms</string>
     <string name="save_vad_segments">Save VAD Segments</string>

@@ -97,6 +97,7 @@ fun HomeScreen(
                         wavFilePath = wavPath,
                         userId = userSettings.userId,
                         recognitionUrl = url,
+                        allowInsecureTls = userSettings.allowInsecureTls,
                         originalText = it.recognizedText,
                         currentText = it.modifiedText
                     )
@@ -134,7 +135,8 @@ fun HomeScreen(
                     feedbackToBackend(
                         userSettings.backendUrl,
                         item.wavFilePath,
-                        userSettings.userId
+                        userSettings.userId,
+                        allowInsecureTls = userSettings.allowInsecureTls
                     )
                 }
                 if (success) {

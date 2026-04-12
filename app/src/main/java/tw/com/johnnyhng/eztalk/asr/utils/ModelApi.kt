@@ -72,19 +72,22 @@ internal fun parseRemoteModelList(responseBody: String): RemoteModelListResponse
 
 internal fun listRemoteModels(
     baseUrl: String,
-    userId: String
+    userId: String,
+    allowInsecureTls: Boolean = false
 ): List<String> {
-    return listRemoteModelsResult(baseUrl, userId).models
+    return listRemoteModelsResult(baseUrl, userId, allowInsecureTls).models
 }
 
 internal fun listRemoteModelsResult(
     baseUrl: String,
-    userId: String
+    userId: String,
+    allowInsecureTls: Boolean = false
 ): RemoteModelListResult {
     return try {
         val connection = executeRequestWithRedirects(
             endpoint = buildListModelsUrl(baseUrl, userId),
             method = "GET",
+            allowInsecureTls = allowInsecureTls,
             connectTimeoutMs = 15000,
             readTimeoutMs = 15000
         ) ?: return RemoteModelListResult(emptyList(), "Unable to create remote model request")
@@ -112,12 +115,14 @@ internal fun listRemoteModelsResult(
 internal fun checkModelUpdate(
     baseUrl: String,
     userId: String,
-    modelName: String
+    modelName: String,
+    allowInsecureTls: Boolean = false
 ): RemoteModelUpdate? {
     return try {
         val connection = executeRequestWithRedirects(
             endpoint = buildCheckUpdateUrl(baseUrl, userId),
             method = "GET",
+            allowInsecureTls = allowInsecureTls,
             connectTimeoutMs = 15000,
             readTimeoutMs = 15000
         ) ?: return null
@@ -144,6 +149,7 @@ internal fun downloadModelFile(
     modelName: String,
     filename: String,
     targetFile: File,
+    allowInsecureTls: Boolean = false,
     onProgress: (Float?) -> Unit = {}
 ): Boolean {
     return downloadModelFileResult(
@@ -152,6 +158,7 @@ internal fun downloadModelFile(
         modelName = modelName,
         filename = filename,
         targetFile = targetFile,
+        allowInsecureTls = allowInsecureTls,
         onProgress = onProgress
     ).success
 }
@@ -162,12 +169,14 @@ internal fun downloadModelFileResult(
     modelName: String,
     filename: String,
     targetFile: File,
+    allowInsecureTls: Boolean = false,
     onProgress: (Float?) -> Unit = {}
 ): ModelDownloadResult {
     return try {
         val connection = executeRequestWithRedirects(
             endpoint = buildModelFileUrl(baseUrl, userId, modelName, filename),
             method = "GET",
+            allowInsecureTls = allowInsecureTls,
             connectTimeoutMs = 15000,
             readTimeoutMs = 15000
         ) ?: return ModelDownloadResult(false, "Unable to create model download request")

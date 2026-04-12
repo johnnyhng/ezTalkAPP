@@ -50,9 +50,9 @@ fun RemoteModelsManager(
             Column {
                 if (homeViewModel.isFetchingRemoteModels) {
                     CircularProgressIndicator()
-                } else if (remoteModels.isEmpty()) {
+                } else if (remoteModels.isEmpty() && remoteModelsErrorMessage.isNullOrBlank()) {
                     Text(stringResource(R.string.no_remote_models_found))
-                } else {
+                } else if (remoteModels.isNotEmpty()) {
                     LazyColumn {
                         items(remoteModels) { model ->
                             Row(
