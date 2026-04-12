@@ -140,11 +140,13 @@
     <string name="speaker_folder_name_label">資料夾名稱</string>
     <string name="speaker_folder_name_placeholder">例如：product-demo</string>
     <string name="speaker_create_folder">建立資料夾</string>
+    <string name="speaker_rename_folder">重新命名資料夾</string>
     <string name="speaker_google_drive">匯入檔案</string>
     <string name="speaker_select_folder_for_import">使用匯入功能建立資料夾，並一次選取多個 txt 檔案。</string>
     <string name="speaker_invalid_folder_name">請輸入有效的資料夾名稱。</string>
     <string name="speaker_folder_exists">資料夾 %1$s 已存在。</string>
     <string name="speaker_create_folder_failed">建立資料夾失敗。</string>
+    <string name="speaker_rename_folder_failed">重新命名資料夾失敗。</string>
     <string name="speaker_empty_text_file">空白 txt 檔案</string>
     <string name="speaker_import_txt">匯入 txt</string>
     <string name="speaker_import_failed">匯入 txt 檔案失敗。</string>

@@ -95,6 +95,37 @@ internal open class SpeakerLocalRepository(private val context: Context) {
         }
     }
 
+    fun renameFolder(
+        userId: String,
+        sourceFolderName: String,
+        targetFolderName: String
+    ): FolderRenameResult {
+        val speechRoot = getSpeakerRootDirectory(context.filesDir, userId)
+        if (!speechRoot.exists() && !speechRoot.mkdirs()) {
+            return FolderRenameResult.FAILED
+        }
+
+        val sourceFolder = File(speechRoot, sourceFolderName)
+        if (!sourceFolder.exists() || !sourceFolder.isDirectory) {
+            return FolderRenameResult.FAILED
+        }
+
+        if (sourceFolderName == targetFolderName) {
+            return FolderRenameResult.RENAMED
+        }
+
+        val targetFolder = File(speechRoot, targetFolderName)
+        if (targetFolder.exists()) {
+            return FolderRenameResult.ALREADY_EXISTS
+        }
+
+        return if (sourceFolder.renameTo(targetFolder)) {
+            FolderRenameResult.RENAMED
+        } else {
+            FolderRenameResult.FAILED
+        }
+    }
+
     fun createOrUpdateDocument(
         userId: String,
         folderName: String,
@@ -130,6 +161,12 @@ internal open class SpeakerLocalRepository(private val context: Context) {
 
 internal enum class FolderCreationResult {
     CREATED,
+    ALREADY_EXISTS,
+    FAILED
+}
+
+internal enum class FolderRenameResult {
+    RENAMED,
     ALREADY_EXISTS,
     FAILED
 }

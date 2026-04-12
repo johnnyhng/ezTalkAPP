@@ -508,6 +508,50 @@ fun SpeakerScreen(
             )
         }
 
+        if (uiState.showRenameFolderDialog) {
+            AlertDialog(
+                onDismissRequest = { speakerViewModel.dismissRenameFolderDialog() },
+                title = {
+                    Text(text = stringResource(R.string.speaker_rename_folder))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = uiState.renameFolderName,
+                            onValueChange = { speakerViewModel.onRenameFolderNameChanged(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.speaker_folder_name_label)) },
+                            placeholder = { Text(stringResource(R.string.speaker_folder_name_placeholder)) },
+                            isError = uiState.renameFolderDialogError != null
+                        )
+                        if (uiState.renameFolderDialogError != null) {
+                            Text(
+                                text = uiState.renameFolderDialogError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { speakerViewModel.renameFolder() },
+                        enabled = uiState.renameFolderName.isNotBlank()
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { speakerViewModel.dismissRenameFolderDialog() }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
         if (uiState.isImporting && isImportProgressDialogVisible) {
             AlertDialog(
                 onDismissRequest = { isImportProgressDialogVisible = false },
@@ -777,12 +821,19 @@ fun SpeakerScreen(
                 isImportEnabled = !uiState.isImporting && !uiState.isSyncing,
                 isCloudSyncEnabled = !uiState.isImporting && !uiState.isSyncing,
                 cloudStatusText = cloudStatusText,
+                isDirectoryRenameEnabled = !uiState.isImporting &&
+                    !uiState.isSyncing &&
+                    !isSelectedDocumentPlaying &&
+                    !isSelectedDocumentPaused,
                 isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
                 onFilePickerImport = { speakerViewModel.showDriveImportDialog() },
                 onUploadDirectoryToCloud = { directory ->
                     pendingCloudUploadDirectory = directory.displayName
+                },
+                onRenameDirectory = { directory ->
+                    speakerViewModel.showRenameFolderDialog(directory)
                 },
                 onCloudImport = {
                     selectedRemoteFolderIds = emptySet()

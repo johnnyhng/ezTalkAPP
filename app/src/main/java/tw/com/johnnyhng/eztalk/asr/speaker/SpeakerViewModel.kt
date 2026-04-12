@@ -23,6 +23,10 @@ internal data class SpeakerScreenUiState(
     val showCreateFolderDialog: Boolean = false,
     val newFolderName: String = "",
     val createFolderDialogError: String? = null,
+    val showRenameFolderDialog: Boolean = false,
+    val renameSourceFolderName: String? = null,
+    val renameFolderName: String = "",
+    val renameFolderDialogError: String? = null,
     val showDriveImportDialog: Boolean = false,
     val driveImportFolderName: String = "",
     val driveImportDialogError: String? = null,
@@ -196,10 +200,35 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         )
     }
 
+    fun showRenameFolderDialog(directory: SpeakerDirectoryUi) {
+        uiState = uiState.copy(
+            showRenameFolderDialog = true,
+            renameSourceFolderName = directory.displayName,
+            renameFolderName = directory.displayName,
+            renameFolderDialogError = null
+        )
+    }
+
+    fun dismissRenameFolderDialog() {
+        uiState = uiState.copy(
+            showRenameFolderDialog = false,
+            renameSourceFolderName = null,
+            renameFolderName = "",
+            renameFolderDialogError = null
+        )
+    }
+
     fun onNewFolderNameChanged(value: String) {
         uiState = uiState.copy(
             newFolderName = value,
             createFolderDialogError = null
+        )
+    }
+
+    fun onRenameFolderNameChanged(value: String) {
+        uiState = uiState.copy(
+            renameFolderName = value,
+            renameFolderDialogError = null
         )
     }
 
@@ -235,6 +264,52 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
                 FolderCreationResult.FAILED -> {
                     uiState = uiState.copy(
                         createFolderDialogError = context.getString(R.string.speaker_create_folder_failed)
+                    )
+                }
+            }
+        }
+    }
+
+    fun renameFolder() {
+        val userId = currentUserId ?: return
+        val sourceFolderName = uiState.renameSourceFolderName ?: return
+        val context = getApplication<Application>()
+        val sanitizedName = sanitizeFolderName(uiState.renameFolderName)
+        if (sanitizedName.isBlank()) {
+            uiState = uiState.copy(
+                renameFolderDialogError = context.getString(R.string.speaker_invalid_folder_name)
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                localRepository.renameFolder(
+                    userId = userId,
+                    sourceFolderName = sourceFolderName,
+                    targetFolderName = sanitizedName
+                )
+            }
+            when (result) {
+                FolderRenameResult.RENAMED -> {
+                    uiState = uiState.copy(
+                        showRenameFolderDialog = false,
+                        renameSourceFolderName = null,
+                        renameFolderName = "",
+                        renameFolderDialogError = null
+                    )
+                    reloadDirectories(userId)
+                }
+
+                FolderRenameResult.ALREADY_EXISTS -> {
+                    uiState = uiState.copy(
+                        renameFolderDialogError = context.getString(R.string.speaker_folder_exists, sanitizedName)
+                    )
+                }
+
+                FolderRenameResult.FAILED -> {
+                    uiState = uiState.copy(
+                        renameFolderDialogError = context.getString(R.string.speaker_rename_folder_failed)
                     )
                 }
             }

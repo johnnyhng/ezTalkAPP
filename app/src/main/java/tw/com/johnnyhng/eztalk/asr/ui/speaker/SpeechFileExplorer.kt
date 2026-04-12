@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,12 +49,14 @@ internal fun SpeechFileExplorer(
     isImportEnabled: Boolean,
     isCloudSyncEnabled: Boolean,
     cloudStatusText: String,
+    isDirectoryRenameEnabled: Boolean,
     isDirectoryDeleteEnabled: Boolean,
     isDocumentDeleteEnabled: Boolean,
     onCreateFolder: () -> Unit,
     onFilePickerImport: () -> Unit,
     onCloudImport: () -> Unit,
     onUploadDirectoryToCloud: (SpeakerDirectoryUi) -> Unit,
+    onRenameDirectory: (SpeakerDirectoryUi) -> Unit,
     onToggleExpand: (SpeakerDirectoryUi) -> Unit,
     onRefresh: () -> Unit,
     onImportIntoDirectory: (SpeakerDirectoryUi) -> Unit,
@@ -112,8 +115,10 @@ internal fun SpeechFileExplorer(
                                 onRefresh = onRefresh,
                                 onImport = { onImportIntoDirectory(directory) },
                                 onUploadToCloud = { onUploadDirectoryToCloud(directory) },
+                                onRename = { onRenameDirectory(directory) },
                                 isImportEnabled = isImportEnabled,
                                 isCloudSyncEnabled = isCloudSyncEnabled,
+                                isRenameEnabled = isDirectoryRenameEnabled,
                                 onRemove = { onRemoveDirectory(directory) },
                                 isDirectoryDeleteEnabled = isDirectoryDeleteEnabled,
                                 onRemoveDocument = onRemoveDocument,
@@ -224,8 +229,10 @@ private fun SpeakerDirectorySection(
     onRefresh: () -> Unit,
     onImport: () -> Unit,
     onUploadToCloud: () -> Unit,
+    onRename: () -> Unit,
     isImportEnabled: Boolean,
     isCloudSyncEnabled: Boolean,
+    isRenameEnabled: Boolean,
     onRemove: () -> Unit,
     isDirectoryDeleteEnabled: Boolean,
     onRemoveDocument: (SpeakerDocumentUi) -> Unit,
@@ -285,6 +292,16 @@ private fun SpeakerDirectorySection(
                 Icon(
                     imageVector = Icons.Filled.CloudUpload,
                     contentDescription = stringResource(R.string.speaker_cloud_upload)
+                )
+            }
+            IconButton(
+                onClick = onRename,
+                enabled = isRenameEnabled,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = stringResource(R.string.speaker_rename_folder)
                 )
             }
             IconButton(
