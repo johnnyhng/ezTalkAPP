@@ -52,6 +52,7 @@ internal fun EditRecognitionDialog(
     onSpeakConfirm: ((String) -> Unit)? = null,
     userId: String,
     backendUrl: String,
+    allowInsecureTls: Boolean = false,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -154,6 +155,7 @@ internal fun EditRecognitionDialog(
                     wavFilePath,
                     userId,
                     recognitionUrl,
+                    allowInsecureTls,
                     originalText,
                     currentText
                 )

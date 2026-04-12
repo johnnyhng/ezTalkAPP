@@ -19,6 +19,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +58,7 @@ import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.audio.AudioRouteDeviceUi
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
+import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
 import tw.com.johnnyhng.eztalk.asr.llm.GoogleAuthGeminiAccessTokenProvider
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
@@ -108,6 +112,7 @@ fun SettingsScreen(
     var geminiModelMenuExpanded by remember { mutableStateOf(false) }
     var audioInputMenuExpanded by remember { mutableStateOf(false) }
     var audioOutputMenuExpanded by remember { mutableStateOf(false) }
+    var advancedSettingsExpanded by rememberSaveable { mutableStateOf(false) }
     var backendUrl by remember(userSettings.backendUrl) { mutableStateOf(userSettings.backendUrl) }
     val geminiModelOptions = listOf(
         "none" to context.getString(R.string.gemini_model_option_none),
@@ -225,7 +230,7 @@ fun SettingsScreen(
             Text(
                 text = stringResource(
                     R.string.welcome_logged_in_user,
-                    session.displayName?.takeIf { it.isNotBlank() } ?: session.email
+                    session.displayLabel()
                 )
             )
             Text(
@@ -488,7 +493,6 @@ fun SettingsScreen(
                 enabled = !isDownloading
             )
         }
-
         Column(modifier = Modifier.padding(vertical = 16.dp)) {
             Text(stringResource(R.string.audio_routing_title), style = MaterialTheme.typography.titleMedium)
             Text(
@@ -615,6 +619,52 @@ fun SettingsScreen(
                 text = stringResource(R.string.audio_routing_note_bluetooth_sco),
                 style = MaterialTheme.typography.bodySmall
             )
+        }
+
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(R.string.advanced_settings),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                IconButton(
+                    onClick = { advancedSettingsExpanded = !advancedSettingsExpanded },
+                    enabled = !isDownloading
+                ) {
+                    Icon(
+                        imageVector = if (advancedSettingsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = stringResource(R.string.advanced_settings)
+                    )
+                }
+            }
+
+            if (advancedSettingsExpanded) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = stringResource(R.string.allow_insecure_tls))
+                        Text(
+                            text = stringResource(R.string.allow_insecure_tls_summary),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = userSettings.allowInsecureTls,
+                        onCheckedChange = { homeViewModel.updateAllowInsecureTls(it) },
+                        enabled = !isDownloading
+                    )
+                }
+            }
         }
     }
 }

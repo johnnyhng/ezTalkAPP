@@ -2,8 +2,8 @@ package tw.com.johnnyhng.eztalk.asr.managers
 
 import android.util.Log
 import tw.com.johnnyhng.eztalk.asr.TAG
-import tw.com.johnnyhng.eztalk.asr.utils.downloadModelFile
-import tw.com.johnnyhng.eztalk.asr.utils.listRemoteModels
+import tw.com.johnnyhng.eztalk.asr.utils.downloadModelFileResult
+import tw.com.johnnyhng.eztalk.asr.utils.listRemoteModelsResult
 import java.io.File
 
 data class RemoteModelDescriptor(
@@ -14,18 +14,25 @@ data class RemoteModelDescriptor(
     val updateAvailable: Boolean = false
 )
 
+data class RemoteModelListFetchResult(
+    val models: List<RemoteModelDescriptor>,
+    val errorMessage: String? = null
+)
+
 interface RemoteModelRepository {
     suspend fun listRemoteModels(
         modelApiBaseUrl: String,
         userId: String,
-        selectedModelName: String
-    ): List<RemoteModelDescriptor>
+        selectedModelName: String,
+        allowInsecureTls: Boolean
+    ): RemoteModelListFetchResult
 
     suspend fun downloadModel(
         modelApiBaseUrl: String,
         userId: String,
         remoteModel: RemoteModelDescriptor,
         userModelsDir: File,
+        allowInsecureTls: Boolean,
         onProgress: (Float?) -> Unit
     ): Result<File>
 }
@@ -34,21 +41,29 @@ object DirectUrlRemoteModelRepository : RemoteModelRepository {
     override suspend fun listRemoteModels(
         modelApiBaseUrl: String,
         userId: String,
-        selectedModelName: String
-    ): List<RemoteModelDescriptor> {
-        if (modelApiBaseUrl.trim().isBlank() || userId.trim().isBlank()) return emptyList()
-
-        return listRemoteModels(
-            baseUrl = modelApiBaseUrl,
-            userId = userId
-        ).map { modelName ->
-            RemoteModelDescriptor(
-                name = modelName,
-                filename = "model.int8.onnx",
-                fileSizeBytes = 0L,
-                serverHash = ""
-            )
+        selectedModelName: String,
+        allowInsecureTls: Boolean
+    ): RemoteModelListFetchResult {
+        if (modelApiBaseUrl.trim().isBlank() || userId.trim().isBlank()) {
+            return RemoteModelListFetchResult(emptyList())
         }
+
+        val result = listRemoteModelsResult(
+            baseUrl = modelApiBaseUrl,
+            userId = userId,
+            allowInsecureTls = allowInsecureTls
+        )
+        return RemoteModelListFetchResult(
+            models = result.models.map { modelName ->
+                RemoteModelDescriptor(
+                    name = modelName,
+                    filename = "model.int8.onnx",
+                    fileSizeBytes = 0L,
+                    serverHash = ""
+                )
+            },
+            errorMessage = result.errorMessage
+        )
     }
 
     override suspend fun downloadModel(
@@ -56,6 +71,7 @@ object DirectUrlRemoteModelRepository : RemoteModelRepository {
         userId: String,
         remoteModel: RemoteModelDescriptor,
         userModelsDir: File,
+        allowInsecureTls: Boolean,
         onProgress: (Float?) -> Unit
     ): Result<File> = runCatching {
         val targetDir = File(userModelsDir, remoteModel.name)
@@ -63,27 +79,29 @@ object DirectUrlRemoteModelRepository : RemoteModelRepository {
         val modelFile = File(targetDir, remoteModel.filename)
         val tokensFile = File(targetDir, "tokens.txt")
 
-        if (!downloadModelFile(
-                baseUrl = modelApiBaseUrl,
-                userId = userId,
-                modelName = remoteModel.name,
-                filename = remoteModel.filename,
-                targetFile = modelFile,
-                onProgress = onProgress
-            )
-        ) {
-            error("Failed to download ${remoteModel.filename}")
+        val modelDownload = downloadModelFileResult(
+            baseUrl = modelApiBaseUrl,
+            userId = userId,
+            modelName = remoteModel.name,
+            filename = remoteModel.filename,
+            targetFile = modelFile,
+            allowInsecureTls = allowInsecureTls,
+            onProgress = onProgress
+        )
+        if (!modelDownload.success) {
+            error(modelDownload.errorMessage ?: "Failed to download ${remoteModel.filename}")
         }
 
-        if (!downloadModelFile(
-                baseUrl = modelApiBaseUrl,
-                userId = userId,
-                modelName = remoteModel.name,
-                filename = "tokens.txt",
-                targetFile = tokensFile
-            )
-        ) {
-            error("Failed to download tokens.txt")
+        val tokensDownload = downloadModelFileResult(
+            baseUrl = modelApiBaseUrl,
+            userId = userId,
+            modelName = remoteModel.name,
+            filename = "tokens.txt",
+            targetFile = tokensFile,
+            allowInsecureTls = allowInsecureTls
+        )
+        if (!tokensDownload.success) {
+            error(tokensDownload.errorMessage ?: "Failed to download tokens.txt")
         }
 
         onProgress(null)

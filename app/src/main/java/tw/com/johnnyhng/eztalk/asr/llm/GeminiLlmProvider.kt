@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.utils.TLSExpireResolver
 
 internal data class GeminiProviderConfig(
     val model: String = "gemini-2.5-flash",
@@ -70,10 +71,14 @@ internal class GeminiLlmProvider(
                 request = request
             )
         }.getOrElse { error ->
-            Log.w(TAG, "Gemini request transport failure", error)
+            val detail = TLSExpireResolver.resolveMessage(
+                error = error,
+                fallbackMessage = "Gemini request failed before a response was received"
+            )
+            Log.w(TAG, "Gemini request transport failure: $detail", error)
             return Result.failure(
                 LlmError.Network(
-                    detail = "Gemini request failed before a response was received",
+                    detail = detail,
                     original = error
                 )
             )

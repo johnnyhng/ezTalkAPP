@@ -36,6 +36,9 @@
     <string name="check_version">檢查版本</string>
     <string name="delete_model">刪除模型</string>
     <string name="backend_url">後端網址</string>
+    <string name="advanced_settings">進階設定</string>
+    <string name="allow_insecure_tls">允許不安全的 TLS</string>
+    <string name="allow_insecure_tls_summary">略過後端憑證驗證，只建議短期應急使用。</string>
     <string name="delay">延遲: %1$d 毫秒</string>
     <string name="recognize_time">辨識時間: %1$d 毫秒</string>
     <string name="save_vad_segments">儲存 VAD 片段</string>

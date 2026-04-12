@@ -78,10 +78,11 @@ internal fun resolveRemoteCandidates(
     wavFilePath: String,
     userId: String,
     recognitionUrl: String,
+    allowInsecureTls: Boolean,
     originalText: String,
     currentText: String,
     readJsonlBlock: (String) -> JSONObject?,
-    postRecognitionBlock: (String, String, String) -> JSONObject?,
+    postRecognitionBlock: (String, String, String, Boolean) -> JSONObject?,
     saveJsonlBlock: (RemoteCandidateMetadata) -> Unit
 ): List<String> {
     val jsonlData = readJsonlBlock(jsonlPath)
@@ -95,7 +96,7 @@ internal fun resolveRemoteCandidates(
         return emptyList()
     }
 
-    val response = postRecognitionBlock(recognitionUrl, wavFilePath, userId) ?: return emptyList()
+    val response = postRecognitionBlock(recognitionUrl, wavFilePath, userId, allowInsecureTls) ?: return emptyList()
 
     return try {
         val latestJsonlData = readJsonlBlock(jsonlPath)
@@ -118,6 +119,7 @@ suspend fun getRemoteCandidates(
     wavFilePath: String,
     userId: String,
     recognitionUrl: String,
+    allowInsecureTls: Boolean = false,
     originalText: String,
     currentText: String
 ): List<String> {
@@ -132,6 +134,7 @@ suspend fun getRemoteCandidates(
             wavFilePath = wavFilePath,
             userId = userId,
             recognitionUrl = recognitionUrl,
+            allowInsecureTls = allowInsecureTls,
             originalText = originalText,
             currentText = currentText,
             readJsonlBlock = ::readJsonl,

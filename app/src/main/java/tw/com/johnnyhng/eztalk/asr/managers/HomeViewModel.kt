@@ -71,6 +71,7 @@ class HomeViewModel @JvmOverloads constructor(
     private val _remoteModels = mutableStateListOf<RemoteModelDescriptor>()
     val remoteModels: List<RemoteModelDescriptor> get() = _remoteModels
     var isFetchingRemoteModels by mutableStateOf(false)
+    var remoteModelsErrorMessage by mutableStateOf<String?>(null)
 
     // Recognition Manager integration
     private val recognitionManager = RecognitionManager(application)
@@ -217,25 +218,34 @@ class HomeViewModel @JvmOverloads constructor(
 
     private fun fetchRemoteModels() {
         isFetchingRemoteModels = true
+        remoteModelsErrorMessage = null
         viewModelScope.launch {
             try {
                 val selectedRemoteModelName = selectedModel?.name
                     ?: userSettings.value.selectedModelName.ifBlank { "custom-sense-voice" }
-                val remoteModels = withContext(Dispatchers.IO) {
-                    val fetchedModels = remoteModelRepository.listRemoteModels(
+                val remoteModelResult = withContext(Dispatchers.IO) {
+                    val fetchedResult = remoteModelRepository.listRemoteModels(
                         modelApiBaseUrl = userSettings.value.backendUrl,
                         userId = userSettings.value.userId,
-                        selectedModelName = selectedRemoteModelName
+                        selectedModelName = selectedRemoteModelName,
+                        allowInsecureTls = userSettings.value.allowInsecureTls
                     )
                     markUpdateAvailability(
-                        remoteModels = fetchedModels,
+                        remoteModels = fetchedResult.models,
                         backendUrl = userSettings.value.backendUrl,
                         userId = userSettings.value.userId,
+                        allowInsecureTls = userSettings.value.allowInsecureTls,
                         userModelsDir = getApplication<Application>().filesDir.resolve("models/${userSettings.value.userId}")
-                    )
+                    ).let { markedModels ->
+                        RemoteModelListFetchResult(
+                            models = markedModels,
+                            errorMessage = fetchedResult.errorMessage
+                        )
+                    }
                 }
                 _remoteModels.clear()
-                _remoteModels.addAll(remoteModels)
+                _remoteModels.addAll(remoteModelResult.models)
+                remoteModelsErrorMessage = remoteModelResult.errorMessage
             } finally {
                 isFetchingRemoteModels = false
             }
@@ -252,6 +262,7 @@ class HomeViewModel @JvmOverloads constructor(
                     userId = userSettings.value.userId,
                     remoteModel = remoteModel,
                     userModelsDir = getApplication<Application>().filesDir.resolve("models/${userSettings.value.userId}"),
+                    allowInsecureTls = userSettings.value.allowInsecureTls,
                     onProgress = { progress -> _downloadProgress.value = progress }
                 )
             }
@@ -279,6 +290,9 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateSaveVadSegmentsOnly(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(saveVadSegmentsOnly = v)) }
     fun updateInlineEdit(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(inlineEdit = v)) }
     fun updateBackendUrl(v: String) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(backendUrl = v)) }
+    fun updateAllowInsecureTls(v: Boolean) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(allowInsecureTls = v))
+    }
     fun updateEnableTtsFeedback(v: Boolean) = viewModelScope.launch { settingsManager.updateSettings(userSettings.value.copy(enableTtsFeedback = v)) }
     fun updateEntryScreenRoute(v: String) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(entryScreenRoute = sanitizeEntryScreenRoute(v)))
@@ -309,6 +323,7 @@ class HomeViewModel @JvmOverloads constructor(
         remoteModels: List<RemoteModelDescriptor>,
         backendUrl: String,
         userId: String,
+        allowInsecureTls: Boolean,
         userModelsDir: File
     ): List<RemoteModelDescriptor> {
         if (backendUrl.isBlank() || userId.isBlank()) return remoteModels
@@ -321,7 +336,8 @@ class HomeViewModel @JvmOverloads constructor(
         val remoteUpdate = checkModelUpdate(
             baseUrl = backendUrl,
             userId = userId,
-            modelName = mobileModel.name
+            modelName = mobileModel.name,
+            allowInsecureTls = allowInsecureTls
         ) ?: return remoteModels
 
         if (remoteUpdate.serverHash.isBlank()) return remoteModels

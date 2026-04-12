@@ -209,6 +209,7 @@ fun TranslateScreen(
                                 wavFilePath = transcript.wavFilePath,
                                 userId = userSettings.userId,
                                 recognitionUrl = userSettings.effectiveRecognitionUrl,
+                                allowInsecureTls = userSettings.allowInsecureTls,
                                 originalText = transcript.recognizedText,
                                 currentText = transcript.modifiedText
                             )

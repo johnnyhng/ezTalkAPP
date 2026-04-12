@@ -146,7 +146,8 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                         feedbackToBackend(
                             userSettings.backendUrl,
                             entry.wavFile.absolutePath,
-                            userSettings.userId
+                            userSettings.userId,
+                            allowInsecureTls = userSettings.allowInsecureTls
                         )
                     }
 

@@ -70,6 +70,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
+import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
+import tw.com.johnnyhng.eztalk.asr.utils.TLSExpireResolver
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 import tw.com.johnnyhng.eztalk.asr.screens.DataCollectScreen
@@ -176,7 +178,7 @@ fun MainScreen(
                     homeViewModel.updateUserId(session.email)
                     Toast.makeText(
                         context,
-                        context.getString(R.string.google_account_status, session.email),
+                        context.getString(R.string.google_account_status, session.displayLabel()),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -332,6 +334,9 @@ private suspend fun loadCachedGoogleProfilePhoto(
             }
         }
         BitmapFactory.decodeFile(cacheFile.absolutePath)?.asImageBitmap()
+    }.onFailure { error ->
+        val detail = TLSExpireResolver.resolveMessage(error, "Profile photo download failed")
+        Log.w(TAG, "Failed to load Google profile photo: $detail", error)
     }.getOrNull()
 }
 
