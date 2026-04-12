@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileOpen
@@ -44,10 +46,13 @@ internal fun SpeechFileExplorer(
     selectedDocumentId: String?,
     isLoading: Boolean,
     isImportEnabled: Boolean,
+    isCloudSyncEnabled: Boolean,
     isDirectoryDeleteEnabled: Boolean,
     isDocumentDeleteEnabled: Boolean,
     onCreateFolder: () -> Unit,
-    onGoogleDriveImport: () -> Unit,
+    onFilePickerImport: () -> Unit,
+    onCloudUploadAll: () -> Unit,
+    onCloudImport: () -> Unit,
     onToggleExpand: (SpeakerDirectoryUi) -> Unit,
     onRefresh: () -> Unit,
     onImportIntoDirectory: (SpeakerDirectoryUi) -> Unit,
@@ -64,8 +69,11 @@ internal fun SpeechFileExplorer(
         Column(modifier = Modifier.fillMaxSize()) {
             SpeakerOverviewHeader(
                 onCreateFolder = onCreateFolder,
-                onGoogleDriveImport = onGoogleDriveImport,
-                isImportEnabled = isImportEnabled
+                onFilePickerImport = onFilePickerImport,
+                onCloudUploadAll = onCloudUploadAll,
+                onCloudImport = onCloudImport,
+                isImportEnabled = isImportEnabled,
+                isCloudSyncEnabled = isCloudSyncEnabled
             )
             SpeakerDivider()
             when {
@@ -152,8 +160,11 @@ internal fun SpeakerDivider() {
 @Composable
 private fun SpeakerOverviewHeader(
     onCreateFolder: () -> Unit,
-    onGoogleDriveImport: () -> Unit,
-    isImportEnabled: Boolean
+    onFilePickerImport: () -> Unit,
+    onCloudUploadAll: () -> Unit,
+    onCloudImport: () -> Unit,
+    isImportEnabled: Boolean,
+    isCloudSyncEnabled: Boolean
 ) {
     Row(
         modifier = Modifier
@@ -174,12 +185,30 @@ private fun SpeakerOverviewHeader(
                 )
             }
             IconButton(
-                onClick = onGoogleDriveImport,
+                onClick = onFilePickerImport,
                 enabled = isImportEnabled
             ) {
                 Icon(
                     imageVector = Icons.Filled.FileOpen,
                     contentDescription = stringResource(R.string.speaker_google_drive)
+                )
+            }
+            IconButton(
+                onClick = onCloudUploadAll,
+                enabled = isCloudSyncEnabled
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CloudUpload,
+                    contentDescription = stringResource(R.string.speaker_cloud_upload_all)
+                )
+            }
+            IconButton(
+                onClick = onCloudImport,
+                enabled = isCloudSyncEnabled
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CloudDownload,
+                    contentDescription = stringResource(R.string.speaker_cloud_import)
                 )
             }
         }

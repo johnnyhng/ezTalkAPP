@@ -155,6 +155,16 @@
     <string name="speaker_importing_title">匯入中</string>
     <string name="speaker_importing_target">目標目錄：%1$s</string>
     <string name="speaker_importing_progress">%1$d / %2$d</string>
+    <string name="speaker_cloud_upload_all">全部上傳</string>
+    <string name="speaker_cloud_import">從雲端匯入</string>
+    <string name="speaker_cloud_empty">找不到雲端資料夾。</string>
+    <string name="speaker_cloud_upload_success">已上傳 %1$d 個資料夾與 %2$d 個 txt 檔</string>
+    <string name="speaker_cloud_import_success">已匯入 %1$d 個資料夾與 %2$d 個 txt 檔</string>
+    <string name="speaker_cloud_upload_failed">上傳 speaker 檔案失敗。</string>
+    <string name="speaker_cloud_import_failed">從雲端匯入檔案失敗。</string>
+    <string name="speaker_cloud_folder_count">%1$d 個 txt 檔</string>
+    <string name="speaker_sync_preparing">正在準備同步…</string>
+    <string name="speaker_sync_target">目標：%1$s</string>
     <string name="speaker_save_success">已儲存變更</string>
     <string name="speaker_save_failed">儲存 txt 檔案失敗。</string>
     <string name="speaker_semantic_candidate_selected">已定位到第 %1$d 行，請點播放或再說一次確認。</string>

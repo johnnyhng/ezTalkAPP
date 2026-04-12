@@ -8,6 +8,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -61,8 +63,10 @@ import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerNoMatchOutcome
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticDecision
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticModule
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerRemoteFolder
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSearchResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticIndexer
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSyncDirection
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
 import tw.com.johnnyhng.eztalk.asr.speaker.buildSpeakerContentLines
@@ -106,6 +110,7 @@ fun SpeakerScreen(
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var isContentSpeechModeEnabled by rememberSaveable { mutableStateOf(false) }
+    var selectedRemoteFolderIds by rememberSaveable { mutableStateOf(setOf<String>()) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
     val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
@@ -361,6 +366,30 @@ fun SpeakerScreen(
         }
     }
 
+    fun showUploadSummaryToast(uploadedFolderCount: Int, uploadedDocumentCount: Int) {
+        Toast.makeText(
+            context,
+            context.getString(
+                R.string.speaker_cloud_upload_success,
+                uploadedFolderCount,
+                uploadedDocumentCount
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    fun showCloudImportSummaryToast(importedFolderCount: Int, importedDocumentCount: Int) {
+        Toast.makeText(
+            context,
+            context.getString(
+                R.string.speaker_cloud_import_success,
+                importedFolderCount,
+                importedDocumentCount
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
     val txtImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
@@ -478,6 +507,49 @@ fun SpeakerScreen(
             )
         }
 
+        if (uiState.isSyncing) {
+            AlertDialog(
+                onDismissRequest = { },
+                title = {
+                    Text(
+                        text = stringResource(
+                            if (uiState.syncDirection == SpeakerSyncDirection.UPLOAD) {
+                                R.string.speaker_cloud_upload_all
+                            } else {
+                                R.string.speaker_cloud_import
+                            }
+                        )
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = if (uiState.syncProgressTargetName.isBlank()) {
+                                stringResource(R.string.speaker_sync_preparing)
+                            } else {
+                                stringResource(R.string.speaker_sync_target, uiState.syncProgressTargetName)
+                            },
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        LinearProgressIndicator(
+                            progress = if (uiState.syncProgressTotal == 0) 0f
+                            else uiState.syncProgressCurrent.toFloat() / uiState.syncProgressTotal.toFloat(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.speaker_importing_progress,
+                                uiState.syncProgressCurrent,
+                                uiState.syncProgressTotal
+                            ),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                },
+                confirmButton = {}
+            )
+        }
+
         if (uiState.showDriveImportDialog) {
             AlertDialog(
                 onDismissRequest = { speakerViewModel.dismissDriveImportDialog() },
@@ -527,6 +599,86 @@ fun SpeakerScreen(
             )
         }
 
+        if (uiState.showCloudImportDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    selectedRemoteFolderIds = emptySet()
+                    speakerViewModel.dismissCloudImportDialog()
+                },
+                title = {
+                    Text(text = stringResource(R.string.speaker_cloud_import))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (uiState.cloudSyncError != null) {
+                            Text(
+                                text = uiState.cloudSyncError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (uiState.remoteFolders.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.speaker_cloud_empty),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else {
+                            uiState.remoteFolders.forEach { folder ->
+                                RemoteFolderRow(
+                                    folder = folder,
+                                    isSelected = selectedRemoteFolderIds.contains(folder.id),
+                                    onToggle = {
+                                        selectedRemoteFolderIds = if (selectedRemoteFolderIds.contains(folder.id)) {
+                                            selectedRemoteFolderIds - folder.id
+                                        } else {
+                                            selectedRemoteFolderIds + folder.id
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val targetFolders = uiState.remoteFolders.filter { selectedRemoteFolderIds.contains(it.id) }
+                            if (targetFolders.isEmpty()) return@TextButton
+                            scope.launch {
+                                val result = speakerViewModel.importRemoteFolders(targetFolders)
+                                result.onSuccess { summary ->
+                                    selectedRemoteFolderIds = emptySet()
+                                    showCloudImportSummaryToast(
+                                        importedFolderCount = summary.importedFolders,
+                                        importedDocumentCount = summary.importedDocuments
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.speaker_cloud_import_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        },
+                        enabled = selectedRemoteFolderIds.isNotEmpty() && !uiState.isSyncing
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            selectedRemoteFolderIds = emptySet()
+                            speakerViewModel.dismissCloudImportDialog()
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
         SpeakerPaneHeader(
             title = stringResource(R.string.speaker_explorer_pane_title),
             isExpanded = expandedPane == SpeakerExpandedPane.EXPLORER,
@@ -538,11 +690,33 @@ fun SpeakerScreen(
                 directories = uiState.directories,
                 selectedDocumentId = uiState.selectedDocumentId,
                 isLoading = uiState.isLoading,
-                isImportEnabled = !uiState.isImporting,
+                isImportEnabled = !uiState.isImporting && !uiState.isSyncing,
+                isCloudSyncEnabled = !uiState.isImporting && !uiState.isSyncing,
                 isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
-                onGoogleDriveImport = { speakerViewModel.showDriveImportDialog() },
+                onFilePickerImport = { speakerViewModel.showDriveImportDialog() },
+                onCloudUploadAll = {
+                    scope.launch {
+                        val result = speakerViewModel.uploadAllToCloud()
+                        result.onSuccess { summary ->
+                            showUploadSummaryToast(
+                                uploadedFolderCount = summary.uploadedFolders,
+                                uploadedDocumentCount = summary.uploadedDocuments
+                            )
+                        }.onFailure {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.speaker_cloud_upload_failed),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                },
+                onCloudImport = {
+                    selectedRemoteFolderIds = emptySet()
+                    speakerViewModel.showCloudImportDialog()
+                },
                 onToggleExpand = { directory -> speakerViewModel.toggleDirectory(directory) },
                 onRefresh = { speakerViewModel.refreshDirectories() },
                 onImportIntoDirectory = { directory ->
@@ -722,6 +896,41 @@ private fun SpeakerPaneHeader(
             Icon(
                 imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                 contentDescription = null
+            )
+        }
+    }
+}
+
+@Composable
+private fun RemoteFolderRow(
+    folder: SpeakerRemoteFolder,
+    isSelected: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = { onToggle() }
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp)
+        ) {
+            Text(
+                text = folder.folderName,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = stringResource(R.string.speaker_cloud_folder_count, folder.documentCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
