@@ -138,8 +138,8 @@
     <string name="speaker_folder_name_label">資料夾名稱</string>
     <string name="speaker_folder_name_placeholder">例如：product-demo</string>
     <string name="speaker_create_folder">建立資料夾</string>
-    <string name="speaker_google_drive">Google Drive</string>
-    <string name="speaker_select_folder_for_import">請使用目錄列上的上傳圖示，將 txt 從 Google Drive 匯入指定資料夾。</string>
+    <string name="speaker_google_drive">匯入檔案</string>
+    <string name="speaker_select_folder_for_import">使用匯入功能建立資料夾，並一次選取多個 txt 檔案。</string>
     <string name="speaker_invalid_folder_name">請輸入有效的資料夾名稱。</string>
     <string name="speaker_folder_exists">資料夾 %1$s 已存在。</string>
     <string name="speaker_create_folder_failed">建立資料夾失敗。</string>
@@ -151,7 +151,7 @@
     <string name="speaker_import_no_txt">未選取任何 txt 檔案。</string>
     <string name="speaker_tts_not_ready">TTS 尚未初始化完成。</string>
     <string name="speaker_import_target_folder_label">匯入目標目錄</string>
-    <string name="speaker_import_target_folder_placeholder">例如：drive-import</string>
+    <string name="speaker_import_target_folder_placeholder">例如：imported-scripts</string>
     <string name="speaker_importing_title">匯入中</string>
     <string name="speaker_importing_target">目標目錄：%1$s</string>
     <string name="speaker_importing_progress">%1$d / %2$d</string>

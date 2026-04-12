@@ -138,8 +138,8 @@
     <string name="speaker_folder_name_label">Folder name</string>
     <string name="speaker_folder_name_placeholder">For example: product-demo</string>
     <string name="speaker_create_folder">Create Folder</string>
-    <string name="speaker_google_drive">Google Drive</string>
-    <string name="speaker_select_folder_for_import">Use the upload icon on a folder row to import txt from Google Drive.</string>
+    <string name="speaker_google_drive">Import files</string>
+    <string name="speaker_select_folder_for_import">Use the import action to create a folder and select multiple txt files.</string>
     <string name="speaker_invalid_folder_name">Please enter a valid folder name.</string>
     <string name="speaker_folder_exists">Folder %1$s already exists.</string>
     <string name="speaker_create_folder_failed">Failed to create folder.</string>
@@ -151,7 +151,7 @@
     <string name="speaker_import_no_txt">No txt files were selected.</string>
     <string name="speaker_tts_not_ready">TTS is not ready yet.</string>
     <string name="speaker_import_target_folder_label">Target folder</string>
-    <string name="speaker_import_target_folder_placeholder">For example: drive-import</string>
+    <string name="speaker_import_target_folder_placeholder">For example: imported-scripts</string>
     <string name="speaker_importing_title">Importing files</string>
     <string name="speaker_importing_target">Target folder: %1$s</string>
     <string name="speaker_importing_progress">%1$d / %2$d</string>

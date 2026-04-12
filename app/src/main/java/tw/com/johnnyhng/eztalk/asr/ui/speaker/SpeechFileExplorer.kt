@@ -17,9 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -178,7 +178,7 @@ private fun SpeakerOverviewHeader(
                 enabled = isImportEnabled
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Cloud,
+                    imageVector = Icons.Filled.FileOpen,
                     contentDescription = stringResource(R.string.speaker_google_drive)
                 )
             }
