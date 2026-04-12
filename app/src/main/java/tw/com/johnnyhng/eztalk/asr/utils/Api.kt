@@ -421,6 +421,10 @@ internal fun executeRequestWithRedirects(
 ): HttpURLConnection? {
     var currentUrl = endpoint
     repeat(maxRedirects + 1) { attempt ->
+        Log.d(
+            TAG,
+            "HTTP request: method=$method, url=$currentUrl, allowInsecureTls=$allowInsecureTls, redirectAttempt=$attempt"
+        )
         val connection = openApiConnection(
             url = currentUrl,
             method = method,
@@ -592,6 +596,10 @@ fun feedbackToBackend(
     userId: String,
     allowInsecureTls: Boolean = false
 ): Boolean {
+    Log.d(
+        TAG,
+        "feedbackToBackend: allowInsecureTls=$allowInsecureTls, backendUrl=$backendUrl"
+    )
     return executeFeedbackToBackend(
         backendUrl = backendUrl,
         filePath = filePath,
@@ -599,8 +607,23 @@ fun feedbackToBackend(
         allowInsecureTls = allowInsecureTls,
         metadataReader = ::readJsonl,
         putUpdates = ::putForUpdates,
-        postProcessAudioBlock = ::postProcessAudio,
-        postTransferBlock = ::postTransfer
+        postProcessAudioBlock = { endpoint, path, id, data, insecureTls ->
+            postProcessAudio(
+                processAudioUrl = endpoint,
+                filePath = path,
+                userId = id,
+                metadata = data,
+                allowInsecureTls = insecureTls
+            )
+        },
+        postTransferBlock = { endpoint, path, id, insecureTls ->
+            postTransfer(
+                transferUrl = endpoint,
+                filePath = path,
+                userId = id,
+                allowInsecureTls = insecureTls
+            )
+        }
     )
 }
 

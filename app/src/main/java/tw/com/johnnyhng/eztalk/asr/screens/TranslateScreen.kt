@@ -514,7 +514,8 @@ fun TranslateScreen(
                                 feedbackToBackend(
                                     userSettings.backendUrl,
                                     transcript.wavFilePath,
-                                    userSettings.userId
+                                    userSettings.userId,
+                                    allowInsecureTls = userSettings.allowInsecureTls
                                 )
                             }
                             if (success) {

@@ -210,7 +210,8 @@ fun HomeScreen(
                     feedbackToBackend(
                         userSettings.backendUrl,
                         item.wavFilePath,
-                        userSettings.userId
+                        userSettings.userId,
+                        allowInsecureTls = userSettings.allowInsecureTls
                     )
                 }
 

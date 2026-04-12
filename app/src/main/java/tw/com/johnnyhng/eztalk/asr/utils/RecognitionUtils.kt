@@ -123,6 +123,10 @@ suspend fun getRemoteCandidates(
     originalText: String,
     currentText: String
 ): List<String> {
+    Log.d(
+        TAG,
+        "getRemoteCandidates: allowInsecureTls=$allowInsecureTls, recognitionUrl=$recognitionUrl"
+    )
     val jsonlFile = File(wavFilePath).resolveSibling(
         File(wavFilePath).nameWithoutExtension + ".jsonl"
     )
@@ -138,7 +142,14 @@ suspend fun getRemoteCandidates(
             originalText = originalText,
             currentText = currentText,
             readJsonlBlock = ::readJsonl,
-            postRecognitionBlock = ::postForRecognition,
+            postRecognitionBlock = { url, path, id, insecureTls ->
+                postForRecognition(
+                    recognitionUrl = url,
+                    filePath = path,
+                    userId = id,
+                    allowInsecureTls = insecureTls
+                )
+            },
             saveJsonlBlock = { metadata ->
                 saveJsonl(
                     context = context,
