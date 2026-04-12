@@ -61,6 +61,7 @@ fun DataCollectScreen(
     val latestAudioSamples by homeViewModel.latestSamples.collectAsState()
     val isRecognizingSpeech by homeViewModel.isRecognizingSpeech.collectAsState()
     val countdownProgress by homeViewModel.countdownProgress.collectAsState()
+    val userSettings by homeViewModel.userSettings.collectAsState()
     val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
@@ -71,7 +72,7 @@ fun DataCollectScreen(
     val latestIsSequenceMode by rememberUpdatedState(uiState.isSequenceMode)
     val latestIsAutoFlowEnabled by rememberUpdatedState(isAutoFlowEnabled)
 
-    LaunchedEffect(selectedModel) {
+    LaunchedEffect(selectedModel?.name, userSettings.userId, userSettings.mobileModelSha256) {
         if (selectedModel != null) {
             homeViewModel.ensureSelectedModelInitialized()
         }

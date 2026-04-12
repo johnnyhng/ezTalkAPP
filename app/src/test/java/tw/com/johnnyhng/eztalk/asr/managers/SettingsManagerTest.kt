@@ -25,6 +25,7 @@ class SettingsManagerTest {
         assertEquals("https://120.126.151.159:56432/api/v2", settings.backendUrl)
         assertTrue(settings.enableTtsFeedback)
         assertEquals("", settings.selectedModelName)
+        assertEquals("", settings.mobileModelSha256)
         assertEquals(null, settings.preferredAudioInputDeviceId)
         assertEquals(null, settings.preferredAudioOutputDeviceId)
         assertFalse(settings.allowAppAudioCapture)
@@ -50,6 +51,7 @@ class SettingsManagerTest {
             stringPreferencesKey("backend_url") to "https://example.com",
             booleanPreferencesKey("enable_tts_feedback") to true,
             stringPreferencesKey("selected_model_name") to "demo-model",
+            stringPreferencesKey("mobile_model_sha256") to "abc123",
             intPreferencesKey("preferred_audio_input_device_id") to 101,
             intPreferencesKey("preferred_audio_output_device_id") to 202,
             booleanPreferencesKey("allow_app_audio_capture") to true,
@@ -66,6 +68,7 @@ class SettingsManagerTest {
         assertEquals("https://example.com", settings.backendUrl)
         assertTrue(settings.enableTtsFeedback)
         assertEquals("demo-model", settings.selectedModelName)
+        assertEquals("abc123", settings.mobileModelSha256)
         assertEquals(101, settings.preferredAudioInputDeviceId)
         assertEquals(202, settings.preferredAudioOutputDeviceId)
         assertTrue(settings.allowAppAudioCapture)
@@ -84,6 +87,7 @@ class SettingsManagerTest {
             backendUrl = "https://backend.example.com",
             enableTtsFeedback = true,
             selectedModelName = "model-a",
+            mobileModelSha256 = "deadbeef",
             preferredAudioInputDeviceId = 303,
             preferredAudioOutputDeviceId = 404,
             allowAppAudioCapture = true,
@@ -100,6 +104,7 @@ class SettingsManagerTest {
         assertEquals("https://backend.example.com", preferences[stringPreferencesKey("backend_url")])
         assertEquals(true, preferences[booleanPreferencesKey("enable_tts_feedback")])
         assertEquals("model-a", preferences[stringPreferencesKey("selected_model_name")])
+        assertEquals("deadbeef", preferences[stringPreferencesKey("mobile_model_sha256")])
         assertEquals(303, preferences[intPreferencesKey("preferred_audio_input_device_id")])
         assertEquals(404, preferences[intPreferencesKey("preferred_audio_output_device_id")])
         assertEquals(true, preferences[booleanPreferencesKey("allow_app_audio_capture")])

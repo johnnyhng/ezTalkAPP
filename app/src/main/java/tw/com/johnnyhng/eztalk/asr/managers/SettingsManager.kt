@@ -20,6 +20,7 @@ private val backendUrlKey = stringPreferencesKey("backend_url")
 private val allowInsecureTlsKey = booleanPreferencesKey("allow_insecure_tls")
 private val enableTtsFeedbackKey = booleanPreferencesKey("enable_tts_feedback")
 private val selectedModelNameKey = stringPreferencesKey("selected_model_name")
+private val mobileModelSha256Key = stringPreferencesKey("mobile_model_sha256")
 private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
 private val geminiModelKey = stringPreferencesKey("gemini_model")
 private val preferredAudioInputDeviceIdKey = intPreferencesKey("preferred_audio_input_device_id")
@@ -40,6 +41,7 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         allowInsecureTls = preferences[allowInsecureTlsKey] ?: defaultUserSettings.allowInsecureTls,
         enableTtsFeedback = preferences[enableTtsFeedbackKey] ?: defaultUserSettings.enableTtsFeedback,
         selectedModelName = preferences[selectedModelNameKey] ?: defaultUserSettings.selectedModelName,
+        mobileModelSha256 = preferences[mobileModelSha256Key] ?: defaultUserSettings.mobileModelSha256,
         entryScreenRoute = sanitizeEntryScreenRoute(
             preferences[entryScreenRouteKey] ?: defaultUserSettings.entryScreenRoute
         ),
@@ -63,6 +65,7 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[allowInsecureTlsKey] = settings.allowInsecureTls
     preferences[enableTtsFeedbackKey] = settings.enableTtsFeedback
     preferences[selectedModelNameKey] = settings.selectedModelName
+    preferences[mobileModelSha256Key] = settings.mobileModelSha256
     preferences[entryScreenRouteKey] = sanitizeEntryScreenRoute(settings.entryScreenRoute)
     preferences[geminiModelKey] = settings.geminiModel
     if (settings.preferredAudioInputDeviceId != null) {
@@ -87,6 +90,12 @@ class SettingsManager(context: Context) {
     suspend fun updateSettings(settings: UserSettings) {
         dataStore.edit { preferences ->
             writeUserSettings(preferences, settings)
+        }
+    }
+
+    suspend fun updateMobileModelSha256(hash: String) {
+        dataStore.edit { preferences ->
+            preferences[mobileModelSha256Key] = hash
         }
     }
 }

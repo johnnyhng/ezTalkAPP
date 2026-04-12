@@ -16,6 +16,7 @@ class UserSettingsTest {
         assertEquals("https://120.126.151.159:56432/api/v2", settings.backendUrl)
         assertEquals(true, settings.enableTtsFeedback)
         assertEquals("", settings.selectedModelName)
+        assertEquals("", settings.mobileModelSha256)
     }
 
     @Test

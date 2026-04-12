@@ -128,6 +128,7 @@ class HomeViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             userSettings.collectLatest { settings ->
                 val list = ModelManager.listModels(getApplication(), settings.userId)
+                syncMobileModelSha256(settings.userId, settings.mobileModelSha256)
                 _models.clear()
                 _models.addAll(list)
                 
@@ -138,6 +139,20 @@ class HomeViewModel @JvmOverloads constructor(
                     _selectedModel.value = savedModel ?: list.firstOrNull()
                 }
             }
+        }
+    }
+
+    private suspend fun syncMobileModelSha256(userId: String, currentHash: String) {
+        val mobileModelFile = getApplication<Application>()
+            .filesDir
+            .resolve("models/$userId/mobile/model.int8.onnx")
+        val resolvedHash = if (mobileModelFile.exists()) {
+            sha256(mobileModelFile).orEmpty()
+        } else {
+            ""
+        }
+        if (resolvedHash != currentHash) {
+            settingsManager.updateMobileModelSha256(resolvedHash)
         }
     }
 
@@ -271,6 +286,12 @@ class HomeViewModel @JvmOverloads constructor(
 
             result.fold(
                 onSuccess = {
+                    if (remoteModel.name == "mobile") {
+                        syncMobileModelSha256(
+                            userId = userSettings.value.userId,
+                            currentHash = userSettings.value.mobileModelSha256
+                        )
+                    }
                     _downloadEventFlow.emit(DownloadUiEvent.ShowToast("Download complete: ${remoteModel.name}"))
                     loadModels()
                 },

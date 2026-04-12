@@ -81,7 +81,7 @@ fun HomeScreen(
     var isTtsSpeaking by remember { mutableStateOf(false) }
     val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
 
-    LaunchedEffect(selectedModel) {
+    LaunchedEffect(selectedModel?.name, userSettings.userId, userSettings.mobileModelSha256) {
         if (selectedModel != null) {
             homeViewModel.ensureSelectedModelInitialized()
         }

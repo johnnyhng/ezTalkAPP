@@ -135,7 +135,7 @@ fun TranslateScreen(
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
 
     // Initialize recognizer in the background
-    LaunchedEffect(selectedModel) {
+    LaunchedEffect(selectedModel?.name, userSettings.userId, userSettings.mobileModelSha256) {
         if (selectedModel != null) {
             Log.i(TAG, "ASR model initialization started.")
             homeViewModel.ensureSelectedModelInitialized()

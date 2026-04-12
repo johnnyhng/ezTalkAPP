@@ -13,6 +13,7 @@ data class UserSettings(
     val allowInsecureTls: Boolean = BuildConfig.ALLOW_INSECURE_TLS_BY_DEFAULT,
     val enableTtsFeedback: Boolean = true,
     val selectedModelName: String = "",
+    val mobileModelSha256: String = "",
     val entryScreenRoute: String = "home",
     val geminiModel: String = "gemini-2.5-flash",
     val preferredAudioInputDeviceId: Int? = null,
