@@ -16,6 +16,7 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max
@@ -235,6 +236,10 @@ class RecognitionManager(private val context: Context) {
 
                         val wavPath = saveAsWav(context, audioToSave, sampleRateInHz, 1, userId, filename)
                         if (wavPath != null) {
+                            Log.d(
+                                TAG,
+                                "DataCollect jsonl update: reason=final_utterance, file=${File(wavPath).name}, modified=$modifiedText, checked=$isDataCollectMode, mutable=${!isDataCollectMode}"
+                            )
                             saveJsonl(context, userId, filename, originalText, modifiedText, isDataCollectMode, !isDataCollectMode)
                             
                             onFinalResult(Transcript(

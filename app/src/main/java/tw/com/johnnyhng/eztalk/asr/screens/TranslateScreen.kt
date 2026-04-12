@@ -72,6 +72,13 @@ import kotlin.math.min
 private var audioRecord: AudioRecord? = null
 private const val sampleRateInHz = 16000
 
+private fun logTranslateJsonlUpdate(reason: String, transcript: Transcript) {
+    Log.d(
+        TAG,
+        "Translate jsonl update: reason=$reason, file=${File(transcript.wavFilePath).name}, modified=${transcript.modifiedText}, checked=${transcript.checked}, mutable=${transcript.mutable}, localCandidates=${transcript.localCandidates.size}, remoteCandidates=${transcript.remoteCandidates.size}"
+    )
+}
+
 @Composable
 fun TranslateScreen(
     homeViewModel: HomeViewModel = viewModel(),
@@ -177,6 +184,7 @@ fun TranslateScreen(
                                     stream.release()
                                     if (localResultText.isNotBlank()) {
                                         val updatedTranscript = transcript.copy(localCandidates = listOf(localResultText))
+                                        logTranslateJsonlUpdate("local_rerecognition", updatedTranscript)
                                         saveJsonl(
                                             context = context,
                                             userId = userSettings.userId,
@@ -418,6 +426,7 @@ fun TranslateScreen(
                                         textInput = newTranscript.modifiedText
 
                                         if (wavPath != null) {
+                                            logTranslateJsonlUpdate("final_recognition", newTranscript)
                                             saveJsonl(
                                                 context = context,
                                                 userId = userId,
@@ -532,6 +541,7 @@ fun TranslateScreen(
                                 val file = File(transcript.wavFilePath)
                                 val filename = file.nameWithoutExtension
                                 withContext(IO) {
+                                    logTranslateJsonlUpdate("tts_feedback_success", updatedTranscript)
                                     saveJsonl(
                                         context = context,
                                         userId = userId,
@@ -561,6 +571,7 @@ fun TranslateScreen(
                         val file = File(transcript.wavFilePath)
                         val filename = file.nameWithoutExtension
                         coroutineScope.launch(IO) {
+                            logTranslateJsonlUpdate("tts_without_feedback", updatedTranscript)
                             saveJsonl(
                                 context = context,
                                 userId = userId,

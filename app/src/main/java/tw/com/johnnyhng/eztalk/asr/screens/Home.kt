@@ -37,6 +37,13 @@ import tw.com.johnnyhng.eztalk.asr.widgets.*
 import java.io.File
 import java.util.*
 
+private fun logHomeJsonlUpdate(reason: String, transcript: Transcript) {
+    Log.d(
+        TAG,
+        "Home jsonl update: reason=$reason, file=${File(transcript.wavFilePath).name}, modified=${transcript.modifiedText}, checked=${transcript.checked}, mutable=${transcript.mutable}, localCandidates=${transcript.localCandidates.size}, remoteCandidates=${transcript.remoteCandidates.size}"
+    )
+}
+
 @Composable
 fun HomeScreen(
     homeViewModel: HomeViewModel = viewModel(),
@@ -155,6 +162,7 @@ fun HomeScreen(
 
                     updated?.let {
                         withContext(Dispatchers.IO) {
+                            logHomeJsonlUpdate("tts_feedback_success", it)
                             saveJsonl(
                                 context = context,
                                 userId = userSettings.userId,
@@ -183,6 +191,7 @@ fun HomeScreen(
             )
             resultList[index] = updated
             coroutineScope.launch(Dispatchers.IO) {
+                logHomeJsonlUpdate("tts_without_feedback", updated)
                 saveJsonl(
                     context = context,
                     userId = userSettings.userId,
@@ -223,6 +232,7 @@ fun HomeScreen(
                     )
                     resultList[index] = updatedItem
                     withContext(Dispatchers.IO) {
+                        logHomeJsonlUpdate("dialog_tts_feedback_success", updatedItem)
                         saveJsonl(
                             context = context,
                             userId = userSettings.userId,
@@ -251,6 +261,7 @@ fun HomeScreen(
             )
             resultList[index] = updatedItem
             coroutineScope.launch(Dispatchers.IO) {
+                logHomeJsonlUpdate("dialog_tts_without_feedback", updatedItem)
                 saveJsonl(
                     context = context,
                     userId = userSettings.userId,
@@ -405,6 +416,7 @@ fun HomeScreen(
                                                             resultList[idx] = updatedItem
                                                         }
                                                     }
+                                                    logHomeJsonlUpdate("local_rerecognition", updatedItem)
                                                     saveJsonl(
                                                         context = context,
                                                         userId = userSettings.userId,
@@ -467,6 +479,7 @@ fun HomeScreen(
                     )
                     resultList[index] = updatedItem
                     coroutineScope.launch(Dispatchers.IO) {
+                        logHomeJsonlUpdate("dialog_confirm", updatedItem)
                         saveJsonl(
                             context = context,
                             userId = userSettings.userId,
