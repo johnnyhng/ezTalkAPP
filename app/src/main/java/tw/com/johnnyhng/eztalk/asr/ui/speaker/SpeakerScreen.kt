@@ -144,6 +144,14 @@ fun SpeakerScreen(
         } else {
             null
         }
+    val cloudStatusText = if (uiState.isCloudSignedIn) {
+        context.getString(
+            R.string.speaker_cloud_status_signed_in,
+            uiState.cloudUserId.orEmpty()
+        )
+    } else {
+        context.getString(R.string.speaker_cloud_status_signed_out)
+    }
     val playDocumentWithAsrStop: (SpeakerDocumentUi) -> SpeakerPlaybackResult = { document ->
         if (speakerAsrState.isRecording) {
             speakerAsrController.stop()
@@ -692,6 +700,7 @@ fun SpeakerScreen(
                 isLoading = uiState.isLoading,
                 isImportEnabled = !uiState.isImporting && !uiState.isSyncing,
                 isCloudSyncEnabled = !uiState.isImporting && !uiState.isSyncing,
+                cloudStatusText = cloudStatusText,
                 isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 onCreateFolder = { speakerViewModel.showCreateFolderDialog() },

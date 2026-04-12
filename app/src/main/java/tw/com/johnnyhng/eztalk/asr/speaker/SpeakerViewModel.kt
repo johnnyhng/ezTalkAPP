@@ -7,6 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
+import tw.com.johnnyhng.eztalk.asr.TAG
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -29,6 +32,8 @@ internal data class SpeakerScreenUiState(
     val syncProgressCurrent: Int = 0,
     val syncProgressTotal: Int = 0,
     val syncProgressTargetName: String = "",
+    val isCloudSignedIn: Boolean = false,
+    val cloudUserId: String? = null,
     val showCloudImportDialog: Boolean = false,
     val cloudSyncError: String? = null,
     val importProgressCurrent: Int = 0,
@@ -44,14 +49,31 @@ internal data class SpeakerScreenUiState(
 internal class SpeakerViewModel(application: Application) : AndroidViewModel(application) {
     private val localRepository = SpeakerLocalRepository(application)
     private val repository = SpeakerRepository(application)
+    private val firebaseAuth = FirebaseAuth.getInstance()
     private val syncService = SpeakerSyncService(
         localRepository = localRepository,
         cloudRepository = FirebaseSpeakerCloudRepository()
     )
+    private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
+        val user = auth.currentUser
+        uiState = uiState.copy(
+            isCloudSignedIn = user != null,
+            cloudUserId = user?.uid
+        )
+    }
     private var currentUserId: String? = null
 
     var uiState by mutableStateOf(SpeakerScreenUiState())
         private set
+
+    init {
+        firebaseAuth.addAuthStateListener(authStateListener)
+        val user = firebaseAuth.currentUser
+        uiState = uiState.copy(
+            isCloudSignedIn = user != null,
+            cloudUserId = user?.uid
+        )
+    }
 
     fun setUserId(userId: String) {
         if (currentUserId == userId) return
@@ -330,7 +352,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
     }
 
     fun loadRemoteFolders() {
-        val userId = currentUserId ?: return
+        val cloudUserId = requireCloudUserId() ?: return
         viewModelScope.launch {
             uiState = uiState.copy(
                 isSyncing = true,
@@ -342,7 +364,7 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
             )
             runCatching {
                 withContext(Dispatchers.IO) {
-                    syncService.listRemoteFolders(userId)
+                    syncService.listRemoteFolders(cloudUserId)
                 }
             }.onSuccess { folders ->
                 uiState = uiState.copy(
@@ -360,7 +382,9 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
     }
 
     suspend fun uploadAllToCloud(): Result<SpeakerUploadSummary> {
-        val userId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
         uiState = uiState.copy(
             isSyncing = true,
             syncDirection = SpeakerSyncDirection.UPLOAD,
@@ -371,7 +395,10 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         )
         val result = runCatching {
             withContext(Dispatchers.IO) {
-                syncService.uploadAllToCloud(userId) { progress ->
+                syncService.uploadAllToCloud(
+                    localUserId = localUserId,
+                    cloudUserId = cloudUserId
+                ) { progress ->
                     uiState = uiState.copy(
                         syncProgressCurrent = progress.current,
                         syncProgressTotal = progress.total,
@@ -379,6 +406,11 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
                     )
                 }
             }
+        }
+        result.onSuccess {
+            Log.i(TAG, "Speaker cloud upload completed with uid=$cloudUserId localUserId=$localUserId")
+        }.onFailure { error ->
+            Log.w(TAG, "Speaker cloud upload failed with uid=$cloudUserId", error)
         }
         uiState = uiState.copy(
             isSyncing = false,
@@ -391,7 +423,9 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         folders: List<SpeakerRemoteFolder>,
         conflictPolicy: SpeakerSyncConflictPolicy = SpeakerSyncConflictPolicy.OVERWRITE
     ): Result<SpeakerImportSummary> {
-        val userId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
         uiState = uiState.copy(
             isSyncing = true,
             syncDirection = SpeakerSyncDirection.IMPORT,
@@ -403,7 +437,8 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         val result = runCatching {
             withContext(Dispatchers.IO) {
                 syncService.importRemoteFolders(
-                    userId = userId,
+                    localUserId = localUserId,
+                    cloudUserId = cloudUserId,
                     remoteFolders = folders,
                     conflictPolicy = conflictPolicy
                 ) { progress ->
@@ -415,15 +450,36 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
                 }
             }
         }
+        result.onSuccess {
+            Log.i(TAG, "Speaker cloud import completed with uid=$cloudUserId localUserId=$localUserId")
+        }.onFailure { error ->
+            Log.w(TAG, "Speaker cloud import failed with uid=$cloudUserId", error)
+        }
         uiState = uiState.copy(
             isSyncing = false,
             showCloudImportDialog = false,
             cloudSyncError = result.exceptionOrNull()?.message
         )
         if (result.isSuccess) {
-            reloadDirectories(userId)
+            reloadDirectories(localUserId)
         }
         return result
+    }
+
+    private fun requireCloudUserId(): String? {
+        val cloudUserId = firebaseAuth.currentUser?.uid
+        if (cloudUserId == null) {
+            val context = getApplication<Application>()
+            uiState = uiState.copy(
+                cloudSyncError = context.getString(R.string.speaker_cloud_sign_in_required)
+            )
+        }
+        return cloudUserId
+    }
+
+    override fun onCleared() {
+        firebaseAuth.removeAuthStateListener(authStateListener)
+        super.onCleared()
     }
 
     private fun reloadDirectories(userId: String? = currentUserId) {

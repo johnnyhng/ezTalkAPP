@@ -47,6 +47,7 @@ internal fun SpeechFileExplorer(
     isLoading: Boolean,
     isImportEnabled: Boolean,
     isCloudSyncEnabled: Boolean,
+    cloudStatusText: String,
     isDirectoryDeleteEnabled: Boolean,
     isDocumentDeleteEnabled: Boolean,
     onCreateFolder: () -> Unit,
@@ -73,7 +74,8 @@ internal fun SpeechFileExplorer(
                 onCloudUploadAll = onCloudUploadAll,
                 onCloudImport = onCloudImport,
                 isImportEnabled = isImportEnabled,
-                isCloudSyncEnabled = isCloudSyncEnabled
+                isCloudSyncEnabled = isCloudSyncEnabled,
+                cloudStatusText = cloudStatusText
             )
             SpeakerDivider()
             when {
@@ -164,7 +166,8 @@ private fun SpeakerOverviewHeader(
     onCloudUploadAll: () -> Unit,
     onCloudImport: () -> Unit,
     isImportEnabled: Boolean,
-    isCloudSyncEnabled: Boolean
+    isCloudSyncEnabled: Boolean,
+    cloudStatusText: String
 ) {
     Row(
         modifier = Modifier
@@ -173,10 +176,17 @@ private fun SpeakerOverviewHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = stringResource(R.string.speaker_overview_title),
-            style = MaterialTheme.typography.titleMedium
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.speaker_overview_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = cloudStatusText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             IconButton(onClick = onCreateFolder) {
                 Icon(

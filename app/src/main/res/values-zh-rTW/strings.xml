@@ -9,6 +9,8 @@
     <string name="language">語言</string>
     <string name="current_user_id">目前的使用者 ID: %1$s</string>
     <string name="google_account_status">Google 帳號：%1$s</string>
+    <string name="firebase_sign_in_success">Firebase 已登入：%1$s</string>
+    <string name="firebase_sign_in_failed">Firebase 登入失敗：%1$s</string>
     <string name="google_account_not_signed_in">尚未登入</string>
     <string name="welcome_logged_in_user">歡迎，%1$s</string>
     <string name="sign_in_with_google">使用 Google 登入</string>
@@ -162,6 +164,9 @@
     <string name="speaker_cloud_import_success">已匯入 %1$d 個資料夾與 %2$d 個 txt 檔</string>
     <string name="speaker_cloud_upload_failed">上傳 speaker 檔案失敗。</string>
     <string name="speaker_cloud_import_failed">從雲端匯入檔案失敗。</string>
+    <string name="speaker_cloud_sign_in_required">使用雲端同步前，請先完成 Firebase 登入。</string>
+    <string name="speaker_cloud_status_signed_in">雲端：已登入（%1$s）</string>
+    <string name="speaker_cloud_status_signed_out">雲端：尚未登入</string>
     <string name="speaker_cloud_folder_count">%1$d 個 txt 檔</string>
     <string name="speaker_sync_preparing">正在準備同步…</string>
     <string name="speaker_sync_target">目標：%1$s</string>

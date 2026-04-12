@@ -9,6 +9,8 @@
     <string name="language">Language</string>
     <string name="current_user_id">Current User ID: %1$s</string>
     <string name="google_account_status">Google account: %1$s</string>
+    <string name="firebase_sign_in_success">Firebase signed in: %1$s</string>
+    <string name="firebase_sign_in_failed">Firebase sign-in failed: %1$s</string>
     <string name="google_account_not_signed_in">Not signed in</string>
     <string name="welcome_logged_in_user">Welcome, %1$s</string>
     <string name="sign_in_with_google">Sign in with Google</string>
@@ -162,6 +164,9 @@
     <string name="speaker_cloud_import_success">Imported %1$d folders and %2$d txt files</string>
     <string name="speaker_cloud_upload_failed">Failed to upload speaker files.</string>
     <string name="speaker_cloud_import_failed">Failed to import cloud files.</string>
+    <string name="speaker_cloud_sign_in_required">Sign in to Firebase before using cloud sync.</string>
+    <string name="speaker_cloud_status_signed_in">Cloud: signed in (%1$s)</string>
+    <string name="speaker_cloud_status_signed_out">Cloud: not signed in</string>
     <string name="speaker_cloud_folder_count">%1$d txt files</string>
     <string name="speaker_sync_preparing">Preparing sync…</string>
     <string name="speaker_sync_target">Target: %1$s</string>

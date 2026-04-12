@@ -2,6 +2,7 @@ package tw.com.johnnyhng.eztalk.asr.auth
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import kotlinx.coroutines.tasks.await
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -10,6 +11,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import tw.com.johnnyhng.eztalk.asr.TAG
 
 internal class GoogleSignInManager {
     fun getSignInClient(context: Context): GoogleSignInClient {
@@ -48,17 +50,31 @@ internal class GoogleSignInManager {
 
     suspend fun signInToFirebase(session: GoogleAccountSession): Result<Unit> {
         val idToken = session.idToken
-            ?: return Result.failure(IllegalStateException("Google ID token unavailable"))
+        if (idToken.isNullOrBlank()) {
+            Log.w(TAG, "Firebase sign in skipped because Google session has no ID token for email=${session.email}")
+            return Result.failure(IllegalStateException("Google ID token unavailable"))
+        }
+        Log.i(TAG, "Firebase sign in requested for email=${session.email} hasIdToken=${idToken.isNotBlank()}")
         return runCatching {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
-            FirebaseAuth.getInstance().signInWithCredential(credential).await()
+            val authResult = FirebaseAuth.getInstance().signInWithCredential(credential).await()
+            Log.i(
+                TAG,
+                "Firebase sign in succeeded email=${session.email} uid=${authResult.user?.uid.orEmpty()}"
+            )
             Unit
+        }.onFailure { error ->
+            Log.w(TAG, "Firebase sign in failed for email=${session.email}", error)
         }
     }
 
     suspend fun restoreFirebaseSession(context: Context): Result<Unit> {
         val session = getCurrentSession(context)
-            ?: return Result.failure(IllegalStateException("No Google session available"))
+        if (session == null) {
+            Log.w(TAG, "Firebase session restore skipped because there is no Google session")
+            return Result.failure(IllegalStateException("No Google session available"))
+        }
+        Log.i(TAG, "Attempting Firebase session restore for email=${session.email} hasIdToken=${!session.idToken.isNullOrBlank()}")
         return signInToFirebase(session)
     }
 

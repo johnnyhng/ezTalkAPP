@@ -178,9 +178,34 @@ fun MainScreen(
                 .onSuccess { session ->
                     googleSession = session
                     homeViewModel.updateUserId(session.email)
+                    Log.i(
+                        TAG,
+                        "Google sign in succeeded email=${session.email} hasIdToken=${!session.idToken.isNullOrBlank()}"
+                    )
                     scope.launch {
                         signInManager.signInToFirebase(session)
-                            .onFailure { error -> Log.w(TAG, "Firebase sign in failed", error) }
+                            .onSuccess {
+                                val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                                Toast.makeText(
+                                    context,
+                                    context.getString(
+                                        R.string.firebase_sign_in_success,
+                                        firebaseUser?.uid.orEmpty()
+                                    ),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            .onFailure { error ->
+                                Log.w(TAG, "Firebase sign in failed", error)
+                                Toast.makeText(
+                                    context,
+                                    context.getString(
+                                        R.string.firebase_sign_in_failed,
+                                        error.message ?: error.javaClass.simpleName
+                                    ),
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                     }
                     Toast.makeText(
                         context,
@@ -200,7 +225,13 @@ fun MainScreen(
         googleSession = session
         if (session != null) {
             signInManager.restoreFirebaseSession(context)
-                .onFailure { error -> Log.w(TAG, "Firebase session restore failed", error) }
+                .onSuccess {
+                    val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                    Log.i(TAG, "Firebase session restore succeeded uid=${firebaseUser?.uid.orEmpty()}")
+                }
+                .onFailure { error ->
+                    Log.w(TAG, "Firebase session restore failed", error)
+                }
         }
     }
     val profilePhoto = produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, googleSession?.email, googleSession?.photoUrl) {
