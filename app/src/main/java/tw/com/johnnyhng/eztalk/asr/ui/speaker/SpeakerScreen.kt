@@ -113,6 +113,7 @@ fun SpeakerScreen(
     var selectedRemoteFolderIds by rememberSaveable { mutableStateOf(setOf<String>()) }
     var isImportProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
     var isSyncProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var pendingCloudUploadDirectory by rememberSaveable { mutableStateOf<String?>(null) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
     val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
@@ -713,6 +714,55 @@ fun SpeakerScreen(
             )
         }
 
+        if (pendingCloudUploadDirectory != null) {
+            AlertDialog(
+                onDismissRequest = { pendingCloudUploadDirectory = null },
+                title = {
+                    Text(text = stringResource(R.string.speaker_cloud_upload))
+                },
+                text = {
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_cloud_upload_overwrite_confirm,
+                            pendingCloudUploadDirectory.orEmpty()
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val folderName = pendingCloudUploadDirectory ?: return@TextButton
+                            pendingCloudUploadDirectory = null
+                            scope.launch {
+                                val result = speakerViewModel.uploadFolderToCloud(folderName)
+                                result.onSuccess { summary ->
+                                    showFolderUploadSummaryToast(
+                                        folderName = folderName,
+                                        uploadedDocumentCount = summary.uploadedDocuments
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.speaker_cloud_upload_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { pendingCloudUploadDirectory = null }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
         SpeakerPaneHeader(
             title = stringResource(R.string.speaker_explorer_pane_title),
             isExpanded = expandedPane == SpeakerExpandedPane.EXPLORER,
@@ -732,21 +782,7 @@ fun SpeakerScreen(
                 onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
                 onFilePickerImport = { speakerViewModel.showDriveImportDialog() },
                 onUploadDirectoryToCloud = { directory ->
-                    scope.launch {
-                        val result = speakerViewModel.uploadFolderToCloud(directory.displayName)
-                        result.onSuccess { summary ->
-                            showFolderUploadSummaryToast(
-                                folderName = directory.displayName,
-                                uploadedDocumentCount = summary.uploadedDocuments
-                            )
-                        }.onFailure {
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.speaker_cloud_upload_failed),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
+                    pendingCloudUploadDirectory = directory.displayName
                 },
                 onCloudImport = {
                     selectedRemoteFolderIds = emptySet()
@@ -959,7 +995,7 @@ private fun RemoteFolderRow(
                 .padding(start = 8.dp)
         ) {
             Text(
-                text = folder.remoteDisplayName,
+                text = folder.folderName,
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(

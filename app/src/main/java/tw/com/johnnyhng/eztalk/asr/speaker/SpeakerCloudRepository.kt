@@ -10,7 +10,6 @@ internal interface SpeakerCloudRepository {
     suspend fun listRemoteDocuments(userId: String, folderId: String): List<SpeakerRemoteDocument>
     suspend fun uploadDocument(
         userId: String,
-        ownerEmail: String,
         folderName: String,
         fileName: String,
         fullText: String,
@@ -29,19 +28,14 @@ internal class FirebaseSpeakerCloudRepository(
             .await()
             .documents
             .map { document ->
-                val folderName = document.getString("folderName").orEmpty()
-                val ownerEmail = document.getString("ownerEmail")
                 SpeakerRemoteFolder(
                     id = document.id,
-                    folderName = folderName,
-                    remoteDisplayName = document.getString("remoteDisplayName")
-                        ?: buildRemoteFolderDisplayName(ownerEmail, folderName),
-                    ownerEmail = ownerEmail,
+                    folderName = document.getString("folderName").orEmpty(),
                     documentCount = (document.getLong("documentCount") ?: 0L).toInt(),
                     updatedAtEpochMillis = document.getTimestamp("updatedAt")?.toDate()?.time ?: 0L
                 )
             }
-            .sortedBy { it.remoteDisplayName.lowercase() }
+            .sortedBy { it.folderName.lowercase() }
     }
 
     override suspend fun listRemoteDocuments(userId: String, folderId: String): List<SpeakerRemoteDocument> {
@@ -69,14 +63,12 @@ internal class FirebaseSpeakerCloudRepository(
 
     override suspend fun uploadDocument(
         userId: String,
-        ownerEmail: String,
         folderName: String,
         fileName: String,
         fullText: String,
         contentHash: String
     ): SpeakerRemoteDocument {
-        val remoteDisplayName = buildRemoteFolderDisplayName(ownerEmail, folderName)
-        val folderId = sanitizeFolderName(remoteDisplayName)
+        val folderId = sanitizeFolderName(folderName)
         val documentId = sanitizeRemoteDocumentId(fileName)
         val bytes = fullText.toByteArray()
         require(bytes.size <= MAX_DOCUMENT_BYTES) {
@@ -89,8 +81,6 @@ internal class FirebaseSpeakerCloudRepository(
             .set(
                 mapOf(
                     "folderName" to folderName,
-                    "ownerEmail" to ownerEmail,
-                    "remoteDisplayName" to remoteDisplayName,
                     "normalizedFolderName" to folderId,
                     "updatedAt" to now
                 ),
@@ -161,11 +151,6 @@ internal class FirebaseSpeakerCloudRepository(
     private fun sanitizeRemoteDocumentId(fileName: String): String {
         return fileName.trim()
             .replace(Regex("[^A-Za-z0-9._-]"), "_")
-    }
-
-    private fun buildRemoteFolderDisplayName(ownerEmail: String?, folderName: String): String {
-        val prefix = ownerEmail?.trim().orEmpty().ifBlank { "unknown" }
-        return "$prefix/$folderName"
     }
 
     private companion object {

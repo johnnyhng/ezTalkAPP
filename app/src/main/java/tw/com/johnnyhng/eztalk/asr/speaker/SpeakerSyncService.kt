@@ -11,7 +11,6 @@ internal class SpeakerSyncService(
     suspend fun uploadAllToCloud(
         localUserId: String,
         cloudUserId: String,
-        ownerEmail: String,
         onProgress: (SpeakerSyncProgress) -> Unit = {}
     ): SpeakerUploadSummary {
         val localFolders = localRepository.listLocalFolders(localUserId)
@@ -22,7 +21,6 @@ internal class SpeakerSyncService(
         allDocuments.forEachIndexed { index, document ->
             cloudRepository.uploadDocument(
                 userId = cloudUserId,
-                ownerEmail = ownerEmail,
                 folderName = document.folderName,
                 fileName = document.fileName,
                 fullText = document.fullText,
@@ -48,7 +46,6 @@ internal class SpeakerSyncService(
     suspend fun uploadFolderToCloud(
         localUserId: String,
         cloudUserId: String,
-        ownerEmail: String,
         folderName: String,
         onProgress: (SpeakerSyncProgress) -> Unit = {}
     ): SpeakerUploadSummary {
@@ -63,7 +60,6 @@ internal class SpeakerSyncService(
         localFolder.documents.forEachIndexed { index, document ->
             cloudRepository.uploadDocument(
                 userId = cloudUserId,
-                ownerEmail = ownerEmail,
                 folderName = document.folderName,
                 fileName = document.fileName,
                 fullText = document.fullText,
