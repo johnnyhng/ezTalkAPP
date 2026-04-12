@@ -62,17 +62,19 @@ import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.persistTranscriptJsonl
 import tw.com.johnnyhng.eztalk.asr.utils.syncTranscriptCandidatesFromJsonl
 import tw.com.johnnyhng.eztalk.asr.workflow.applyTranslateFeedbackResult
+import tw.com.johnnyhng.eztalk.asr.workflow.appendTranslateSamples
 import tw.com.johnnyhng.eztalk.asr.workflow.awaitCandidateFetchBeforeFeedback
+import tw.com.johnnyhng.eztalk.asr.workflow.buildTranslateFinalAudio
 import tw.com.johnnyhng.eztalk.asr.workflow.createTranslateTranscript
+import tw.com.johnnyhng.eztalk.asr.workflow.markTranslateVadSegmentDetected
 import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldCompleteTranslateCapture
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
+import tw.com.johnnyhng.eztalk.asr.workflow.TranslateCaptureState
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.max
-import kotlin.math.min
 
 private var audioRecord: AudioRecord? = null
 private const val sampleRateInHz = 16000
@@ -309,14 +311,9 @@ fun TranslateScreen(
 
                 // --- Coroutine to process audio ---
                 CoroutineScope(Default).launch {
-                    val fullRecordingBuffer = arrayListOf<Float>()
                     val reserveForPreviousSpeechDetectedMs = 500
                     val keep = (sampleRateInHz / 1000) * reserveForPreviousSpeechDetectedMs
-
-                    var speechStartOffset = -1
-                    var lastSpeechDetectedOffset = -1
-                    var isSpeechStarted = false
-                    var lastRealtimeRecognitionTime = 0L
+                    val captureState = TranslateCaptureState()
                     val realtimeRecognitionInterval = 500L // ms
 
                     // Reset UI for new recording
@@ -333,20 +330,24 @@ fun TranslateScreen(
                         val flushRequest = flushChannel.tryReceive().getOrNull()
 
                         if (s != null) {
-                            val currentBufferPosition = fullRecordingBuffer.size
-                            fullRecordingBuffer.addAll(s.toList())
                             SimulateStreamingAsr.acceptVadWaveformSafely(s)
+                            appendTranslateSamples(
+                                state = captureState,
+                                samples = s,
+                                keepSamples = keep,
+                                speechDetected = SimulateStreamingAsr.isVadSpeechDetectedSafely()
+                            )
 
-                            if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
-                                isSpeechStarted = true
-                                speechStartOffset = max(0, currentBufferPosition - keep)
-                            }
-
-                            if (isSpeechStarted) {
+                            if (captureState.isSpeechStarted) {
                                 val now = System.currentTimeMillis()
-                                if (now - lastRealtimeRecognitionTime > realtimeRecognitionInterval) {
-                                    lastRealtimeRecognitionTime = now
-                                    val audioForRealtime = fullRecordingBuffer.subList(speechStartOffset, fullRecordingBuffer.size).toFloatArray()
+                                if (now - captureState.lastRealtimeRecognitionTime > realtimeRecognitionInterval) {
+                                    captureState.lastRealtimeRecognitionTime = now
+                                    val audioForRealtime = captureState.fullRecordingBuffer
+                                        .subList(
+                                            captureState.speechStartOffset,
+                                            captureState.fullRecordingBuffer.size
+                                        )
+                                        .toFloatArray()
                                     
                                     // Fire-and-forget recognition job
                                     launch(IO) {
@@ -370,7 +371,7 @@ fun TranslateScreen(
 
                         while (true) {
                             if (SimulateStreamingAsr.popVadSegmentSafely() == null) break
-                            lastSpeechDetectedOffset = fullRecordingBuffer.size
+                            markTranslateVadSegmentDetected(captureState)
                             // Segment content is not used in this screen; draining queue updates VAD state.
                         }
 
@@ -386,20 +387,13 @@ fun TranslateScreen(
                     }
 
                     // Final recognition and save
-                    if (isSpeechStarted && speechStartOffset != -1) {
+                    if (captureState.isSpeechStarted && captureState.speechStartOffset != -1) {
                         withContext(Main) { isRecognizingSpeech = true }
 
-                        val endPosition = if (lastSpeechDetectedOffset != -1) {
-                            min(fullRecordingBuffer.size, lastSpeechDetectedOffset + keep)
-                        } else {
-                            fullRecordingBuffer.size
-                        }
-
-                        val audioToRecognize = if (speechStartOffset < endPosition) {
-                            fullRecordingBuffer.subList(speechStartOffset, endPosition).toFloatArray()
-                        } else {
-                            FloatArray(0)
-                        }
+                        val audioToRecognize = buildTranslateFinalAudio(
+                            state = captureState,
+                            keepSamples = keep
+                        )
 
                         if (audioToRecognize.isNotEmpty()) {
                             val stream = SimulateStreamingAsr.recognizer.createStream()

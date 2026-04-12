@@ -113,4 +113,51 @@ class TranslateWorkflowTest {
         assertFalse(updated.mutable)
         assertTrue(updated.removable)
     }
+
+    @Test
+    fun appendTranslateSamplesStartsSpeechAtBufferedLeadInWhenVadFirstDetectsSpeech() {
+        val state = TranslateCaptureState(
+            fullRecordingBuffer = arrayListOf(0.1f, 0.2f, 0.3f)
+        )
+
+        appendTranslateSamples(
+            state = state,
+            samples = floatArrayOf(0.4f, 0.5f),
+            keepSamples = 2,
+            speechDetected = true
+        )
+
+        assertTrue(state.isSpeechStarted)
+        assertEquals(1, state.speechStartOffset)
+        assertEquals(listOf(0.1f, 0.2f, 0.3f, 0.4f, 0.5f), state.fullRecordingBuffer)
+    }
+
+    @Test
+    fun buildTranslateFinalAudioUsesVadTailPaddingAndReturnsSingleTrimmedSegment() {
+        val state = TranslateCaptureState(
+            fullRecordingBuffer = arrayListOf(0f, 1f, 2f, 3f, 4f, 5f),
+            speechStartOffset = 1,
+            lastSpeechDetectedOffset = 4,
+            isSpeechStarted = true
+        )
+
+        val audio = buildTranslateFinalAudio(
+            state = state,
+            keepSamples = 1
+        )
+
+        assertEquals(listOf(1f, 2f, 3f, 4f), audio.toList())
+    }
+
+    @Test
+    fun buildTranslateFinalAudioReturnsEmptyWhenSpeechNeverStarted() {
+        val audio = buildTranslateFinalAudio(
+            state = TranslateCaptureState(
+                fullRecordingBuffer = arrayListOf(1f, 2f, 3f)
+            ),
+            keepSamples = 3
+        )
+
+        assertTrue(audio.isEmpty())
+    }
 }
