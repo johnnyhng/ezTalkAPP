@@ -27,6 +27,10 @@ internal data class SpeakerScreenUiState(
     val renameSourceFolderName: String? = null,
     val renameFolderName: String = "",
     val renameFolderDialogError: String? = null,
+    val showRenameDocumentDialog: Boolean = false,
+    val renameSourceDocumentId: String? = null,
+    val renameDocumentName: String = "",
+    val renameDocumentDialogError: String? = null,
     val showDriveImportDialog: Boolean = false,
     val driveImportFolderName: String = "",
     val driveImportDialogError: String? = null,
@@ -218,6 +222,24 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         )
     }
 
+    fun showRenameDocumentDialog(document: SpeakerDocumentUi) {
+        uiState = uiState.copy(
+            showRenameDocumentDialog = true,
+            renameSourceDocumentId = document.id,
+            renameDocumentName = document.displayName.removeSuffix(".txt"),
+            renameDocumentDialogError = null
+        )
+    }
+
+    fun dismissRenameDocumentDialog() {
+        uiState = uiState.copy(
+            showRenameDocumentDialog = false,
+            renameSourceDocumentId = null,
+            renameDocumentName = "",
+            renameDocumentDialogError = null
+        )
+    }
+
     fun onNewFolderNameChanged(value: String) {
         uiState = uiState.copy(
             newFolderName = value,
@@ -229,6 +251,13 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         uiState = uiState.copy(
             renameFolderName = value,
             renameFolderDialogError = null
+        )
+    }
+
+    fun onRenameDocumentNameChanged(value: String) {
+        uiState = uiState.copy(
+            renameDocumentName = value,
+            renameDocumentDialogError = null
         )
     }
 
@@ -310,6 +339,59 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
                 FolderRenameResult.FAILED -> {
                     uiState = uiState.copy(
                         renameFolderDialogError = context.getString(R.string.speaker_rename_folder_failed)
+                    )
+                }
+            }
+        }
+    }
+
+    fun renameDocument() {
+        val sourceDocumentId = uiState.renameSourceDocumentId ?: return
+        val context = getApplication<Application>()
+        val normalizedBaseName = sanitizeDocumentName(uiState.renameDocumentName)
+        if (normalizedBaseName.isBlank()) {
+            uiState = uiState.copy(
+                renameDocumentDialogError = context.getString(R.string.speaker_invalid_document_name)
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                localRepository.renameDocument(
+                    filePath = sourceDocumentId,
+                    targetDisplayName = normalizedBaseName
+                )
+            }
+            when (result) {
+                DocumentRenameResult.RENAMED -> {
+                    uiState = uiState.copy(
+                        showRenameDocumentDialog = false,
+                        renameSourceDocumentId = null,
+                        renameDocumentName = "",
+                        renameDocumentDialogError = null
+                    )
+                    reloadDirectories()
+                }
+
+                DocumentRenameResult.ALREADY_EXISTS -> {
+                    uiState = uiState.copy(
+                        renameDocumentDialogError = context.getString(
+                            R.string.speaker_document_exists,
+                            ensureTxtExtension(normalizedBaseName)
+                        )
+                    )
+                }
+
+                DocumentRenameResult.INVALID_NAME -> {
+                    uiState = uiState.copy(
+                        renameDocumentDialogError = context.getString(R.string.speaker_invalid_document_name)
+                    )
+                }
+
+                DocumentRenameResult.FAILED -> {
+                    uiState = uiState.copy(
+                        renameDocumentDialogError = context.getString(R.string.speaker_rename_document_failed)
                     )
                 }
             }

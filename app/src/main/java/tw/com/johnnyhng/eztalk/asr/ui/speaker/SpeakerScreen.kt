@@ -555,6 +555,50 @@ fun SpeakerScreen(
             )
         }
 
+        if (uiState.showRenameDocumentDialog) {
+            AlertDialog(
+                onDismissRequest = { speakerViewModel.dismissRenameDocumentDialog() },
+                title = {
+                    Text(text = stringResource(R.string.speaker_rename_document))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = uiState.renameDocumentName,
+                            onValueChange = { speakerViewModel.onRenameDocumentNameChanged(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.speaker_document_name_label)) },
+                            placeholder = { Text(stringResource(R.string.speaker_document_name_placeholder)) },
+                            isError = uiState.renameDocumentDialogError != null
+                        )
+                        if (uiState.renameDocumentDialogError != null) {
+                            Text(
+                                text = uiState.renameDocumentDialogError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { speakerViewModel.renameDocument() },
+                        enabled = uiState.renameDocumentName.isNotBlank()
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { speakerViewModel.dismissRenameDocumentDialog() }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
         if (uiState.isImporting && isImportProgressDialogVisible) {
             AlertDialog(
                 onDismissRequest = { isImportProgressDialogVisible = false },
@@ -992,6 +1036,9 @@ fun SpeakerScreen(
                 },
                 onRemoveDirectory = { directory ->
                     speakerViewModel.deleteFolder(directory)
+                },
+                onRenameDocument = { document ->
+                    speakerViewModel.showRenameDocumentDialog(document)
                 },
                 onRemoveDocument = { document ->
                     playbackController.stopIfPlaying(document.id)

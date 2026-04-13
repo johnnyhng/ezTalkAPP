@@ -62,6 +62,7 @@ internal fun SpeechFileExplorer(
     onRefresh: () -> Unit,
     onImportIntoDirectory: (SpeakerDirectoryUi) -> Unit,
     onRemoveDirectory: (SpeakerDirectoryUi) -> Unit,
+    onRenameDocument: (SpeakerDocumentUi) -> Unit,
     onRemoveDocument: (SpeakerDocumentUi) -> Unit,
     onDocumentSelected: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -124,7 +125,9 @@ internal fun SpeechFileExplorer(
                                 isRenameEnabled = isDirectoryRenameEnabled,
                                 onRemove = { onRemoveDirectory(directory) },
                                 isDirectoryDeleteEnabled = isDirectoryDeleteEnabled,
+                                onRenameDocument = onRenameDocument,
                                 onRemoveDocument = onRemoveDocument,
+                                isDocumentRenameEnabled = isDocumentDeleteEnabled,
                                 isDocumentDeleteEnabled = isDocumentDeleteEnabled,
                                 onDocumentSelected = onDocumentSelected
                             )
@@ -242,7 +245,9 @@ private fun SpeakerDirectorySection(
     isRenameEnabled: Boolean,
     onRemove: () -> Unit,
     isDirectoryDeleteEnabled: Boolean,
+    onRenameDocument: (SpeakerDocumentUi) -> Unit,
     onRemoveDocument: (SpeakerDocumentUi) -> Unit,
+    isDocumentRenameEnabled: Boolean,
     isDocumentDeleteEnabled: Boolean,
     onDocumentSelected: (String) -> Unit
 ) {
@@ -344,7 +349,9 @@ private fun SpeakerDirectorySection(
                             document = document,
                             isSelected = document.id == selectedDocumentId,
                             onClick = { onDocumentSelected(document.id) },
+                            onRename = { onRenameDocument(document) },
                             onRemove = { onRemoveDocument(document) },
+                            isRenameEnabled = isDocumentRenameEnabled,
                             isDeleteEnabled = isDocumentDeleteEnabled
                         )
                     }
@@ -359,7 +366,9 @@ private fun SpeakerDocumentRow(
     document: SpeakerDocumentUi,
     isSelected: Boolean,
     onClick: () -> Unit,
+    onRename: () -> Unit,
     onRemove: () -> Unit,
+    isRenameEnabled: Boolean,
     isDeleteEnabled: Boolean
 ) {
     val borderColor = if (isSelected) {
@@ -383,6 +392,16 @@ private fun SpeakerDocumentRow(
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f)
         )
+        IconButton(
+            onClick = onRename,
+            enabled = isRenameEnabled,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.speaker_rename_document)
+            )
+        }
         IconButton(
             onClick = onRemove,
             enabled = isDeleteEnabled,

@@ -152,6 +152,34 @@ internal open class SpeakerLocalRepository(private val context: Context) {
         return target.exists() && target.delete()
     }
 
+    fun renameDocument(filePath: String, targetDisplayName: String): DocumentRenameResult {
+        val sourceFile = File(filePath)
+        if (!sourceFile.exists() || !sourceFile.isFile) {
+            return DocumentRenameResult.FAILED
+        }
+
+        val normalizedBaseName = sanitizeDocumentName(targetDisplayName)
+        if (normalizedBaseName.isBlank()) {
+            return DocumentRenameResult.INVALID_NAME
+        }
+
+        val normalizedFileName = ensureTxtExtension(normalizedBaseName)
+        if (sourceFile.name == normalizedFileName) {
+            return DocumentRenameResult.RENAMED
+        }
+
+        val targetFile = File(sourceFile.parentFile, normalizedFileName)
+        if (targetFile.exists()) {
+            return DocumentRenameResult.ALREADY_EXISTS
+        }
+
+        return if (sourceFile.renameTo(targetFile)) {
+            DocumentRenameResult.RENAMED
+        } else {
+            DocumentRenameResult.FAILED
+        }
+    }
+
     fun saveDocument(filePath: String, updatedText: String): Boolean {
         return runCatching {
             File(filePath).writeText(updatedText)
@@ -171,6 +199,13 @@ internal enum class FolderRenameResult {
     FAILED
 }
 
+internal enum class DocumentRenameResult {
+    RENAMED,
+    ALREADY_EXISTS,
+    INVALID_NAME,
+    FAILED
+}
+
 internal fun getSpeakerRootDirectory(filesDir: File, userId: String): File {
     return File(filesDir, "speech/$userId")
 }
@@ -179,6 +214,17 @@ internal fun sanitizeFolderName(input: String): String {
     return input.trim()
         .replace(Regex("[\\\\/:*?\"<>|]"), "_")
         .replace(Regex("\\s+"), " ")
+}
+
+internal fun sanitizeDocumentName(input: String): String {
+    return input.trim()
+        .removeSuffix(".txt")
+        .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        .replace(Regex("\\s+"), " ")
+}
+
+internal fun ensureTxtExtension(input: String): String {
+    return if (input.lowercase().endsWith(".txt")) input else "$input.txt"
 }
 
 private fun buildPreviewText(text: String): String {
