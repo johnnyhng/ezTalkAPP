@@ -13,13 +13,14 @@ This plan is based on [Android 音訊錄製併發與非對稱路由技術方案.
 
 ## Current State
 
-- `SettingsScreen` has no audio device inventory or routing controls.
-- `UserSettings` has no persisted audio routing fields.
-- `SettingsManager` has no keys for input/output routing preferences.
-- The app currently has no shared repository or manager for:
+- `SettingsScreen` already exposes an audio routing section with detected-device counts, preferred-device selectors, capture-policy toggles, and active-route summary text.
+- `UserSettings` already persists audio routing fields for preferred input/output device ids and playback capture policy.
+- `SettingsManager` already reads and writes those routing preferences through DataStore.
+- The app now has shared audio components for:
   - enumerating `AudioDeviceInfo`
-  - showing active route state
+  - showing selected and active route state
   - applying preferred input/output devices
+  - creating microphone, playback, and TTS audio entry points through `AudioIOManager`
 
 ## Product Scope
 
@@ -261,39 +262,59 @@ Read-only state:
 
 ## Implementation Status Update
 
-Based on the current codebase, Phase 1 is partially implemented already.
+The planned audio routing work is largely complete.
 
 Implemented:
 
-- `SettingsScreen` now includes an audio routing section with:
+- `SettingsScreen` includes a full audio routing section with:
   - detected input/output counts
   - preferred input/output selection
   - `allowAppAudioCapture`
   - `preferCommunicationDeviceRouting`
-  - selected/active route summary text
+  - selected input/output labels
+  - active input/output labels
+  - `lastApplyMessage`
 - `UserSettings` persists:
   - `preferredAudioInputDeviceId`
   - `preferredAudioOutputDeviceId`
   - `allowAppAudioCapture`
   - `preferCommunicationDeviceRouting`
-- `SettingsManager` reads and writes those fields
-- `AudioRoutingRepository` exists and currently:
+- `SettingsManager` reads and writes those fields.
+- `AudioRoutingRepository`:
   - enumerates inputs and outputs
   - maps `AudioDeviceInfo` to `AudioRouteDeviceUi`
-  - reports selected labels
-  - reports active communication-device output when available
-- `HomeViewModel` exposes `audioRoutingStatus` and update methods for the new settings
+  - applies preferred input routing to `AudioRecord`
+  - applies preferred output routing to `MediaPlayer`
+  - reports active input and active communication-device output labels
+  - builds user-facing routing result messages
+- `HomeViewModel` exposes `audioRoutingStatus`, update methods for routing preferences, and runtime route status feedback to the UI.
+- `AudioIOManager` is now the shared audio I/O orchestration layer for:
+  - microphone recorder creation
+  - playback `MediaPlayer` creation
+  - shared TTS driver creation
+- microphone capture creation is unified across:
+  - `RecognitionManager`
+  - `TranslateScreen`
+  - `SpeakerAsrController`
+- wav playback routing and capture policy are unified through `MediaController` + `AudioIOManager`.
+- shared TTS lifecycle is centralized in `SpeechOutputController`, including `SpeakerPlaybackController` using the same TTS creation path.
+- targeted unit tests exist for:
+  - routing message helpers
+  - playback capture policy helpers
+  - speaker playback controller state transitions
+- manual verification docs exist in:
+  - [AUDIO_IO_MANUAL_TEST_CHECKLIST.md](/home/hhs/workspace/ezTalkAPP/AUDIO_IO_MANUAL_TEST_CHECKLIST.md)
+  - [AUDIO_IO_SMOKE_TEST.md](/home/hhs/workspace/ezTalkAPP/AUDIO_IO_SMOKE_TEST.md)
 
-Still missing:
+Remaining gaps:
 
-- runtime application of preferred input/output devices
-- `activeInputLabel` in `AudioRoutingStatus`
-- meaningful `lastApplyMessage`
-- capture-policy wiring for playback/TTS paths
+- real-device verification across Bluetooth, wired, USB, and built-in routes still needs to be executed regularly
+- TTS output is lifecycle-centralized, but explicit output-device routing for TTS is still limited by Android `TextToSpeech` APIs
+- if runtime routing logic grows further, `HomeViewModel` may still need to hand off more responsibility to a dedicated audio routing view-model or coordinator
 
 ## Current Audio I/O Inventory
 
-The current codebase has multiple independent audio entry points.
+The current codebase now routes audio I/O through shared infrastructure, while still preserving screen-specific behavior where needed.
 
 ### Microphone Input
 
@@ -301,13 +322,13 @@ The current codebase has multiple independent audio entry points.
 - `TranslateScreen`
 - `SpeakerAsrController`
 
-Each currently creates its own `AudioRecord` directly.
+These now share microphone creation and preferred-input routing through `AudioIOManager.createMicAudioRecord(...)`.
 
 ### Playback Output
 
 - `MediaController`
 
-This currently wraps `MediaPlayer` for wav playback and is used from multiple screens.
+This remains the shared wav playback entry point, but it now delegates routed `MediaPlayer` creation to `AudioIOManager`.
 
 ### TTS Output
 
@@ -317,13 +338,13 @@ This currently wraps `MediaPlayer` for wav playback and is used from multiple sc
 - `EditRecognitionDialog`
 - `SpeakerPlaybackController`
 
-Each currently owns its own `TextToSpeech` lifecycle.
+These now share a common speech-output implementation via `SpeechOutputController`, with creation flowing through `AudioIOManager`.
 
 ### Routing State
 
 - `AudioRoutingRepository`
 
-This currently handles enumeration and route-state inspection only.
+This now handles device enumeration, route-state inspection, and preferred-route application helpers.
 
 ## Recommended Next Architecture
 
@@ -358,52 +379,40 @@ Rationale:
 
 ## Next-Step Plan
 
-### Step 1: Unify Microphone Capture First
+### Step 1: Run Real-Device Verification
 
 Goal:
 
-- remove duplicated `AudioRecord` setup across the codebase
-- make preferred input routing actually take effect
+- confirm the refactor behaves correctly on actual Android routing stacks
 
 Scope:
 
-- centralize `AudioRecord` creation
-- apply preferred input device during capture startup
-- reuse the same capture helper in:
-  - `RecognitionManager`
-  - `TranslateScreen`
-  - `SpeakerAsrController`
-- expose apply result and active-input information back to UI/logging
+- execute [AUDIO_IO_SMOKE_TEST.md](/home/hhs/workspace/ezTalkAPP/AUDIO_IO_SMOKE_TEST.md) on at least one device
+- execute [AUDIO_IO_MANUAL_TEST_CHECKLIST.md](/home/hhs/workspace/ezTalkAPP/AUDIO_IO_MANUAL_TEST_CHECKLIST.md) for Bluetooth, wired, USB, and disconnect scenarios
+- capture device-specific caveats discovered during testing
 
-Why first:
-
-- this is where routing preference is most actionable today
-- this area has the most duplication
-- it delivers real user-visible value with limited architectural risk
-
-### Step 2: Refactor Wav Playback
+### Step 2: Tighten Runtime Reporting
 
 Goal:
 
-- evolve `MediaController` into a routed playback controller
+- make routing behavior easier to debug in production and QA
 
 Scope:
 
-- move playback logic behind a dedicated controller
-- apply preferred output routing where Android APIs allow it
-- prepare for `allowAppAudioCapture` policy wiring
+- add or refine structured logs around route application and fallback
+- record common failure cases seen during device testing
+- adjust UI wording if Android behavior proves confusing on specific devices
 
-### Step 3: Consolidate TTS
+### Step 3: Reassess Architecture Only If New Complexity Appears
 
 Goal:
 
-- remove repeated `TextToSpeech` setup/shutdown logic
+- avoid premature refactors now that the main consolidation is complete
 
 Scope:
 
-- centralize `TextToSpeech` lifecycle management
-- preserve screen-specific behaviors and callbacks
-- coordinate TTS vs recording/playback interactions through `AudioIOManager`
+- keep `AudioIOManager` as the shared creation/orchestration layer
+- only split further if future features add queueing, focus handling, or more complex concurrent audio behavior
 
 ## Delivery Strategy
 
@@ -444,36 +453,31 @@ Map common device types to user-facing labels:
 
 ### Input Apply Strategy
 
-When phase 2 starts:
+Current implementation:
 
 - locate selected input `AudioDeviceInfo`
 - call `AudioRecord.setPreferredDevice(device)`
-
-Target integration points likely include:
-
-- [RecognitionManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/RecognitionManager.kt)
-- [SpeakerAsrController.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/speaker/SpeakerAsrController.kt)
+- return a user-facing apply/fallback message
+- surface the active input label back to settings UI
 
 ### Output Apply Strategy
 
-When phase 2 starts:
+Current implementation:
 
-- if app owns an `AudioTrack`, call `setPreferredDevice(device)`
-- if using communication-style output and API level is high enough, try:
-  - `AudioManager.setCommunicationDevice(device)`
+- `MediaPlayer.setPreferredDevice(device)` is attempted for shared wav playback
+- active output uses communication-device inspection where Android exposes it
+- playback routing behavior remains guarded by API-level and device-support checks
 
-This should be guarded by:
+Known limitation:
 
-- API level check
-- device capability check
-- explicit user setting `preferCommunicationDeviceRouting`
+- explicit output-device routing for `TextToSpeech` remains constrained by platform APIs
 
 ### Capture Policy Strategy
 
-If app audio capture policy is exposed in settings:
+Current implementation:
 
-- use `AudioAttributes.Builder`
-- apply `setAllowedCapturePolicy(ALLOW_CAPTURE_BY_ALL)` where playback streams are created
+- playback `AudioAttributes.Builder` applies `setAllowedCapturePolicy(...)` where supported
+- `allowAppAudioCapture` is persisted in settings and consumed by routed playback creation
 
 Do not promise that this solves microphone sharing by itself. It only controls whether app output may be captured by other apps such as system screen recording.
 
@@ -523,19 +527,16 @@ At minimum test:
 4. Bluetooth input preferred + phone speaker preferred
 5. Device disconnect after preference is saved
 
-### Acceptance Criteria For Phase 1
+### Acceptance Criteria For Completed Work
 
 - Settings page shows detected input devices
 - Settings page shows detected output devices
 - User can save preferred input/output
 - Reopening app restores saved choices
 - Missing devices degrade to `System default` display without crash
-
-### Acceptance Criteria For Phase 2
-
-- Recording path attempts preferred input device
-- Playback path attempts preferred output device
-- UI shows active route / apply result
+- Recording paths attempt the preferred input device
+- Shared wav playback attempts the preferred output device
+- UI shows active route and apply result
 - Unsupported routes fail safely and visibly
 
 ## File Change Plan
@@ -558,12 +559,10 @@ Phase 2 likely also touches:
 
 ## Recommended Next Step
 
-Implement Phase 1 only:
+Do not add more structure first.
 
-1. add persisted fields to `UserSettings`
-2. add `AudioRoutingRepository`
-3. show detected input/output devices in `SettingsScreen`
-4. allow saving preferred input/output
-5. show helper text and current selection
+1. run the smoke test on a real device
+2. run the full manual checklist across available route types
+3. capture vendor-specific routing behavior before changing architecture again
 
-This gets the app to a debuggable state on real devices before attempting non-symmetric runtime routing.
+The codebase is already past the original Phase 1 and Phase 2 targets. The highest-value next step is validating the current implementation on hardware.
