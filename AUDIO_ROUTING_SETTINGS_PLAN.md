@@ -259,6 +259,162 @@ Read-only state:
 - `Active output: ...`
 - `Last routing result: ...`
 
+## Implementation Status Update
+
+Based on the current codebase, Phase 1 is partially implemented already.
+
+Implemented:
+
+- `SettingsScreen` now includes an audio routing section with:
+  - detected input/output counts
+  - preferred input/output selection
+  - `allowAppAudioCapture`
+  - `preferCommunicationDeviceRouting`
+  - selected/active route summary text
+- `UserSettings` persists:
+  - `preferredAudioInputDeviceId`
+  - `preferredAudioOutputDeviceId`
+  - `allowAppAudioCapture`
+  - `preferCommunicationDeviceRouting`
+- `SettingsManager` reads and writes those fields
+- `AudioRoutingRepository` exists and currently:
+  - enumerates inputs and outputs
+  - maps `AudioDeviceInfo` to `AudioRouteDeviceUi`
+  - reports selected labels
+  - reports active communication-device output when available
+- `HomeViewModel` exposes `audioRoutingStatus` and update methods for the new settings
+
+Still missing:
+
+- runtime application of preferred input/output devices
+- `activeInputLabel` in `AudioRoutingStatus`
+- meaningful `lastApplyMessage`
+- capture-policy wiring for playback/TTS paths
+
+## Current Audio I/O Inventory
+
+The current codebase has multiple independent audio entry points.
+
+### Microphone Input
+
+- `RecognitionManager`
+- `TranslateScreen`
+- `SpeakerAsrController`
+
+Each currently creates its own `AudioRecord` directly.
+
+### Playback Output
+
+- `MediaController`
+
+This currently wraps `MediaPlayer` for wav playback and is used from multiple screens.
+
+### TTS Output
+
+- `Home`
+- `TranslateScreen`
+- `DataCollectScreen`
+- `EditRecognitionDialog`
+- `SpeakerPlaybackController`
+
+Each currently owns its own `TextToSpeech` lifecycle.
+
+### Routing State
+
+- `AudioRoutingRepository`
+
+This currently handles enumeration and route-state inspection only.
+
+## Recommended Next Architecture
+
+Do not collapse everything into one large god object.
+
+Recommended structure:
+
+- `AudioRoutingRepository`
+  - audio device enumeration
+  - active route inspection
+  - preferred-route apply helpers
+- `AudioIOManager`
+  - orchestration / coordination layer
+  - shared policy and conflict handling
+- `AudioInputController`
+  - `AudioRecord` creation
+  - preferred mic routing
+  - capture lifecycle helpers
+- `AudioOutputController`
+  - wav/media playback
+  - preferred output routing
+  - playback capture policy
+- `SpeechOutputController`
+  - shared `TextToSpeech` lifecycle
+  - speech output state/callback handling
+
+Rationale:
+
+- mic capture, wav playback, and TTS are all audio I/O, but they have different lifecycle and callback semantics
+- `AudioIOManager` should coordinate them, not absorb every implementation detail
+- this keeps routing reusable and prevents a single oversized manager
+
+## Next-Step Plan
+
+### Step 1: Unify Microphone Capture First
+
+Goal:
+
+- remove duplicated `AudioRecord` setup across the codebase
+- make preferred input routing actually take effect
+
+Scope:
+
+- centralize `AudioRecord` creation
+- apply preferred input device during capture startup
+- reuse the same capture helper in:
+  - `RecognitionManager`
+  - `TranslateScreen`
+  - `SpeakerAsrController`
+- expose apply result and active-input information back to UI/logging
+
+Why first:
+
+- this is where routing preference is most actionable today
+- this area has the most duplication
+- it delivers real user-visible value with limited architectural risk
+
+### Step 2: Refactor Wav Playback
+
+Goal:
+
+- evolve `MediaController` into a routed playback controller
+
+Scope:
+
+- move playback logic behind a dedicated controller
+- apply preferred output routing where Android APIs allow it
+- prepare for `allowAppAudioCapture` policy wiring
+
+### Step 3: Consolidate TTS
+
+Goal:
+
+- remove repeated `TextToSpeech` setup/shutdown logic
+
+Scope:
+
+- centralize `TextToSpeech` lifecycle management
+- preserve screen-specific behaviors and callbacks
+- coordinate TTS vs recording/playback interactions through `AudioIOManager`
+
+## Delivery Strategy
+
+Implement in phases and validate after each phase:
+
+1. compile
+2. targeted tests
+3. manual route-behavior verification
+
+Do not combine mic refactor, playback refactor, and TTS consolidation in a single change.
+
 ### Block D: Constraints / Notes
 
 Short helper text in UI:
