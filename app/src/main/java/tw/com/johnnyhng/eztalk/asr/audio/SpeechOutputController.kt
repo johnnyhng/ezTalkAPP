@@ -20,18 +20,30 @@ internal data class SpeechOutputState(
     val isSpeaking: Boolean = false
 )
 
+internal interface SpeechOutputDriver {
+    fun initialize()
+    fun speak(
+        text: String,
+        onStart: (() -> Unit)? = null,
+        onDone: (() -> Unit)? = null,
+        onError: (() -> Unit)? = null
+    ): Boolean
+    fun stop()
+    fun dispose()
+}
+
 internal class SpeechOutputController(
     private val context: Context,
     private val preferredLocale: Locale?,
     private val onStateChanged: (SpeechOutputState) -> Unit
-) {
+) : SpeechOutputDriver {
     private var tts: TextToSpeech? = null
     private var state = SpeechOutputState()
     private var pendingOnStart: (() -> Unit)? = null
     private var pendingOnDone: (() -> Unit)? = null
     private var pendingOnError: (() -> Unit)? = null
 
-    fun initialize() {
+    override fun initialize() {
         if (tts != null) return
         tts = TextToSpeech(context) { status ->
             val isReady = if (status == TextToSpeech.SUCCESS) {
@@ -70,11 +82,11 @@ internal class SpeechOutputController(
         }
     }
 
-    fun speak(
+    override fun speak(
         text: String,
-        onStart: (() -> Unit)? = null,
-        onDone: (() -> Unit)? = null,
-        onError: (() -> Unit)? = null
+        onStart: (() -> Unit)?,
+        onDone: (() -> Unit)?,
+        onError: (() -> Unit)?
     ): Boolean {
         val engine = tts ?: return false
         pendingOnStart = onStart
@@ -91,7 +103,7 @@ internal class SpeechOutputController(
         return true
     }
 
-    fun stop() {
+    override fun stop() {
         pendingOnStart = null
         pendingOnDone = null
         pendingOnError = null
@@ -99,7 +111,7 @@ internal class SpeechOutputController(
         updateState { it.copy(isSpeaking = false) }
     }
 
-    fun dispose() {
+    override fun dispose() {
         pendingOnStart = null
         pendingOnDone = null
         pendingOnError = null

@@ -1,6 +1,7 @@
 package tw.com.johnnyhng.eztalk.asr.speaker
 
 import android.content.Context
+import tw.com.johnnyhng.eztalk.asr.audio.SpeechOutputDriver
 import tw.com.johnnyhng.eztalk.asr.audio.SpeechOutputController
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -32,13 +33,23 @@ internal data class SpeakerPlaybackState(
 
 internal class SpeakerPlaybackController(
     private val context: Context,
-    private val onStateChanged: (SpeakerPlaybackState) -> Unit
+    private val onStateChanged: (SpeakerPlaybackState) -> Unit,
+    private val speechControllerFactory: ((Context, (Boolean) -> Unit) -> SpeechOutputDriver)? = null
 ) {
-    private val speechController = SpeechOutputController(
-        context = context,
-        preferredLocale = Locale.TRADITIONAL_CHINESE,
-        onStateChanged = { speechState ->
-            updateState { it.copy(isReady = speechState.isReady) }
+    private val speechController: SpeechOutputDriver = (speechControllerFactory ?: { ctx, onReadyChanged ->
+        SpeechOutputController(
+            context = ctx,
+            preferredLocale = Locale.TRADITIONAL_CHINESE,
+            onStateChanged = { speechState ->
+                onReadyChanged(speechState.isReady)
+            }
+        )
+    })(
+        context,
+        { isReady ->
+            updateState {
+                it.copy(isReady = isReady)
+            }
         }
     )
     private var state = SpeakerPlaybackState()
@@ -221,9 +232,12 @@ internal fun rememberSpeakerPlaybackController(): Pair<SpeakerPlaybackController
     val context = LocalContext.current
     var state by remember { mutableStateOf(SpeakerPlaybackState()) }
     val controller = remember {
-        SpeakerPlaybackController(context) { updatedState ->
-            state = updatedState
-        }
+        SpeakerPlaybackController(
+            context = context,
+            onStateChanged = { updatedState ->
+                state = updatedState
+            }
+        )
     }
 
     DisposableEffect(controller) {
