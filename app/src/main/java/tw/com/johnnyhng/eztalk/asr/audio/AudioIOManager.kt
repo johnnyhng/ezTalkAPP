@@ -99,16 +99,25 @@ internal class AudioIOManager(
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            builder.setAllowedCapturePolicy(
-                if (allowAppAudioCapture) {
-                    AudioAttributes.ALLOW_CAPTURE_BY_ALL
-                } else {
-                    AudioAttributes.ALLOW_CAPTURE_BY_SYSTEM
-                }
-            )
+        resolvePlaybackCapturePolicy(
+            allowAppAudioCapture = allowAppAudioCapture,
+            sdkInt = Build.VERSION.SDK_INT
+        )?.let { capturePolicy ->
+            builder.setAllowedCapturePolicy(capturePolicy)
         }
 
         return builder.build()
+    }
+}
+
+internal fun resolvePlaybackCapturePolicy(
+    allowAppAudioCapture: Boolean,
+    sdkInt: Int
+): Int? {
+    if (sdkInt < Build.VERSION_CODES.Q) return null
+    return if (allowAppAudioCapture) {
+        AudioAttributes.ALLOW_CAPTURE_BY_ALL
+    } else {
+        AudioAttributes.ALLOW_CAPTURE_BY_SYSTEM
     }
 }

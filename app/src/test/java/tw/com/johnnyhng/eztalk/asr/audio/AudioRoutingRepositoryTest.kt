@@ -67,4 +67,44 @@ class AudioRoutingRepositoryTest {
 
         assertEquals("Using system default playback route", message)
     }
+
+    @Test
+    fun buildPreferredOutputRoutingMessageReportsUnsupportedApi() {
+        val message = buildPreferredOutputRoutingMessage(
+            selectedOutput = null,
+            outputApplied = false,
+            apiSupportsPreferredDevice = false
+        )
+
+        assertEquals("Preferred playback routing is unavailable on this Android version", message)
+    }
+
+    @Test
+    fun buildPreferredOutputRoutingMessageReportsApplyResult() {
+        val device = AudioRouteDeviceUi(
+            id = 9,
+            productName = "USB DAC",
+            type = AudioDeviceInfo.TYPE_USB_DEVICE,
+            typeLabel = "USB audio",
+            isInput = false,
+            isOutput = true,
+            isConnected = true,
+            isCommunicationDeviceCapable = true
+        )
+
+        val applied = buildPreferredOutputRoutingMessage(
+            selectedOutput = device,
+            outputApplied = true,
+            apiSupportsPreferredDevice = true
+        )
+        val rejected = buildPreferredOutputRoutingMessage(
+            selectedOutput = device,
+            outputApplied = false,
+            apiSupportsPreferredDevice = true
+        )
+
+        assertTrue(applied.contains("USB DAC"))
+        assertTrue(applied.contains("requested"))
+        assertTrue(rejected.contains("rejected"))
+    }
 }
