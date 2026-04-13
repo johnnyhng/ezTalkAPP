@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -22,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import kotlin.math.max
 
@@ -41,6 +41,7 @@ internal class SpeakerAsrController(
     private val onStateChanged: (SpeakerAsrState) -> Unit
 ) {
     private val controllerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val audioIOManager = AudioIOManager(context)
     private val sampleRateInHz = 16000
 
     private var state = SpeakerAsrState()
@@ -69,18 +70,19 @@ internal class SpeakerAsrController(
 
         recordingJob = controllerScope.launch {
             val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
-            val bufferSize = AudioRecord.getMinBufferSize(
-                sampleRateInHz,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
+            val managedRecord = audioIOManager.createMicAudioRecord(
+                sampleRateInHz = sampleRateInHz,
+                channelConfig = AudioFormat.CHANNEL_IN_MONO,
+                audioFormat = AudioFormat.ENCODING_PCM_16BIT,
+                preferredInputDeviceId = userSettings.preferredAudioInputDeviceId
             )
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRateInHz,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize * 2
-            )
+            audioRecord = managedRecord.audioRecord
+            managedRecord.routingMessage?.let { Log.i(TAG, it) }
+            if (audioRecord == null) {
+                updateState { it.copy(isRecording = false) }
+                recordingJob = null
+                return@launch
+            }
 
             SimulateStreamingAsr.resetVadSafely()
 

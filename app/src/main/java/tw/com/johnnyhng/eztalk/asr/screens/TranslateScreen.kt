@@ -6,7 +6,6 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -49,6 +48,7 @@ import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
@@ -112,6 +112,7 @@ fun TranslateScreen(
     val clipboardManager = LocalClipboardManager.current
     val activity = LocalContext.current as Activity
     val coroutineScope = rememberCoroutineScope()
+    val audioIOManager = remember(context) { AudioIOManager(context.applicationContext) }
 
     // UI state
     var isStarted by remember { mutableStateOf(false) }
@@ -250,18 +251,21 @@ fun TranslateScreen(
                 stopAudio()
                 val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
 
-                val audioSource = MediaRecorder.AudioSource.MIC
                 val channelConfig = AudioFormat.CHANNEL_IN_MONO
                 val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-                val numBytes =
-                    AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat)
-                audioRecord = AudioRecord(
-                    audioSource,
-                    sampleRateInHz,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    numBytes * 2
+                val managedRecord = audioIOManager.createMicAudioRecord(
+                    sampleRateInHz = sampleRateInHz,
+                    channelConfig = channelConfig,
+                    audioFormat = audioFormat,
+                    preferredInputDeviceId = userSettings.preferredAudioInputDeviceId
                 )
+                audioRecord = managedRecord.audioRecord
+                managedRecord.routingMessage?.let { Log.i(TAG, it) }
+                if (audioRecord == null) {
+                    Log.e(TAG, "Translate microphone recorder initialization failed")
+                    isStarted = false
+                    return@LaunchedEffect
+                }
                 SimulateStreamingAsr.resetVadSafely()
 
                 // --- Coroutine to record audio ---

@@ -3,6 +3,7 @@ package tw.com.johnnyhng.eztalk.asr.audio
 import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.AudioRecord
 import android.os.Build
 
 data class AudioRouteDeviceUi(
@@ -70,6 +71,33 @@ internal class AudioRoutingRepository(context: Context) {
         )
     }
 
+    fun applyPreferredInputDevice(
+        audioRecord: AudioRecord,
+        selectedInputDeviceId: Int?
+    ): String {
+        val selectedInput = audioManager
+            .getDevices(AudioManager.GET_DEVICES_INPUTS)
+            .firstOrNull { it.id == selectedInputDeviceId }
+            ?.toUi(isInput = true, isOutput = false)
+
+        val inputApplied = when {
+            selectedInputDeviceId == null -> false
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.M -> false
+            selectedInput == null -> false
+            else -> audioRecord.setPreferredDevice(
+                audioManager
+                    .getDevices(AudioManager.GET_DEVICES_INPUTS)
+                    .firstOrNull { it.id == selectedInputDeviceId }
+            )
+        }
+
+        return buildPreferredInputRoutingMessage(
+            selectedInput = selectedInput,
+            inputApplied = inputApplied,
+            apiSupportsPreferredDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+        )
+    }
+
     private fun AudioDeviceInfo.toUi(
         isInput: Boolean,
         isOutput: Boolean
@@ -113,5 +141,29 @@ internal class AudioRoutingRepository(context: Context) {
             AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_USB_ACCESSORY
         )
+    }
+}
+
+internal fun buildPreferredInputRoutingMessage(
+    selectedInput: AudioRouteDeviceUi?,
+    inputApplied: Boolean,
+    apiSupportsPreferredDevice: Boolean
+): String {
+    if (selectedInput == null) {
+        return if (apiSupportsPreferredDevice) {
+            "Using system default microphone route"
+        } else {
+            "Preferred microphone routing is unavailable on this Android version"
+        }
+    }
+
+    if (!apiSupportsPreferredDevice) {
+        return "Preferred microphone routing is unavailable on this Android version"
+    }
+
+    return if (inputApplied) {
+        "Preferred microphone requested: ${selectedInput.displayLabel}"
+    } else {
+        "Preferred microphone request rejected: ${selectedInput.displayLabel}"
     }
 }

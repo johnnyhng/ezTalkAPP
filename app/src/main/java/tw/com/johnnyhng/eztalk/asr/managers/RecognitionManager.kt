@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -12,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
@@ -29,6 +29,7 @@ class RecognitionManager(private val context: Context) {
     }
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val audioIOManager = AudioIOManager(context)
     private var audioRecord: AudioRecord? = null
     private val sampleRateInHz = 16000
 
@@ -74,18 +75,20 @@ class RecognitionManager(private val context: Context) {
             val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
             
             // Audio setup
-            val bufferSize = AudioRecord.getMinBufferSize(
-                sampleRateInHz,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
+            val managedRecord = audioIOManager.createMicAudioRecord(
+                sampleRateInHz = sampleRateInHz,
+                channelConfig = AudioFormat.CHANNEL_IN_MONO,
+                audioFormat = AudioFormat.ENCODING_PCM_16BIT,
+                preferredInputDeviceId = userSettings.preferredAudioInputDeviceId
             )
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRateInHz,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize * 2
-            )
+            audioRecord = managedRecord.audioRecord
+            managedRecord.routingMessage?.let { Log.i(TAG, it) }
+            if (audioRecord == null) {
+                onError("Unable to initialize microphone recorder")
+                _isStarted.value = false
+                recognitionJob = null
+                return@launch
+            }
             
             SimulateStreamingAsr.resetVadSafely()
 
