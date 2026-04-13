@@ -30,6 +30,7 @@ The main navigation destinations are:
 - `Home`
 - `Translate`
 - `DataCollect`
+- `Speaker`
 - `FileManager`
 - `Settings`
 - `Help`
@@ -64,6 +65,11 @@ Their roles are:
 - [FileManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/FileManager.kt)
   - loads saved `.wav` / `.jsonl` pairs from disk
   - allows editing, playback, selection, deletion, and feedback upload
+- [SpeakerScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/ui/speaker/SpeakerScreen.kt)
+  - manages local speaker txt folders under `filesDir/speech/<userId>/`
+  - supports create/import/rename/delete for folders
+  - supports rename/delete/edit/playback for txt files
+  - supports Firebase-backed cloud upload/import/delete for speaker folders
 - [SettingsScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SettingsScreen.kt)
   - edits persisted user settings such as backend URL, model selection, timing, and TTS feedback mode
 
@@ -94,6 +100,10 @@ The main state/control classes live under [app/src/main/java/tw/com/johnnyhng/ez
 - [RemoteModelRepository.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/RemoteModelRepository.kt)
   - lists remote models from backend
   - downloads selected model files into the local per-user model directory
+- [SpeakerViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/speaker/SpeakerViewModel.kt)
+  - owns local speaker explorer state
+  - owns local folder / txt rename dialogs and progress state
+  - coordinates Firebase Auth state and Firestore speaker sync state
 
 ### 3. Utilities
 
@@ -117,6 +127,9 @@ The key utility files live under [app/src/main/java/tw/com/johnnyhng/eztalk/asr/
   - centralized audio playback for saved WAVs
 - [Utils.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/Utils.kt)
   - queue state persistence helpers for data collection
+- [GoogleSignInManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/auth/GoogleSignInManager.kt)
+  - exchanges the existing Google sign-in flow into Firebase Auth
+  - keeps Firebase sign-in aligned with app sign-in state
 
 ### 4. Speech engine wrapper
 
@@ -164,6 +177,123 @@ Current behavior:
 - the app uses it as-is, only trimming whitespace and a trailing slash
 - `effectiveRecognitionUrl` is derived from `backendUrl` as `backendUrl + /process_audio`
 - model list / model download / feedback routes all use the same `backendUrl`
+
+## Speaker feature flow
+
+The Speaker feature is a separate text-based playback and practice workflow.
+
+Core files:
+
+- [SpeakerScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/ui/speaker/SpeakerScreen.kt)
+- [SpeechFileExplorer.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/ui/speaker/SpeechFileExplorer.kt)
+- [SpeakerLocalRepository.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/speaker/SpeakerLocalRepository.kt)
+- [SpeakerCloudRepository.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/speaker/SpeakerCloudRepository.kt)
+- [SpeakerSyncService.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/speaker/SpeakerSyncService.kt)
+- [SpeakerViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/speaker/SpeakerViewModel.kt)
+
+### Local speaker storage
+
+Speaker text files are stored under:
+
+```text
+filesDir/
+  speech/
+    <localUserId>/
+      <folderName>/
+        <fileName>.txt
+```
+
+Current local operations:
+
+- create local folder
+- rename local folder
+- delete local folder
+- import one or more txt files into a folder
+- rename local txt file
+- delete local txt file
+- edit txt content in place
+
+### Speaker cloud sync
+
+Speaker cloud sync uses Firebase Auth plus Cloud Firestore.
+
+Current remote structure:
+
+```text
+users/{firebaseUid}/speakerFolders/{folderName}
+users/{firebaseUid}/speakerFolders/{folderName}/documents/{fileName}
+```
+
+Each remote document stores:
+
+- file name
+- full txt content
+- content hash
+- size in bytes
+- update timestamp
+
+The app does not use Firebase Storage for speaker sync. txt content is stored directly in Firestore documents.
+
+### Speaker cloud auth behavior
+
+- cloud actions are only shown when Firebase Auth is signed in
+- the header still shows cloud signed-in / signed-out status
+- UI does not expose Firebase UID or token to the user
+- Firestore isolation is based on the signed-in Firebase UID
+
+### Speaker explorer UI behavior
+
+Header actions:
+
+- create folder
+- import local files using Android file picker
+- import from cloud when signed in
+
+Per-folder actions:
+
+- refresh
+- import txt into the folder
+- upload the folder to cloud when signed in
+- rename local folder
+- delete local folder
+
+Per-document actions:
+
+- select file
+- rename local txt file
+- delete local txt file
+
+### Speaker cloud sync behavior
+
+Upload flow:
+
+1. user taps cloud upload on a local folder
+2. app shows an overwrite confirmation dialog
+3. app writes the folder and its txt files into Firestore under the current Firebase UID
+4. app shows sync progress
+5. app shows success/failure toast
+
+Import flow:
+
+1. user opens cloud import
+2. app lists remote folders from Firestore
+3. user can select one or more folders
+4. app checks whether selected remote txt paths already exist locally
+5. if there are conflicts, app asks whether local txt files should be overwritten
+6. import writes remote txt content back into the local speaker folder tree
+
+Remote delete flow:
+
+1. user opens cloud import
+2. each remote folder row has a delete action
+3. app asks for confirmation
+4. app deletes the remote folder document and its nested document collection from Firestore
+
+Current limitations:
+
+- no remote folder rename
+- no remote diff preview beyond overwrite confirmation
+- no cancellation of an already-running cloud job after the dialog is dismissed
 
 ## Main recognition flow
 
