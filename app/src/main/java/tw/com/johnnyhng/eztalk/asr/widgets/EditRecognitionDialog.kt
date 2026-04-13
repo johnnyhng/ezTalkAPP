@@ -1,7 +1,5 @@
 package tw.com.johnnyhng.eztalk.asr.widgets
 
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -31,14 +29,13 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.utils.BackendEndpoints
 import tw.com.johnnyhng.eztalk.asr.utils.getRemoteCandidates
 import tw.com.johnnyhng.eztalk.asr.utils.readWavFileToFloatArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
-import java.util.UUID
 
 private const val sampleRateInHz = 16000
 
@@ -63,48 +60,16 @@ internal fun EditRecognitionDialog(
     var isRemoteRecognizing by remember { mutableStateOf(false) }
     var recognitionError by remember { mutableStateOf<String?>(null) }
 
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    var isTtsSpeaking by remember { mutableStateOf(false) }
+    val (speechController, speechState) = rememberSpeechOutputController()
+    val isTtsSpeaking = speechState.isSpeaking
     val recognitionUrl = remember(backendUrl) { BackendEndpoints.processAudio(backendUrl) }
 
     // Use the non-streaming (offline) recognizer for whole-file recognition
     val recognizer: OfflineRecognizer = remember { SimulateStreamingAsr.recognizer }
 
-    // Initialize TTS
-    LaunchedEffect(key1 = Unit) {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.getDefault()
-                Log.i(TAG, "TTS initialized successfully for dialog.")
-            } else {
-                Log.e(TAG, "TTS initialization failed for dialog.")
-            }
-        }.apply {
-            setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {
-                    coroutineScope.launch { isTtsSpeaking = true }
-                }
-
-                    override fun onDone(utteranceId: String?) {
-                        coroutineScope.launch {
-                            isTtsSpeaking = false
-                            (onSpeakConfirm ?: onConfirm)(text)
-                        }
-                    }
-
-                @Deprecated("Deprecated in Java")
-                override fun onError(utteranceId: String?) {
-                    coroutineScope.launch { isTtsSpeaking = false }
-                }
-            })
-        }
-    }
-
-    // Cleanup TTS
     DisposableEffect(Unit) {
         onDispose {
-            tts?.stop()
-            tts?.shutdown()
+            speechController.stop()
         }
     }
 
@@ -178,8 +143,11 @@ internal fun EditRecognitionDialog(
                     )
                     IconButton(
                         onClick = {
-                            val utteranceId = UUID.randomUUID().toString()
-                            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                            speechController.speak(text) {
+                                coroutineScope.launch {
+                                    (onSpeakConfirm ?: onConfirm)(text)
+                                }
+                            }
                         },
                         enabled = !isTtsSpeaking
                     ) {

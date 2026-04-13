@@ -6,8 +6,6 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.clickable
@@ -49,6 +47,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
+import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
@@ -129,8 +128,10 @@ fun TranslateScreen(
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
 
     // TTS state
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    var isTtsSpeaking by remember { mutableStateOf(false) }
+    val (speechController, speechState) = rememberSpeechOutputController(
+        preferredLocale = Locale.TRADITIONAL_CHINESE
+    )
+    val isTtsSpeaking = speechState.isSpeaking
 
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
@@ -142,37 +143,6 @@ fun TranslateScreen(
             homeViewModel.ensureSelectedModelInitialized()
             Log.i(TAG, "ASR model initialization finished.")
         }
-    }
-
-    // Initialize TTS
-    LaunchedEffect(key1 = Unit) {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                if (tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE) {
-                    tts?.language = Locale.TRADITIONAL_CHINESE
-                } else {
-                    Log.w(TAG, "Traditional Chinese is not available for TTS, using default.")
-                    tts?.language = Locale.getDefault()
-                }
-                Log.i(TAG, "TTS initialized successfully.")
-            } else {
-                Log.e(TAG, "TTS initialization failed.")
-            }
-        }
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                isTtsSpeaking = true
-            }
-
-            override fun onDone(utteranceId: String?) {
-                isTtsSpeaking = false
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                isTtsSpeaking = false
-            }
-        })
     }
 
     // Fetch candidates when a new transcript is available
@@ -223,9 +193,7 @@ fun TranslateScreen(
     DisposableEffect(Unit) {
         onDispose {
             stopAudio()
-            tts?.stop()
-            tts?.shutdown()
-            tts = null
+            speechController.stop()
         }
     }
 
@@ -502,8 +470,7 @@ fun TranslateScreen(
                 )
             },
             onTtsButtonClick = {
-                val utteranceId = UUID.randomUUID().toString()
-                tts?.speak(uiState.textInput, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+                speechController.speak(uiState.textInput)
 
                 uiState.transcript?.let { transcript ->
                     coroutineScope.launch {

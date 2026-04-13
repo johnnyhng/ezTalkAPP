@@ -3,7 +3,6 @@ package tw.com.johnnyhng.eztalk.asr.screens
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
-import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +38,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.DataCollectViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
@@ -67,7 +67,9 @@ fun DataCollectScreen(
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
     val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    val (speechController, _) = rememberSpeechOutputController(
+        preferredLocale = Locale.TRADITIONAL_CHINESE
+    )
     var isAutoFlowEnabled by rememberSaveable { mutableStateOf(false) }
     val latestIsSequenceMode by rememberUpdatedState(uiState.isSequenceMode)
     val latestIsAutoFlowEnabled by rememberUpdatedState(isAutoFlowEnabled)
@@ -78,18 +80,9 @@ fun DataCollectScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.TRADITIONAL_CHINESE
-            }
-        }
-    }
-
     DisposableEffect(Unit) {
         onDispose {
-            tts?.stop()
-            tts?.shutdown()
+            speechController.stop()
         }
     }
 
@@ -152,7 +145,7 @@ fun DataCollectScreen(
                     onTextChange = dataCollectViewModel::onTextChange,
                     onTtsClick = {
                         if (uiState.text.isNotBlank()) {
-                            tts?.speak(uiState.text, TextToSpeech.QUEUE_FLUSH, null, "data_collect_tts")
+                            speechController.speak(uiState.text)
                         }
                     },
                     isSequenceMode = uiState.isSequenceMode,

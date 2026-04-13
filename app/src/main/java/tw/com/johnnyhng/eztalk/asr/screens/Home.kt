@@ -3,8 +3,6 @@ package tw.com.johnnyhng.eztalk.asr.screens
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
@@ -28,6 +26,7 @@ import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
+import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.*
@@ -77,8 +76,10 @@ fun HomeScreen(
 
     // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    var isTtsSpeaking by remember { mutableStateOf(false) }
+    val (speechController, speechState) = rememberSpeechOutputController(
+        preferredLocale = Locale.TRADITIONAL_CHINESE
+    )
+    val isTtsSpeaking = speechState.isSpeaking
     val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
 
     LaunchedEffect(selectedModel?.name, userSettings.userId, userSettings.mobileModelSha256) {
@@ -130,8 +131,7 @@ fun HomeScreen(
     // Handlers
     fun handleTtsClick(index: Int, text: String) {
         MediaController.stop()
-        val utteranceId = UUID.randomUUID().toString()
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        speechController.speak(text)
         
         val item = resultList[index]
         val shouldRunFeedback = shouldAttemptFeedback(item, userSettings.enableTtsFeedback)
@@ -308,28 +308,9 @@ fun HomeScreen(
         }
     }
 
-    // TTS Init
-    LaunchedEffect(Unit) {
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                if (tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE) {
-                    tts?.language = Locale.TRADITIONAL_CHINESE
-                } else {
-                    tts?.language = Locale.getDefault()
-                }
-            }
-        }
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String?) { isTtsSpeaking = true }
-            override fun onDone(id: String?) { isTtsSpeaking = false }
-            override fun onError(id: String?) { isTtsSpeaking = false }
-        })
-    }
-
     DisposableEffect(Unit) {
         onDispose {
-            tts?.stop()
-            tts?.shutdown()
+            speechController.stop()
             recognitionQueue.close()
         }
     }
