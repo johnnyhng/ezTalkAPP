@@ -580,6 +580,39 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         return result
     }
 
+    suspend fun deleteRemoteFolder(folder: SpeakerRemoteFolder): Result<Unit> {
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncDirection = SpeakerSyncDirection.DELETE,
+            syncProgressCurrent = 0,
+            syncProgressTotal = 1,
+            syncProgressTargetName = folder.folderName,
+            cloudSyncError = null
+        )
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.deleteRemoteFolder(cloudUserId, folder)
+            }
+        }
+        result.onSuccess {
+            Log.i(TAG, "Speaker cloud folder delete completed with uid=$cloudUserId folder=${folder.folderName}")
+        }.onFailure { error ->
+            Log.w(TAG, "Speaker cloud folder delete failed with uid=$cloudUserId folder=${folder.folderName}", error)
+        }
+        uiState = uiState.copy(
+            isSyncing = false,
+            cloudSyncError = result.exceptionOrNull()?.message
+        )
+        if (result.isSuccess) {
+            uiState = uiState.copy(
+                remoteFolders = uiState.remoteFolders.filterNot { it.id == folder.id }
+            )
+        }
+        return result
+    }
+
     private fun requireCloudUserId(): String? {
         val cloudUserId = firebaseAuth.currentUser?.uid
         if (cloudUserId == null) {

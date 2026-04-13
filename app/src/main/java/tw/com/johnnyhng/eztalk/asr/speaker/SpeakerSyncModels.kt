@@ -44,7 +44,8 @@ internal data class SpeakerSyncProgress(
 
 internal enum class SpeakerSyncDirection {
     UPLOAD,
-    IMPORT
+    IMPORT,
+    DELETE
 }
 
 internal enum class SpeakerSyncConflictPolicy {

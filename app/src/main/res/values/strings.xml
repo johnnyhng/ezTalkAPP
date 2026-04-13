@@ -162,13 +162,17 @@
     <string name="speaker_cloud_upload_all">Upload all</string>
     <string name="speaker_cloud_upload">Upload folder</string>
     <string name="speaker_cloud_import">Import from cloud</string>
+    <string name="speaker_cloud_delete">Delete from cloud</string>
     <string name="speaker_cloud_empty">No cloud folders found.</string>
     <string name="speaker_cloud_upload_success">Uploaded %1$d folders and %2$d txt files</string>
     <string name="speaker_cloud_upload_folder_success">Uploaded %2$d txt files from %1$s</string>
     <string name="speaker_cloud_upload_overwrite_confirm">Upload %1$s to Firestore and overwrite files with the same names?</string>
     <string name="speaker_cloud_import_success">Imported %1$d folders and %2$d txt files</string>
+    <string name="speaker_cloud_delete_confirm">Delete remote folder %1$s from Firestore?</string>
+    <string name="speaker_cloud_delete_success">Deleted remote folder %1$s</string>
     <string name="speaker_cloud_upload_failed">Failed to upload speaker files.</string>
     <string name="speaker_cloud_import_failed">Failed to import cloud files.</string>
+    <string name="speaker_cloud_delete_failed">Failed to delete remote folder.</string>
     <string name="speaker_cloud_sign_in_required">Sign in to Firebase before using cloud sync.</string>
     <string name="speaker_cloud_status_signed_in">Cloud: signed in</string>
     <string name="speaker_cloud_status_signed_out">Cloud: not signed in</string>

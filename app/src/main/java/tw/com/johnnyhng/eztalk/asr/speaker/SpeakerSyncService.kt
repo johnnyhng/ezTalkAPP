@@ -8,6 +8,10 @@ internal class SpeakerSyncService(
         return cloudRepository.listRemoteFolders(cloudUserId)
     }
 
+    suspend fun deleteRemoteFolder(cloudUserId: String, folder: SpeakerRemoteFolder) {
+        cloudRepository.deleteRemoteFolder(cloudUserId, folder.id)
+    }
+
     suspend fun uploadAllToCloud(
         localUserId: String,
         cloudUserId: String,

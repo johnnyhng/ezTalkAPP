@@ -8,6 +8,7 @@ import kotlinx.coroutines.tasks.await
 internal interface SpeakerCloudRepository {
     suspend fun listRemoteFolders(userId: String): List<SpeakerRemoteFolder>
     suspend fun listRemoteDocuments(userId: String, folderId: String): List<SpeakerRemoteDocument>
+    suspend fun deleteRemoteFolder(userId: String, folderId: String)
     suspend fun uploadDocument(
         userId: String,
         folderName: String,
@@ -59,6 +60,21 @@ internal class FirebaseSpeakerCloudRepository(
                 )
             }
             .sortedBy { it.fileName.lowercase() }
+    }
+
+    override suspend fun deleteRemoteFolder(userId: String, folderId: String) {
+        val folderRef = folderCollection(userId).document(folderId)
+        val documentSnapshots = folderRef
+            .collection("documents")
+            .get()
+            .await()
+            .documents
+
+        documentSnapshots.forEach { snapshot ->
+            snapshot.reference.delete().await()
+        }
+
+        folderRef.delete().await()
     }
 
     override suspend fun uploadDocument(

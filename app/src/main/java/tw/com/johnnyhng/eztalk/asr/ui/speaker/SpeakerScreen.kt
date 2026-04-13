@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -114,6 +116,7 @@ fun SpeakerScreen(
     var isImportProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
     var isSyncProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
     var pendingCloudUploadDirectory by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingRemoteDeleteFolderId by rememberSaveable { mutableStateOf<String?>(null) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
     val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
@@ -589,10 +592,10 @@ fun SpeakerScreen(
                 title = {
                     Text(
                         text = stringResource(
-                            if (uiState.syncDirection == SpeakerSyncDirection.UPLOAD) {
-                                R.string.speaker_cloud_upload_all
-                            } else {
-                                R.string.speaker_cloud_import
+                            when (uiState.syncDirection) {
+                                SpeakerSyncDirection.UPLOAD -> R.string.speaker_cloud_upload_all
+                                SpeakerSyncDirection.DELETE -> R.string.speaker_cloud_delete
+                                SpeakerSyncDirection.IMPORT, null -> R.string.speaker_cloud_import
                             }
                         )
                     )
@@ -709,7 +712,11 @@ fun SpeakerScreen(
                                         } else {
                                             selectedRemoteFolderIds + folder.id
                                         }
-                                    }
+                                    },
+                                    onDelete = {
+                                        pendingRemoteDeleteFolderId = folder.id
+                                    },
+                                    isDeleteEnabled = !uiState.isSyncing
                                 )
                             }
                         }
@@ -797,6 +804,62 @@ fun SpeakerScreen(
                 dismissButton = {
                     TextButton(
                         onClick = { pendingCloudUploadDirectory = null }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        val pendingRemoteDeleteFolder = uiState.remoteFolders.firstOrNull { it.id == pendingRemoteDeleteFolderId }
+        if (pendingRemoteDeleteFolder != null) {
+            AlertDialog(
+                onDismissRequest = { pendingRemoteDeleteFolderId = null },
+                title = {
+                    Text(text = stringResource(R.string.speaker_cloud_delete))
+                },
+                text = {
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_cloud_delete_confirm,
+                            pendingRemoteDeleteFolder.folderName
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val folder = pendingRemoteDeleteFolder
+                            pendingRemoteDeleteFolderId = null
+                            selectedRemoteFolderIds = selectedRemoteFolderIds - folder.id
+                            scope.launch {
+                                val result = speakerViewModel.deleteRemoteFolder(folder)
+                                result.onSuccess {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(
+                                            R.string.speaker_cloud_delete_success,
+                                            folder.folderName
+                                        ),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.speaker_cloud_delete_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        },
+                        enabled = !uiState.isSyncing
+                    ) {
+                        Text(text = stringResource(R.string.delete))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { pendingRemoteDeleteFolderId = null }
                     ) {
                         Text(text = stringResource(R.string.cancel))
                     }
@@ -1024,7 +1087,9 @@ private fun SpeakerPaneHeader(
 private fun RemoteFolderRow(
     folder: SpeakerRemoteFolder,
     isSelected: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+    isDeleteEnabled: Boolean
 ) {
     Row(
         modifier = Modifier
@@ -1050,6 +1115,15 @@ private fun RemoteFolderRow(
                 text = stringResource(R.string.speaker_cloud_folder_count, folder.documentCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        IconButton(
+            onClick = onDelete,
+            enabled = isDeleteEnabled
+        ) {
+            Icon(
+                imageVector = Icons.Filled.DeleteOutline,
+                contentDescription = stringResource(R.string.speaker_cloud_delete)
             )
         }
     }
