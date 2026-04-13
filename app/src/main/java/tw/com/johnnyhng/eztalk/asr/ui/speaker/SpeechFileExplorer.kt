@@ -16,9 +16,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,14 +47,22 @@ internal fun SpeechFileExplorer(
     selectedDocumentId: String?,
     isLoading: Boolean,
     isImportEnabled: Boolean,
+    isCloudSyncVisible: Boolean,
+    isCloudSyncEnabled: Boolean,
+    cloudStatusText: String,
+    isDirectoryRenameEnabled: Boolean,
     isDirectoryDeleteEnabled: Boolean,
     isDocumentDeleteEnabled: Boolean,
     onCreateFolder: () -> Unit,
-    onGoogleDriveImport: () -> Unit,
+    onFilePickerImport: () -> Unit,
+    onCloudImport: () -> Unit,
+    onUploadDirectoryToCloud: (SpeakerDirectoryUi) -> Unit,
+    onRenameDirectory: (SpeakerDirectoryUi) -> Unit,
     onToggleExpand: (SpeakerDirectoryUi) -> Unit,
     onRefresh: () -> Unit,
     onImportIntoDirectory: (SpeakerDirectoryUi) -> Unit,
     onRemoveDirectory: (SpeakerDirectoryUi) -> Unit,
+    onRenameDocument: (SpeakerDocumentUi) -> Unit,
     onRemoveDocument: (SpeakerDocumentUi) -> Unit,
     onDocumentSelected: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -64,8 +75,12 @@ internal fun SpeechFileExplorer(
         Column(modifier = Modifier.fillMaxSize()) {
             SpeakerOverviewHeader(
                 onCreateFolder = onCreateFolder,
-                onGoogleDriveImport = onGoogleDriveImport,
-                isImportEnabled = isImportEnabled
+                onFilePickerImport = onFilePickerImport,
+                onCloudImport = onCloudImport,
+                isImportEnabled = isImportEnabled,
+                isCloudSyncVisible = isCloudSyncVisible,
+                isCloudSyncEnabled = isCloudSyncEnabled,
+                cloudStatusText = cloudStatusText
             )
             SpeakerDivider()
             when {
@@ -102,10 +117,17 @@ internal fun SpeechFileExplorer(
                                 onToggleExpand = { onToggleExpand(directory) },
                                 onRefresh = onRefresh,
                                 onImport = { onImportIntoDirectory(directory) },
+                                onUploadToCloud = { onUploadDirectoryToCloud(directory) },
+                                onRename = { onRenameDirectory(directory) },
                                 isImportEnabled = isImportEnabled,
+                                isCloudSyncVisible = isCloudSyncVisible,
+                                isCloudSyncEnabled = isCloudSyncEnabled,
+                                isRenameEnabled = isDirectoryRenameEnabled,
                                 onRemove = { onRemoveDirectory(directory) },
                                 isDirectoryDeleteEnabled = isDirectoryDeleteEnabled,
+                                onRenameDocument = onRenameDocument,
                                 onRemoveDocument = onRemoveDocument,
+                                isDocumentRenameEnabled = isDocumentDeleteEnabled,
                                 isDocumentDeleteEnabled = isDocumentDeleteEnabled,
                                 onDocumentSelected = onDocumentSelected
                             )
@@ -152,8 +174,12 @@ internal fun SpeakerDivider() {
 @Composable
 private fun SpeakerOverviewHeader(
     onCreateFolder: () -> Unit,
-    onGoogleDriveImport: () -> Unit,
-    isImportEnabled: Boolean
+    onFilePickerImport: () -> Unit,
+    onCloudImport: () -> Unit,
+    isImportEnabled: Boolean,
+    isCloudSyncVisible: Boolean,
+    isCloudSyncEnabled: Boolean,
+    cloudStatusText: String
 ) {
     Row(
         modifier = Modifier
@@ -162,10 +188,17 @@ private fun SpeakerOverviewHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = stringResource(R.string.speaker_overview_title),
-            style = MaterialTheme.typography.titleMedium
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.speaker_overview_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = cloudStatusText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             IconButton(onClick = onCreateFolder) {
                 Icon(
@@ -174,13 +207,24 @@ private fun SpeakerOverviewHeader(
                 )
             }
             IconButton(
-                onClick = onGoogleDriveImport,
+                onClick = onFilePickerImport,
                 enabled = isImportEnabled
             ) {
                 Icon(
                     imageVector = Icons.Filled.FileOpen,
                     contentDescription = stringResource(R.string.speaker_google_drive)
                 )
+            }
+            if (isCloudSyncVisible) {
+                IconButton(
+                    onClick = onCloudImport,
+                    enabled = isCloudSyncEnabled
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudDownload,
+                        contentDescription = stringResource(R.string.speaker_cloud_import)
+                    )
+                }
             }
         }
     }
@@ -193,10 +237,17 @@ private fun SpeakerDirectorySection(
     onToggleExpand: () -> Unit,
     onRefresh: () -> Unit,
     onImport: () -> Unit,
+    onUploadToCloud: () -> Unit,
+    onRename: () -> Unit,
     isImportEnabled: Boolean,
+    isCloudSyncVisible: Boolean,
+    isCloudSyncEnabled: Boolean,
+    isRenameEnabled: Boolean,
     onRemove: () -> Unit,
     isDirectoryDeleteEnabled: Boolean,
+    onRenameDocument: (SpeakerDocumentUi) -> Unit,
     onRemoveDocument: (SpeakerDocumentUi) -> Unit,
+    isDocumentRenameEnabled: Boolean,
     isDocumentDeleteEnabled: Boolean,
     onDocumentSelected: (String) -> Unit
 ) {
@@ -241,8 +292,30 @@ private fun SpeakerDirectorySection(
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Filled.ArrowUpward,
+                    imageVector = Icons.AutoMirrored.Filled.NoteAdd,
                     contentDescription = stringResource(R.string.speaker_import_txt)
+                )
+            }
+            if (isCloudSyncVisible) {
+                IconButton(
+                    onClick = onUploadToCloud,
+                    enabled = isCloudSyncEnabled,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudUpload,
+                        contentDescription = stringResource(R.string.speaker_cloud_upload)
+                    )
+                }
+            }
+            IconButton(
+                onClick = onRename,
+                enabled = isRenameEnabled,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = stringResource(R.string.speaker_rename_folder)
                 )
             }
             IconButton(
@@ -276,7 +349,9 @@ private fun SpeakerDirectorySection(
                             document = document,
                             isSelected = document.id == selectedDocumentId,
                             onClick = { onDocumentSelected(document.id) },
+                            onRename = { onRenameDocument(document) },
                             onRemove = { onRemoveDocument(document) },
+                            isRenameEnabled = isDocumentRenameEnabled,
                             isDeleteEnabled = isDocumentDeleteEnabled
                         )
                     }
@@ -291,7 +366,9 @@ private fun SpeakerDocumentRow(
     document: SpeakerDocumentUi,
     isSelected: Boolean,
     onClick: () -> Unit,
+    onRename: () -> Unit,
     onRemove: () -> Unit,
+    isRenameEnabled: Boolean,
     isDeleteEnabled: Boolean
 ) {
     val borderColor = if (isSelected) {
@@ -315,6 +392,16 @@ private fun SpeakerDocumentRow(
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f)
         )
+        IconButton(
+            onClick = onRename,
+            enabled = isRenameEnabled,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.speaker_rename_document)
+            )
+        }
         IconButton(
             onClick = onRemove,
             enabled = isDeleteEnabled,

@@ -8,6 +8,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,10 +19,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -61,8 +65,10 @@ import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerNoMatchOutcome
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticDecision
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticModule
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerPlaybackResult
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerRemoteFolder
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSearchResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSemanticIndexer
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerSyncDirection
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
 import tw.com.johnnyhng.eztalk.asr.speaker.buildSpeakerContentLines
@@ -106,6 +112,14 @@ fun SpeakerScreen(
     var lastHandledContentFinalVersion by rememberSaveable { mutableStateOf(0) }
     var expandedPane by rememberSaveable { mutableStateOf(SpeakerExpandedPane.EXPLORER) }
     var isContentSpeechModeEnabled by rememberSaveable { mutableStateOf(false) }
+    var selectedRemoteFolderIds by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var isImportProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var isSyncProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var pendingCloudUploadDirectory by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingRemoteDeleteFolderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingImportOverwriteFolderIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var pendingImportConflictFolders by rememberSaveable { mutableStateOf(0) }
+    var pendingImportConflictDocuments by rememberSaveable { mutableStateOf(0) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
     val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
@@ -139,6 +153,11 @@ fun SpeakerScreen(
         } else {
             null
         }
+    val cloudStatusText = if (uiState.isCloudSignedIn) {
+        context.getString(R.string.speaker_cloud_status_signed_in)
+    } else {
+        context.getString(R.string.speaker_cloud_status_signed_out)
+    }
     val playDocumentWithAsrStop: (SpeakerDocumentUi) -> SpeakerPlaybackResult = { document ->
         if (speakerAsrState.isRecording) {
             speakerAsrController.stop()
@@ -170,6 +189,18 @@ fun SpeakerScreen(
 
     LaunchedEffect(userSettings.userId) {
         speakerViewModel.setUserId(userSettings.userId)
+    }
+
+    LaunchedEffect(uiState.isImporting) {
+        if (uiState.isImporting) {
+            isImportProgressDialogVisible = true
+        }
+    }
+
+    LaunchedEffect(uiState.isSyncing) {
+        if (uiState.isSyncing) {
+            isSyncProgressDialogVisible = true
+        }
     }
 
     LaunchedEffect(speakerAsrState.partialText, speakerAsrState.finalText, activeAsrTarget) {
@@ -361,6 +392,42 @@ fun SpeakerScreen(
         }
     }
 
+    fun showUploadSummaryToast(uploadedFolderCount: Int, uploadedDocumentCount: Int) {
+        Toast.makeText(
+            context,
+            context.getString(
+                R.string.speaker_cloud_upload_success,
+                uploadedFolderCount,
+                uploadedDocumentCount
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    fun showFolderUploadSummaryToast(folderName: String, uploadedDocumentCount: Int) {
+        Toast.makeText(
+            context,
+            context.getString(
+                R.string.speaker_cloud_upload_folder_success,
+                folderName,
+                uploadedDocumentCount
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    fun showCloudImportSummaryToast(importedFolderCount: Int, importedDocumentCount: Int) {
+        Toast.makeText(
+            context,
+            context.getString(
+                R.string.speaker_cloud_import_success,
+                importedFolderCount,
+                importedDocumentCount
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
     val txtImportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
@@ -444,9 +511,97 @@ fun SpeakerScreen(
             )
         }
 
-        if (uiState.isImporting) {
+        if (uiState.showRenameFolderDialog) {
             AlertDialog(
-                onDismissRequest = { },
+                onDismissRequest = { speakerViewModel.dismissRenameFolderDialog() },
+                title = {
+                    Text(text = stringResource(R.string.speaker_rename_folder))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = uiState.renameFolderName,
+                            onValueChange = { speakerViewModel.onRenameFolderNameChanged(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.speaker_folder_name_label)) },
+                            placeholder = { Text(stringResource(R.string.speaker_folder_name_placeholder)) },
+                            isError = uiState.renameFolderDialogError != null
+                        )
+                        if (uiState.renameFolderDialogError != null) {
+                            Text(
+                                text = uiState.renameFolderDialogError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { speakerViewModel.renameFolder() },
+                        enabled = uiState.renameFolderName.isNotBlank()
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { speakerViewModel.dismissRenameFolderDialog() }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        if (uiState.showRenameDocumentDialog) {
+            AlertDialog(
+                onDismissRequest = { speakerViewModel.dismissRenameDocumentDialog() },
+                title = {
+                    Text(text = stringResource(R.string.speaker_rename_document))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = uiState.renameDocumentName,
+                            onValueChange = { speakerViewModel.onRenameDocumentNameChanged(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.speaker_document_name_label)) },
+                            placeholder = { Text(stringResource(R.string.speaker_document_name_placeholder)) },
+                            isError = uiState.renameDocumentDialogError != null
+                        )
+                        if (uiState.renameDocumentDialogError != null) {
+                            Text(
+                                text = uiState.renameDocumentDialogError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { speakerViewModel.renameDocument() },
+                        enabled = uiState.renameDocumentName.isNotBlank()
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { speakerViewModel.dismissRenameDocumentDialog() }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        if (uiState.isImporting && isImportProgressDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { isImportProgressDialogVisible = false },
                 title = {
                     Text(text = stringResource(R.string.speaker_importing_title))
                 },
@@ -469,6 +624,49 @@ fun SpeakerScreen(
                                 R.string.speaker_importing_progress,
                                 uiState.importProgressCurrent,
                                 uiState.importProgressTotal
+                            ),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                },
+                confirmButton = {}
+            )
+        }
+
+        if (uiState.isSyncing && isSyncProgressDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { isSyncProgressDialogVisible = false },
+                title = {
+                    Text(
+                        text = stringResource(
+                            when (uiState.syncDirection) {
+                                SpeakerSyncDirection.UPLOAD -> R.string.speaker_cloud_upload_all
+                                SpeakerSyncDirection.DELETE -> R.string.speaker_cloud_delete
+                                SpeakerSyncDirection.IMPORT, null -> R.string.speaker_cloud_import
+                            }
+                        )
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = if (uiState.syncProgressTargetName.isBlank()) {
+                                stringResource(R.string.speaker_sync_preparing)
+                            } else {
+                                stringResource(R.string.speaker_sync_target, uiState.syncProgressTargetName)
+                            },
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        LinearProgressIndicator(
+                            progress = if (uiState.syncProgressTotal == 0) 0f
+                            else uiState.syncProgressCurrent.toFloat() / uiState.syncProgressTotal.toFloat(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.speaker_importing_progress,
+                                uiState.syncProgressCurrent,
+                                uiState.syncProgressTotal
                             ),
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -527,6 +725,276 @@ fun SpeakerScreen(
             )
         }
 
+        if (uiState.showCloudImportDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    selectedRemoteFolderIds = emptySet()
+                    pendingImportOverwriteFolderIds = emptySet()
+                    speakerViewModel.dismissCloudImportDialog()
+                },
+                title = {
+                    Text(text = stringResource(R.string.speaker_cloud_import))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (uiState.cloudSyncError != null) {
+                            Text(
+                                text = uiState.cloudSyncError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        if (uiState.remoteFolders.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.speaker_cloud_empty),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else {
+                            uiState.remoteFolders.forEach { folder ->
+                                RemoteFolderRow(
+                                    folder = folder,
+                                    isSelected = selectedRemoteFolderIds.contains(folder.id),
+                                    onToggle = {
+                                        selectedRemoteFolderIds = if (selectedRemoteFolderIds.contains(folder.id)) {
+                                            selectedRemoteFolderIds - folder.id
+                                        } else {
+                                            selectedRemoteFolderIds + folder.id
+                                        }
+                                    },
+                                    onDelete = {
+                                        pendingRemoteDeleteFolderId = folder.id
+                                    },
+                                    isDeleteEnabled = !uiState.isSyncing
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val targetFolders = uiState.remoteFolders.filter { selectedRemoteFolderIds.contains(it.id) }
+                            if (targetFolders.isEmpty()) return@TextButton
+                            scope.launch {
+                                val conflictResult = speakerViewModel.previewImportConflicts(targetFolders)
+                                conflictResult.onSuccess { conflictSummary ->
+                                    if (conflictSummary.conflictingDocuments > 0) {
+                                        pendingImportOverwriteFolderIds = targetFolders.map { it.id }.toSet()
+                                        pendingImportConflictFolders = conflictSummary.conflictingFolders
+                                        pendingImportConflictDocuments = conflictSummary.conflictingDocuments
+                                        return@onSuccess
+                                    }
+
+                                    val result = speakerViewModel.importRemoteFolders(targetFolders)
+                                    result.onSuccess { summary ->
+                                        selectedRemoteFolderIds = emptySet()
+                                        showCloudImportSummaryToast(
+                                            importedFolderCount = summary.importedFolders,
+                                            importedDocumentCount = summary.importedDocuments
+                                        )
+                                    }.onFailure {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.speaker_cloud_import_failed),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.speaker_cloud_import_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        },
+                        enabled = selectedRemoteFolderIds.isNotEmpty() && !uiState.isSyncing
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            selectedRemoteFolderIds = emptySet()
+                            pendingImportOverwriteFolderIds = emptySet()
+                            speakerViewModel.dismissCloudImportDialog()
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        if (pendingCloudUploadDirectory != null) {
+            AlertDialog(
+                onDismissRequest = { pendingCloudUploadDirectory = null },
+                title = {
+                    Text(text = stringResource(R.string.speaker_cloud_upload))
+                },
+                text = {
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_cloud_upload_overwrite_confirm,
+                            pendingCloudUploadDirectory.orEmpty()
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val folderName = pendingCloudUploadDirectory ?: return@TextButton
+                            pendingCloudUploadDirectory = null
+                            scope.launch {
+                                val result = speakerViewModel.uploadFolderToCloud(folderName)
+                                result.onSuccess { summary ->
+                                    showFolderUploadSummaryToast(
+                                        folderName = folderName,
+                                        uploadedDocumentCount = summary.uploadedDocuments
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.speaker_cloud_upload_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { pendingCloudUploadDirectory = null }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        if (pendingImportOverwriteFolderIds.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = {
+                    pendingImportOverwriteFolderIds = emptySet()
+                    pendingImportConflictFolders = 0
+                    pendingImportConflictDocuments = 0
+                },
+                title = {
+                    Text(text = stringResource(R.string.speaker_cloud_import))
+                },
+                text = {
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_cloud_import_overwrite_confirm,
+                            pendingImportConflictFolders,
+                            pendingImportConflictDocuments
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val targetFolders = uiState.remoteFolders.filter {
+                                pendingImportOverwriteFolderIds.contains(it.id)
+                            }
+                            pendingImportOverwriteFolderIds = emptySet()
+                            pendingImportConflictFolders = 0
+                            pendingImportConflictDocuments = 0
+                            scope.launch {
+                                val result = speakerViewModel.importRemoteFolders(targetFolders)
+                                result.onSuccess { summary ->
+                                    selectedRemoteFolderIds = emptySet()
+                                    showCloudImportSummaryToast(
+                                        importedFolderCount = summary.importedFolders,
+                                        importedDocumentCount = summary.importedDocuments
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.speaker_cloud_import_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pendingImportOverwriteFolderIds = emptySet()
+                            pendingImportConflictFolders = 0
+                            pendingImportConflictDocuments = 0
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        val pendingRemoteDeleteFolder = uiState.remoteFolders.firstOrNull { it.id == pendingRemoteDeleteFolderId }
+        if (pendingRemoteDeleteFolder != null) {
+            AlertDialog(
+                onDismissRequest = { pendingRemoteDeleteFolderId = null },
+                title = {
+                    Text(text = stringResource(R.string.speaker_cloud_delete))
+                },
+                text = {
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_cloud_delete_confirm,
+                            pendingRemoteDeleteFolder.folderName
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val folder = pendingRemoteDeleteFolder
+                            pendingRemoteDeleteFolderId = null
+                            selectedRemoteFolderIds = selectedRemoteFolderIds - folder.id
+                            scope.launch {
+                                val result = speakerViewModel.deleteRemoteFolder(folder)
+                                result.onSuccess {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(
+                                            R.string.speaker_cloud_delete_success,
+                                            folder.folderName
+                                        ),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.speaker_cloud_delete_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        },
+                        enabled = !uiState.isSyncing
+                    ) {
+                        Text(text = stringResource(R.string.delete))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { pendingRemoteDeleteFolderId = null }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
         SpeakerPaneHeader(
             title = stringResource(R.string.speaker_explorer_pane_title),
             isExpanded = expandedPane == SpeakerExpandedPane.EXPLORER,
@@ -538,11 +1006,28 @@ fun SpeakerScreen(
                 directories = uiState.directories,
                 selectedDocumentId = uiState.selectedDocumentId,
                 isLoading = uiState.isLoading,
-                isImportEnabled = !uiState.isImporting,
+                isImportEnabled = !uiState.isImporting && !uiState.isSyncing,
+                isCloudSyncVisible = uiState.isCloudSignedIn,
+                isCloudSyncEnabled = !uiState.isImporting && !uiState.isSyncing,
+                cloudStatusText = cloudStatusText,
+                isDirectoryRenameEnabled = !uiState.isImporting &&
+                    !uiState.isSyncing &&
+                    !isSelectedDocumentPlaying &&
+                    !isSelectedDocumentPaused,
                 isDirectoryDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 isDocumentDeleteEnabled = !isSelectedDocumentPlaying && !isSelectedDocumentPaused,
                 onCreateFolder = { speakerViewModel.showCreateFolderDialog() },
-                onGoogleDriveImport = { speakerViewModel.showDriveImportDialog() },
+                onFilePickerImport = { speakerViewModel.showDriveImportDialog() },
+                onUploadDirectoryToCloud = { directory ->
+                    pendingCloudUploadDirectory = directory.displayName
+                },
+                onRenameDirectory = { directory ->
+                    speakerViewModel.showRenameFolderDialog(directory)
+                },
+                onCloudImport = {
+                    selectedRemoteFolderIds = emptySet()
+                    speakerViewModel.showCloudImportDialog()
+                },
                 onToggleExpand = { directory -> speakerViewModel.toggleDirectory(directory) },
                 onRefresh = { speakerViewModel.refreshDirectories() },
                 onImportIntoDirectory = { directory ->
@@ -551,6 +1036,9 @@ fun SpeakerScreen(
                 },
                 onRemoveDirectory = { directory ->
                     speakerViewModel.deleteFolder(directory)
+                },
+                onRenameDocument = { document ->
+                    speakerViewModel.showRenameDocumentDialog(document)
                 },
                 onRemoveDocument = { document ->
                     playbackController.stopIfPlaying(document.id)
@@ -722,6 +1210,52 @@ private fun SpeakerPaneHeader(
             Icon(
                 imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                 contentDescription = null
+            )
+        }
+    }
+}
+
+@Composable
+private fun RemoteFolderRow(
+    folder: SpeakerRemoteFolder,
+    isSelected: Boolean,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+    isDeleteEnabled: Boolean
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = { onToggle() }
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp)
+        ) {
+            Text(
+                text = folder.folderName,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = stringResource(R.string.speaker_cloud_folder_count, folder.documentCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        IconButton(
+            onClick = onDelete,
+            enabled = isDeleteEnabled
+        ) {
+            Icon(
+                imageVector = Icons.Filled.DeleteOutline,
+                contentDescription = stringResource(R.string.speaker_cloud_delete)
             )
         }
     }

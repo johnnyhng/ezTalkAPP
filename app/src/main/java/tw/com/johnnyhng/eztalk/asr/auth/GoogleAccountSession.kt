@@ -3,7 +3,8 @@ package tw.com.johnnyhng.eztalk.asr.auth
 internal data class GoogleAccountSession(
     val email: String,
     val displayName: String? = null,
-    val photoUrl: String? = null
+    val photoUrl: String? = null,
+    val idToken: String? = null
 )
 
 internal fun GoogleAccountSession.displayLabel(): String {

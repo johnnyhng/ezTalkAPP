@@ -1,0 +1,156 @@
+package tw.com.johnnyhng.eztalk.asr.speaker
+
+internal class SpeakerSyncService(
+    private val localRepository: SpeakerLocalRepository,
+    private val cloudRepository: SpeakerCloudRepository
+) {
+    suspend fun listRemoteFolders(cloudUserId: String): List<SpeakerRemoteFolder> {
+        return cloudRepository.listRemoteFolders(cloudUserId)
+    }
+
+    suspend fun deleteRemoteFolder(cloudUserId: String, folder: SpeakerRemoteFolder) {
+        cloudRepository.deleteRemoteFolder(cloudUserId, folder.id)
+    }
+
+    suspend fun previewImportConflicts(
+        localUserId: String,
+        cloudUserId: String,
+        remoteFolders: List<SpeakerRemoteFolder>
+    ): SpeakerImportConflictSummary {
+        val localDocumentKeys = localRepository.listLocalFolders(localUserId)
+            .flatMap { folder -> folder.documents.map { document -> "${folder.folderName}/${document.fileName}" } }
+            .toSet()
+        val conflictingKeys = remoteFolders.flatMap { folder ->
+            cloudRepository.listRemoteDocuments(cloudUserId, folder.id).map { document ->
+                "${document.folderName}/${document.fileName}"
+            }
+        }.filter { it in localDocumentKeys }
+
+        return SpeakerImportConflictSummary(
+            conflictingFolders = conflictingKeys.map { it.substringBefore('/') }.distinct().size,
+            conflictingDocuments = conflictingKeys.size
+        )
+    }
+
+    suspend fun uploadAllToCloud(
+        localUserId: String,
+        cloudUserId: String,
+        onProgress: (SpeakerSyncProgress) -> Unit = {}
+    ): SpeakerUploadSummary {
+        val localFolders = localRepository.listLocalFolders(localUserId)
+        val allDocuments = localFolders.flatMap { it.documents }
+        var uploadedDocuments = 0
+        var skippedDocuments = 0
+
+        allDocuments.forEachIndexed { index, document ->
+            cloudRepository.uploadDocument(
+                userId = cloudUserId,
+                folderName = document.folderName,
+                fileName = document.fileName,
+                fullText = document.fullText,
+                contentHash = document.contentHash
+            )
+            uploadedDocuments += 1
+            onProgress(
+                SpeakerSyncProgress(
+                    current = index + 1,
+                    total = allDocuments.size,
+                    targetName = document.folderName
+                )
+            )
+        }
+
+        return SpeakerUploadSummary(
+            uploadedFolders = localFolders.size,
+            uploadedDocuments = uploadedDocuments,
+            skippedDocuments = skippedDocuments
+        )
+    }
+
+    suspend fun uploadFolderToCloud(
+        localUserId: String,
+        cloudUserId: String,
+        folderName: String,
+        onProgress: (SpeakerSyncProgress) -> Unit = {}
+    ): SpeakerUploadSummary {
+        val localFolder = localRepository.listLocalFolders(localUserId)
+            .firstOrNull { it.folderName == folderName }
+            ?: return SpeakerUploadSummary(
+                uploadedFolders = 0,
+                uploadedDocuments = 0,
+                skippedDocuments = 0
+            )
+
+        localFolder.documents.forEachIndexed { index, document ->
+            cloudRepository.uploadDocument(
+                userId = cloudUserId,
+                folderName = document.folderName,
+                fileName = document.fileName,
+                fullText = document.fullText,
+                contentHash = document.contentHash
+            )
+            onProgress(
+                SpeakerSyncProgress(
+                    current = index + 1,
+                    total = localFolder.documents.size,
+                    targetName = document.folderName
+                )
+            )
+        }
+
+        return SpeakerUploadSummary(
+            uploadedFolders = 1,
+            uploadedDocuments = localFolder.documents.size,
+            skippedDocuments = 0
+        )
+    }
+
+    suspend fun importRemoteFolders(
+        localUserId: String,
+        cloudUserId: String,
+        remoteFolders: List<SpeakerRemoteFolder>,
+        conflictPolicy: SpeakerSyncConflictPolicy = SpeakerSyncConflictPolicy.OVERWRITE,
+        onProgress: (SpeakerSyncProgress) -> Unit = {}
+    ): SpeakerImportSummary {
+        val localDocuments = localRepository.listLocalFolders(localUserId)
+            .flatMap { folder -> folder.documents.map { document -> "${folder.folderName}/${document.fileName}" to document } }
+            .toMap()
+        val remoteDocuments = remoteFolders.flatMap { folder ->
+            cloudRepository.listRemoteDocuments(cloudUserId, folder.id)
+        }
+
+        var importedDocuments = 0
+        var skippedDocuments = 0
+        remoteDocuments.forEachIndexed { index, remoteDocument ->
+            val localKey = "${remoteDocument.folderName}/${remoteDocument.fileName}"
+            val existingDocument = localDocuments[localKey]
+            val shouldSkip = conflictPolicy == SpeakerSyncConflictPolicy.SKIP_EXISTING &&
+                existingDocument != null
+            if (shouldSkip) {
+                skippedDocuments += 1
+            } else {
+                val fullText = cloudRepository.downloadDocument(cloudUserId, remoteDocument)
+                localRepository.createOrUpdateDocument(
+                    userId = localUserId,
+                    folderName = remoteDocument.folderName,
+                    fileName = remoteDocument.fileName,
+                    fullText = fullText
+                )
+                importedDocuments += 1
+            }
+            onProgress(
+                SpeakerSyncProgress(
+                    current = index + 1,
+                    total = remoteDocuments.size,
+                    targetName = remoteDocument.folderName
+                )
+            )
+        }
+
+        return SpeakerImportSummary(
+            importedFolders = remoteFolders.size,
+            importedDocuments = importedDocuments,
+            skippedDocuments = skippedDocuments
+        )
+    }
+}

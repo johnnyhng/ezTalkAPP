@@ -65,10 +65,6 @@ private fun queryDisplayName(context: Context, uri: Uri): String? {
     }
 }
 
-private fun ensureTxtExtension(name: String): String {
-    return if (name.lowercase().endsWith(".txt")) name else "$name.txt"
-}
-
 private fun uniqueTargetFile(directory: File, requestedName: String): File {
     val baseName = requestedName.substringBeforeLast('.', requestedName)
     val extension = requestedName.substringAfterLast('.', "txt")

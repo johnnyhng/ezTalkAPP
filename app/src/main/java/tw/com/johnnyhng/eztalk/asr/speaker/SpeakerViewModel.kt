@@ -7,6 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
+import tw.com.johnnyhng.eztalk.asr.TAG
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -14,15 +17,33 @@ import tw.com.johnnyhng.eztalk.asr.R
 
 internal data class SpeakerScreenUiState(
     val directories: List<SpeakerDirectoryUi> = emptyList(),
+    val remoteFolders: List<SpeakerRemoteFolder> = emptyList(),
     val selectedDocumentId: String? = null,
     val isLoading: Boolean = true,
     val showCreateFolderDialog: Boolean = false,
     val newFolderName: String = "",
     val createFolderDialogError: String? = null,
+    val showRenameFolderDialog: Boolean = false,
+    val renameSourceFolderName: String? = null,
+    val renameFolderName: String = "",
+    val renameFolderDialogError: String? = null,
+    val showRenameDocumentDialog: Boolean = false,
+    val renameSourceDocumentId: String? = null,
+    val renameDocumentName: String = "",
+    val renameDocumentDialogError: String? = null,
     val showDriveImportDialog: Boolean = false,
     val driveImportFolderName: String = "",
     val driveImportDialogError: String? = null,
     val isImporting: Boolean = false,
+    val isSyncing: Boolean = false,
+    val syncDirection: SpeakerSyncDirection? = null,
+    val syncProgressCurrent: Int = 0,
+    val syncProgressTotal: Int = 0,
+    val syncProgressTargetName: String = "",
+    val isCloudSignedIn: Boolean = false,
+    val cloudUserId: String? = null,
+    val showCloudImportDialog: Boolean = false,
+    val cloudSyncError: String? = null,
     val importProgressCurrent: Int = 0,
     val importProgressTotal: Int = 0,
     val importProgressFolderName: String = "",
@@ -34,11 +55,33 @@ internal data class SpeakerScreenUiState(
 )
 
 internal class SpeakerViewModel(application: Application) : AndroidViewModel(application) {
+    private val localRepository = SpeakerLocalRepository(application)
     private val repository = SpeakerRepository(application)
+    private val firebaseAuth = FirebaseAuth.getInstance()
+    private val syncService = SpeakerSyncService(
+        localRepository = localRepository,
+        cloudRepository = FirebaseSpeakerCloudRepository()
+    )
+    private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
+        val user = auth.currentUser
+        uiState = uiState.copy(
+            isCloudSignedIn = user != null,
+            cloudUserId = user?.uid
+        )
+    }
     private var currentUserId: String? = null
 
     var uiState by mutableStateOf(SpeakerScreenUiState())
         private set
+
+    init {
+        firebaseAuth.addAuthStateListener(authStateListener)
+        val user = firebaseAuth.currentUser
+        uiState = uiState.copy(
+            isCloudSignedIn = user != null,
+            cloudUserId = user?.uid
+        )
+    }
 
     fun setUserId(userId: String) {
         if (currentUserId == userId) return
@@ -161,10 +204,60 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         )
     }
 
+    fun showRenameFolderDialog(directory: SpeakerDirectoryUi) {
+        uiState = uiState.copy(
+            showRenameFolderDialog = true,
+            renameSourceFolderName = directory.displayName,
+            renameFolderName = directory.displayName,
+            renameFolderDialogError = null
+        )
+    }
+
+    fun dismissRenameFolderDialog() {
+        uiState = uiState.copy(
+            showRenameFolderDialog = false,
+            renameSourceFolderName = null,
+            renameFolderName = "",
+            renameFolderDialogError = null
+        )
+    }
+
+    fun showRenameDocumentDialog(document: SpeakerDocumentUi) {
+        uiState = uiState.copy(
+            showRenameDocumentDialog = true,
+            renameSourceDocumentId = document.id,
+            renameDocumentName = document.displayName.removeSuffix(".txt"),
+            renameDocumentDialogError = null
+        )
+    }
+
+    fun dismissRenameDocumentDialog() {
+        uiState = uiState.copy(
+            showRenameDocumentDialog = false,
+            renameSourceDocumentId = null,
+            renameDocumentName = "",
+            renameDocumentDialogError = null
+        )
+    }
+
     fun onNewFolderNameChanged(value: String) {
         uiState = uiState.copy(
             newFolderName = value,
             createFolderDialogError = null
+        )
+    }
+
+    fun onRenameFolderNameChanged(value: String) {
+        uiState = uiState.copy(
+            renameFolderName = value,
+            renameFolderDialogError = null
+        )
+    }
+
+    fun onRenameDocumentNameChanged(value: String) {
+        uiState = uiState.copy(
+            renameDocumentName = value,
+            renameDocumentDialogError = null
         )
     }
 
@@ -200,6 +293,105 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
                 FolderCreationResult.FAILED -> {
                     uiState = uiState.copy(
                         createFolderDialogError = context.getString(R.string.speaker_create_folder_failed)
+                    )
+                }
+            }
+        }
+    }
+
+    fun renameFolder() {
+        val userId = currentUserId ?: return
+        val sourceFolderName = uiState.renameSourceFolderName ?: return
+        val context = getApplication<Application>()
+        val sanitizedName = sanitizeFolderName(uiState.renameFolderName)
+        if (sanitizedName.isBlank()) {
+            uiState = uiState.copy(
+                renameFolderDialogError = context.getString(R.string.speaker_invalid_folder_name)
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                localRepository.renameFolder(
+                    userId = userId,
+                    sourceFolderName = sourceFolderName,
+                    targetFolderName = sanitizedName
+                )
+            }
+            when (result) {
+                FolderRenameResult.RENAMED -> {
+                    uiState = uiState.copy(
+                        showRenameFolderDialog = false,
+                        renameSourceFolderName = null,
+                        renameFolderName = "",
+                        renameFolderDialogError = null
+                    )
+                    reloadDirectories(userId)
+                }
+
+                FolderRenameResult.ALREADY_EXISTS -> {
+                    uiState = uiState.copy(
+                        renameFolderDialogError = context.getString(R.string.speaker_folder_exists, sanitizedName)
+                    )
+                }
+
+                FolderRenameResult.FAILED -> {
+                    uiState = uiState.copy(
+                        renameFolderDialogError = context.getString(R.string.speaker_rename_folder_failed)
+                    )
+                }
+            }
+        }
+    }
+
+    fun renameDocument() {
+        val sourceDocumentId = uiState.renameSourceDocumentId ?: return
+        val context = getApplication<Application>()
+        val normalizedBaseName = sanitizeDocumentName(uiState.renameDocumentName)
+        if (normalizedBaseName.isBlank()) {
+            uiState = uiState.copy(
+                renameDocumentDialogError = context.getString(R.string.speaker_invalid_document_name)
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                localRepository.renameDocument(
+                    filePath = sourceDocumentId,
+                    targetDisplayName = normalizedBaseName
+                )
+            }
+            when (result) {
+                DocumentRenameResult.RENAMED -> {
+                    uiState = uiState.copy(
+                        showRenameDocumentDialog = false,
+                        renameSourceDocumentId = null,
+                        renameDocumentName = "",
+                        renameDocumentDialogError = null
+                    )
+                    reloadDirectories()
+                }
+
+                DocumentRenameResult.ALREADY_EXISTS -> {
+                    uiState = uiState.copy(
+                        renameDocumentDialogError = context.getString(
+                            R.string.speaker_document_exists,
+                            ensureTxtExtension(normalizedBaseName)
+                        )
+                    )
+                }
+
+                DocumentRenameResult.INVALID_NAME -> {
+                    uiState = uiState.copy(
+                        renameDocumentDialogError = context.getString(R.string.speaker_invalid_document_name)
+                    )
+                }
+
+                DocumentRenameResult.FAILED -> {
+                    uiState = uiState.copy(
+                        renameDocumentDialogError = context.getString(R.string.speaker_rename_document_failed)
                     )
                 }
             }
@@ -299,6 +491,241 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
 
     fun refreshDirectories() {
         reloadDirectories()
+    }
+
+    fun showCloudImportDialog() {
+        uiState = uiState.copy(
+            showCloudImportDialog = true,
+            cloudSyncError = null
+        )
+        loadRemoteFolders()
+    }
+
+    fun dismissCloudImportDialog() {
+        uiState = uiState.copy(
+            showCloudImportDialog = false,
+            cloudSyncError = null
+        )
+    }
+
+    fun loadRemoteFolders() {
+        val cloudUserId = requireCloudUserId() ?: return
+        viewModelScope.launch {
+            uiState = uiState.copy(
+                isSyncing = true,
+                syncDirection = SpeakerSyncDirection.IMPORT,
+                syncProgressCurrent = 0,
+                syncProgressTotal = 0,
+                syncProgressTargetName = "",
+                cloudSyncError = null
+            )
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    syncService.listRemoteFolders(cloudUserId)
+                }
+            }.onSuccess { folders ->
+                uiState = uiState.copy(
+                    remoteFolders = folders,
+                    isSyncing = false
+                )
+            }.onFailure { error ->
+                uiState = uiState.copy(
+                    remoteFolders = emptyList(),
+                    isSyncing = false,
+                    cloudSyncError = error.message
+                )
+            }
+        }
+    }
+
+    suspend fun uploadAllToCloud(): Result<SpeakerUploadSummary> {
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncDirection = SpeakerSyncDirection.UPLOAD,
+            syncProgressCurrent = 0,
+            syncProgressTotal = 0,
+            syncProgressTargetName = "",
+            cloudSyncError = null
+        )
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.uploadAllToCloud(
+                    localUserId = localUserId,
+                    cloudUserId = cloudUserId
+                ) { progress ->
+                    uiState = uiState.copy(
+                        syncProgressCurrent = progress.current,
+                        syncProgressTotal = progress.total,
+                        syncProgressTargetName = progress.targetName
+                    )
+                }
+            }
+        }
+        result.onSuccess {
+            Log.i(TAG, "Speaker cloud upload completed with uid=$cloudUserId localUserId=$localUserId")
+        }.onFailure { error ->
+            Log.w(TAG, "Speaker cloud upload failed with uid=$cloudUserId", error)
+        }
+        uiState = uiState.copy(
+            isSyncing = false,
+            cloudSyncError = result.exceptionOrNull()?.message
+        )
+        return result
+    }
+
+    suspend fun uploadFolderToCloud(folderName: String): Result<SpeakerUploadSummary> {
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncDirection = SpeakerSyncDirection.UPLOAD,
+            syncProgressCurrent = 0,
+            syncProgressTotal = 0,
+            syncProgressTargetName = folderName,
+            cloudSyncError = null
+        )
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.uploadFolderToCloud(
+                    localUserId = localUserId,
+                    cloudUserId = cloudUserId,
+                    folderName = folderName
+                ) { progress ->
+                    uiState = uiState.copy(
+                        syncProgressCurrent = progress.current,
+                        syncProgressTotal = progress.total,
+                        syncProgressTargetName = progress.targetName
+                    )
+                }
+            }
+        }
+        result.onSuccess {
+            Log.i(TAG, "Speaker cloud folder upload completed with uid=$cloudUserId localUserId=$localUserId folder=$folderName")
+        }.onFailure { error ->
+            Log.w(TAG, "Speaker cloud folder upload failed with uid=$cloudUserId folder=$folderName", error)
+        }
+        uiState = uiState.copy(
+            isSyncing = false,
+            cloudSyncError = result.exceptionOrNull()?.message
+        )
+        return result
+    }
+
+    suspend fun importRemoteFolders(
+        folders: List<SpeakerRemoteFolder>,
+        conflictPolicy: SpeakerSyncConflictPolicy = SpeakerSyncConflictPolicy.OVERWRITE
+    ): Result<SpeakerImportSummary> {
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncDirection = SpeakerSyncDirection.IMPORT,
+            syncProgressCurrent = 0,
+            syncProgressTotal = 0,
+            syncProgressTargetName = "",
+            cloudSyncError = null
+        )
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.importRemoteFolders(
+                    localUserId = localUserId,
+                    cloudUserId = cloudUserId,
+                    remoteFolders = folders,
+                    conflictPolicy = conflictPolicy
+                ) { progress ->
+                    uiState = uiState.copy(
+                        syncProgressCurrent = progress.current,
+                        syncProgressTotal = progress.total,
+                        syncProgressTargetName = progress.targetName
+                    )
+                }
+            }
+        }
+        result.onSuccess {
+            Log.i(TAG, "Speaker cloud import completed with uid=$cloudUserId localUserId=$localUserId")
+        }.onFailure { error ->
+            Log.w(TAG, "Speaker cloud import failed with uid=$cloudUserId", error)
+        }
+        uiState = uiState.copy(
+            isSyncing = false,
+            showCloudImportDialog = false,
+            cloudSyncError = result.exceptionOrNull()?.message
+        )
+        if (result.isSuccess) {
+            reloadDirectories(localUserId)
+        }
+        return result
+    }
+
+    suspend fun previewImportConflicts(
+        folders: List<SpeakerRemoteFolder>
+    ): Result<SpeakerImportConflictSummary> {
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        return runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.previewImportConflicts(
+                    localUserId = localUserId,
+                    cloudUserId = cloudUserId,
+                    remoteFolders = folders
+                )
+            }
+        }
+    }
+
+    suspend fun deleteRemoteFolder(folder: SpeakerRemoteFolder): Result<Unit> {
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        uiState = uiState.copy(
+            isSyncing = true,
+            syncDirection = SpeakerSyncDirection.DELETE,
+            syncProgressCurrent = 0,
+            syncProgressTotal = 1,
+            syncProgressTargetName = folder.folderName,
+            cloudSyncError = null
+        )
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.deleteRemoteFolder(cloudUserId, folder)
+            }
+        }
+        result.onSuccess {
+            Log.i(TAG, "Speaker cloud folder delete completed with uid=$cloudUserId folder=${folder.folderName}")
+        }.onFailure { error ->
+            Log.w(TAG, "Speaker cloud folder delete failed with uid=$cloudUserId folder=${folder.folderName}", error)
+        }
+        uiState = uiState.copy(
+            isSyncing = false,
+            cloudSyncError = result.exceptionOrNull()?.message
+        )
+        if (result.isSuccess) {
+            uiState = uiState.copy(
+                remoteFolders = uiState.remoteFolders.filterNot { it.id == folder.id }
+            )
+        }
+        return result
+    }
+
+    private fun requireCloudUserId(): String? {
+        val cloudUserId = firebaseAuth.currentUser?.uid
+        if (cloudUserId == null) {
+            val context = getApplication<Application>()
+            uiState = uiState.copy(
+                cloudSyncError = context.getString(R.string.speaker_cloud_sign_in_required)
+            )
+        }
+        return cloudUserId
+    }
+
+    override fun onCleared() {
+        firebaseAuth.removeAuthStateListener(authStateListener)
+        super.onCleared()
     }
 
     private fun reloadDirectories(userId: String? = currentUserId) {
