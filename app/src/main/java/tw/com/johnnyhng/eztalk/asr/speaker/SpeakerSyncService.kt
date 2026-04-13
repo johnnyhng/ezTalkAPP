@@ -12,6 +12,26 @@ internal class SpeakerSyncService(
         cloudRepository.deleteRemoteFolder(cloudUserId, folder.id)
     }
 
+    suspend fun previewImportConflicts(
+        localUserId: String,
+        cloudUserId: String,
+        remoteFolders: List<SpeakerRemoteFolder>
+    ): SpeakerImportConflictSummary {
+        val localDocumentKeys = localRepository.listLocalFolders(localUserId)
+            .flatMap { folder -> folder.documents.map { document -> "${folder.folderName}/${document.fileName}" } }
+            .toSet()
+        val conflictingKeys = remoteFolders.flatMap { folder ->
+            cloudRepository.listRemoteDocuments(cloudUserId, folder.id).map { document ->
+                "${document.folderName}/${document.fileName}"
+            }
+        }.filter { it in localDocumentKeys }
+
+        return SpeakerImportConflictSummary(
+            conflictingFolders = conflictingKeys.map { it.substringBefore('/') }.distinct().size,
+            conflictingDocuments = conflictingKeys.size
+        )
+    }
+
     suspend fun uploadAllToCloud(
         localUserId: String,
         cloudUserId: String,

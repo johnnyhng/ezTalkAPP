@@ -168,6 +168,7 @@
     <string name="speaker_cloud_upload_folder_success">Uploaded %2$d txt files from %1$s</string>
     <string name="speaker_cloud_upload_overwrite_confirm">Upload %1$s to Firestore and overwrite files with the same names?</string>
     <string name="speaker_cloud_import_success">Imported %1$d folders and %2$d txt files</string>
+    <string name="speaker_cloud_import_overwrite_confirm">Found %2$d existing txt files across %1$d folders. Overwrite local files?</string>
     <string name="speaker_cloud_delete_confirm">Delete remote folder %1$s from Firestore?</string>
     <string name="speaker_cloud_delete_success">Deleted remote folder %1$s</string>
     <string name="speaker_cloud_upload_failed">Failed to upload speaker files.</string>

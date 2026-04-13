@@ -580,6 +580,23 @@ internal class SpeakerViewModel(application: Application) : AndroidViewModel(app
         return result
     }
 
+    suspend fun previewImportConflicts(
+        folders: List<SpeakerRemoteFolder>
+    ): Result<SpeakerImportConflictSummary> {
+        val cloudUserId = requireCloudUserId()
+            ?: return Result.failure(IllegalStateException("Firebase sign-in required"))
+        val localUserId = currentUserId ?: return Result.failure(IllegalStateException("User ID unavailable"))
+        return runCatching {
+            withContext(Dispatchers.IO) {
+                syncService.previewImportConflicts(
+                    localUserId = localUserId,
+                    cloudUserId = cloudUserId,
+                    remoteFolders = folders
+                )
+            }
+        }
+    }
+
     suspend fun deleteRemoteFolder(folder: SpeakerRemoteFolder): Result<Unit> {
         val cloudUserId = requireCloudUserId()
             ?: return Result.failure(IllegalStateException("Firebase sign-in required"))

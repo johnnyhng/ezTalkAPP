@@ -117,6 +117,9 @@ fun SpeakerScreen(
     var isSyncProgressDialogVisible by rememberSaveable { mutableStateOf(false) }
     var pendingCloudUploadDirectory by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingRemoteDeleteFolderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingImportOverwriteFolderIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var pendingImportConflictFolders by rememberSaveable { mutableStateOf(0) }
+    var pendingImportConflictDocuments by rememberSaveable { mutableStateOf(0) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
     val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
     val semanticModule = remember(appContext, userSettings.geminiModel) {
@@ -682,6 +685,7 @@ fun SpeakerScreen(
             AlertDialog(
                 onDismissRequest = {
                     selectedRemoteFolderIds = emptySet()
+                    pendingImportOverwriteFolderIds = emptySet()
                     speakerViewModel.dismissCloudImportDialog()
                 },
                 title = {
@@ -728,13 +732,29 @@ fun SpeakerScreen(
                             val targetFolders = uiState.remoteFolders.filter { selectedRemoteFolderIds.contains(it.id) }
                             if (targetFolders.isEmpty()) return@TextButton
                             scope.launch {
-                                val result = speakerViewModel.importRemoteFolders(targetFolders)
-                                result.onSuccess { summary ->
-                                    selectedRemoteFolderIds = emptySet()
-                                    showCloudImportSummaryToast(
-                                        importedFolderCount = summary.importedFolders,
-                                        importedDocumentCount = summary.importedDocuments
-                                    )
+                                val conflictResult = speakerViewModel.previewImportConflicts(targetFolders)
+                                conflictResult.onSuccess { conflictSummary ->
+                                    if (conflictSummary.conflictingDocuments > 0) {
+                                        pendingImportOverwriteFolderIds = targetFolders.map { it.id }.toSet()
+                                        pendingImportConflictFolders = conflictSummary.conflictingFolders
+                                        pendingImportConflictDocuments = conflictSummary.conflictingDocuments
+                                        return@onSuccess
+                                    }
+
+                                    val result = speakerViewModel.importRemoteFolders(targetFolders)
+                                    result.onSuccess { summary ->
+                                        selectedRemoteFolderIds = emptySet()
+                                        showCloudImportSummaryToast(
+                                            importedFolderCount = summary.importedFolders,
+                                            importedDocumentCount = summary.importedDocuments
+                                        )
+                                    }.onFailure {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.speaker_cloud_import_failed),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
                                 }.onFailure {
                                     Toast.makeText(
                                         context,
@@ -753,6 +773,7 @@ fun SpeakerScreen(
                     TextButton(
                         onClick = {
                             selectedRemoteFolderIds = emptySet()
+                            pendingImportOverwriteFolderIds = emptySet()
                             speakerViewModel.dismissCloudImportDialog()
                         }
                     ) {
@@ -804,6 +825,69 @@ fun SpeakerScreen(
                 dismissButton = {
                     TextButton(
                         onClick = { pendingCloudUploadDirectory = null }
+                    ) {
+                        Text(text = stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        if (pendingImportOverwriteFolderIds.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = {
+                    pendingImportOverwriteFolderIds = emptySet()
+                    pendingImportConflictFolders = 0
+                    pendingImportConflictDocuments = 0
+                },
+                title = {
+                    Text(text = stringResource(R.string.speaker_cloud_import))
+                },
+                text = {
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_cloud_import_overwrite_confirm,
+                            pendingImportConflictFolders,
+                            pendingImportConflictDocuments
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val targetFolders = uiState.remoteFolders.filter {
+                                pendingImportOverwriteFolderIds.contains(it.id)
+                            }
+                            pendingImportOverwriteFolderIds = emptySet()
+                            pendingImportConflictFolders = 0
+                            pendingImportConflictDocuments = 0
+                            scope.launch {
+                                val result = speakerViewModel.importRemoteFolders(targetFolders)
+                                result.onSuccess { summary ->
+                                    selectedRemoteFolderIds = emptySet()
+                                    showCloudImportSummaryToast(
+                                        importedFolderCount = summary.importedFolders,
+                                        importedDocumentCount = summary.importedDocuments
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(R.string.speaker_cloud_import_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    ) {
+                        Text(text = stringResource(R.string.ok))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pendingImportOverwriteFolderIds = emptySet()
+                            pendingImportConflictFolders = 0
+                            pendingImportConflictDocuments = 0
+                        }
                     ) {
                         Text(text = stringResource(R.string.cancel))
                     }

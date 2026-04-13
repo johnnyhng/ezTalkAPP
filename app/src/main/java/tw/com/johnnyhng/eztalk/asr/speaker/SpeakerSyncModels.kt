@@ -64,3 +64,8 @@ internal data class SpeakerImportSummary(
     val importedDocuments: Int,
     val skippedDocuments: Int
 )
+
+internal data class SpeakerImportConflictSummary(
+    val conflictingFolders: Int,
+    val conflictingDocuments: Int
+)
