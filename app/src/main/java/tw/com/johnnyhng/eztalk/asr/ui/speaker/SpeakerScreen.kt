@@ -963,6 +963,7 @@ fun SpeakerScreen(
                 selectedDocumentId = uiState.selectedDocumentId,
                 isLoading = uiState.isLoading,
                 isImportEnabled = !uiState.isImporting && !uiState.isSyncing,
+                isCloudSyncVisible = uiState.isCloudSignedIn,
                 isCloudSyncEnabled = !uiState.isImporting && !uiState.isSyncing,
                 cloudStatusText = cloudStatusText,
                 isDirectoryRenameEnabled = !uiState.isImporting &&

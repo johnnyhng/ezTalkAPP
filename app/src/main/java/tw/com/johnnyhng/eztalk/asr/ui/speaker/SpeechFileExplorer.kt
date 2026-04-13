@@ -47,6 +47,7 @@ internal fun SpeechFileExplorer(
     selectedDocumentId: String?,
     isLoading: Boolean,
     isImportEnabled: Boolean,
+    isCloudSyncVisible: Boolean,
     isCloudSyncEnabled: Boolean,
     cloudStatusText: String,
     isDirectoryRenameEnabled: Boolean,
@@ -76,6 +77,7 @@ internal fun SpeechFileExplorer(
                 onFilePickerImport = onFilePickerImport,
                 onCloudImport = onCloudImport,
                 isImportEnabled = isImportEnabled,
+                isCloudSyncVisible = isCloudSyncVisible,
                 isCloudSyncEnabled = isCloudSyncEnabled,
                 cloudStatusText = cloudStatusText
             )
@@ -117,6 +119,7 @@ internal fun SpeechFileExplorer(
                                 onUploadToCloud = { onUploadDirectoryToCloud(directory) },
                                 onRename = { onRenameDirectory(directory) },
                                 isImportEnabled = isImportEnabled,
+                                isCloudSyncVisible = isCloudSyncVisible,
                                 isCloudSyncEnabled = isCloudSyncEnabled,
                                 isRenameEnabled = isDirectoryRenameEnabled,
                                 onRemove = { onRemoveDirectory(directory) },
@@ -171,6 +174,7 @@ private fun SpeakerOverviewHeader(
     onFilePickerImport: () -> Unit,
     onCloudImport: () -> Unit,
     isImportEnabled: Boolean,
+    isCloudSyncVisible: Boolean,
     isCloudSyncEnabled: Boolean,
     cloudStatusText: String
 ) {
@@ -208,14 +212,16 @@ private fun SpeakerOverviewHeader(
                     contentDescription = stringResource(R.string.speaker_google_drive)
                 )
             }
-            IconButton(
-                onClick = onCloudImport,
-                enabled = isCloudSyncEnabled
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CloudDownload,
-                    contentDescription = stringResource(R.string.speaker_cloud_import)
-                )
+            if (isCloudSyncVisible) {
+                IconButton(
+                    onClick = onCloudImport,
+                    enabled = isCloudSyncEnabled
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudDownload,
+                        contentDescription = stringResource(R.string.speaker_cloud_import)
+                    )
+                }
             }
         }
     }
@@ -231,6 +237,7 @@ private fun SpeakerDirectorySection(
     onUploadToCloud: () -> Unit,
     onRename: () -> Unit,
     isImportEnabled: Boolean,
+    isCloudSyncVisible: Boolean,
     isCloudSyncEnabled: Boolean,
     isRenameEnabled: Boolean,
     onRemove: () -> Unit,
@@ -284,15 +291,17 @@ private fun SpeakerDirectorySection(
                     contentDescription = stringResource(R.string.speaker_import_txt)
                 )
             }
-            IconButton(
-                onClick = onUploadToCloud,
-                enabled = isCloudSyncEnabled,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CloudUpload,
-                    contentDescription = stringResource(R.string.speaker_cloud_upload)
-                )
+            if (isCloudSyncVisible) {
+                IconButton(
+                    onClick = onUploadToCloud,
+                    enabled = isCloudSyncEnabled,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudUpload,
+                        contentDescription = stringResource(R.string.speaker_cloud_upload)
+                    )
+                }
             }
             IconButton(
                 onClick = onRename,
