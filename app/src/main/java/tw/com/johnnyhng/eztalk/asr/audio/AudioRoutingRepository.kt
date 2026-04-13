@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.os.Build
 
 data class AudioRouteDeviceUi(
@@ -27,6 +28,7 @@ data class AudioRoutingStatus(
     val selectedOutputDeviceId: Int? = null,
     val selectedInputLabel: String? = null,
     val selectedOutputLabel: String? = null,
+    val activeInputLabel: String? = null,
     val activeOutputLabel: String? = null,
     val lastApplyMessage: String? = null,
     val apiLevelSupportsCommunicationDevice: Boolean = false
@@ -37,7 +39,9 @@ internal class AudioRoutingRepository(context: Context) {
 
     fun getStatus(
         selectedInputDeviceId: Int?,
-        selectedOutputDeviceId: Int?
+        selectedOutputDeviceId: Int?,
+        activeInputLabel: String? = null,
+        lastApplyMessage: String? = null
     ): AudioRoutingStatus {
         val inputs = audioManager
             .getDevices(AudioManager.GET_DEVICES_INPUTS)
@@ -66,7 +70,9 @@ internal class AudioRoutingRepository(context: Context) {
             selectedOutputDeviceId = selectedOutputDeviceId,
             selectedInputLabel = selectedInput?.displayLabel,
             selectedOutputLabel = selectedOutput?.displayLabel,
+            activeInputLabel = activeInputLabel,
             activeOutputLabel = activeCommunicationOutput,
+            lastApplyMessage = lastApplyMessage,
             apiLevelSupportsCommunicationDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         )
     }
@@ -94,6 +100,39 @@ internal class AudioRoutingRepository(context: Context) {
         return buildPreferredInputRoutingMessage(
             selectedInput = selectedInput,
             inputApplied = inputApplied,
+            apiSupportsPreferredDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+        )
+    }
+
+    fun resolveActiveInputLabel(audioRecord: AudioRecord): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        val routedDevice = audioRecord.routedDevice ?: return null
+        return routedDevice.toUi(isInput = true, isOutput = false).displayLabel
+    }
+
+    fun applyPreferredOutputDevice(
+        mediaPlayer: MediaPlayer,
+        selectedOutputDeviceId: Int?
+    ): String {
+        val selectedOutput = audioManager
+            .getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .firstOrNull { it.id == selectedOutputDeviceId }
+            ?.toUi(isInput = false, isOutput = true)
+
+        val outputApplied = when {
+            selectedOutputDeviceId == null -> false
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.M -> false
+            selectedOutput == null -> false
+            else -> mediaPlayer.setPreferredDevice(
+                audioManager
+                    .getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                    .firstOrNull { it.id == selectedOutputDeviceId }
+            )
+        }
+
+        return buildPreferredOutputRoutingMessage(
+            selectedOutput = selectedOutput,
+            outputApplied = outputApplied,
             apiSupportsPreferredDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
         )
     }
@@ -165,5 +204,29 @@ internal fun buildPreferredInputRoutingMessage(
         "Preferred microphone requested: ${selectedInput.displayLabel}"
     } else {
         "Preferred microphone request rejected: ${selectedInput.displayLabel}"
+    }
+}
+
+internal fun buildPreferredOutputRoutingMessage(
+    selectedOutput: AudioRouteDeviceUi?,
+    outputApplied: Boolean,
+    apiSupportsPreferredDevice: Boolean
+): String {
+    if (selectedOutput == null) {
+        return if (apiSupportsPreferredDevice) {
+            "Using system default playback route"
+        } else {
+            "Preferred playback routing is unavailable on this Android version"
+        }
+    }
+
+    if (!apiSupportsPreferredDevice) {
+        return "Preferred playback routing is unavailable on this Android version"
+    }
+
+    return if (outputApplied) {
+        "Preferred playback route requested: ${selectedOutput.displayLabel}"
+    } else {
+        "Preferred playback route request rejected: ${selectedOutput.displayLabel}"
     }
 }

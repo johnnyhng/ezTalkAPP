@@ -40,6 +40,8 @@ class HomeViewModel @JvmOverloads constructor(
         SharingStarted.WhileSubscribed(5000),
         UserSettings()
     )
+    private val _audioRoutingActiveInputLabel = MutableStateFlow<String?>(null)
+    private val _audioRoutingLastApplyMessage = MutableStateFlow<String?>(null)
     private val _audioRoutingStatus = MutableStateFlow(AudioRoutingStatus())
     val audioRoutingStatus = _audioRoutingStatus.asStateFlow()
 
@@ -101,6 +103,9 @@ class HomeViewModel @JvmOverloads constructor(
         recognitionManager.onFinalResult = { transcript ->
             viewModelScope.launch { _finalTranscript.emit(transcript) }
         }
+        recognitionManager.onAudioRoutingApplied = { message, activeInputLabel ->
+            reportAudioInputRoutingState(message, activeInputLabel)
+        }
 
         // Sync selected model from settings
         viewModelScope.launch {
@@ -116,10 +121,7 @@ class HomeViewModel @JvmOverloads constructor(
                         _selectedModel.value = model
                     }
                 }
-                _audioRoutingStatus.value = audioRoutingRepository.getStatus(
-                    selectedInputDeviceId = settings.preferredAudioInputDeviceId,
-                    selectedOutputDeviceId = settings.preferredAudioOutputDeviceId
-                )
+                refreshAudioRoutingStatus()
             }
         }
     }
@@ -322,6 +324,7 @@ class HomeViewModel @JvmOverloads constructor(
         settingsManager.updateSettings(userSettings.value.copy(geminiModel = v))
     }
     fun updatePreferredAudioInputDeviceId(v: Int?) = viewModelScope.launch {
+        _audioRoutingActiveInputLabel.value = null
         settingsManager.updateSettings(userSettings.value.copy(preferredAudioInputDeviceId = v))
     }
     fun updatePreferredAudioOutputDeviceId(v: Int?) = viewModelScope.launch {
@@ -333,10 +336,23 @@ class HomeViewModel @JvmOverloads constructor(
     fun updatePreferCommunicationDeviceRouting(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(preferCommunicationDeviceRouting = v))
     }
+    fun reportAudioInputRoutingState(message: String?, activeInputLabel: String? = null) {
+        _audioRoutingLastApplyMessage.value = message
+        if (activeInputLabel != null) {
+            _audioRoutingActiveInputLabel.value = activeInputLabel
+        }
+        refreshAudioRoutingStatus()
+    }
+    fun reportAudioRoutingMessage(message: String?) {
+        _audioRoutingLastApplyMessage.value = message
+        refreshAudioRoutingStatus()
+    }
     fun refreshAudioRoutingStatus() {
         _audioRoutingStatus.value = audioRoutingRepository.getStatus(
             selectedInputDeviceId = userSettings.value.preferredAudioInputDeviceId,
-            selectedOutputDeviceId = userSettings.value.preferredAudioOutputDeviceId
+            selectedOutputDeviceId = userSettings.value.preferredAudioOutputDeviceId,
+            activeInputLabel = _audioRoutingActiveInputLabel.value,
+            lastApplyMessage = _audioRoutingLastApplyMessage.value
         )
     }
 

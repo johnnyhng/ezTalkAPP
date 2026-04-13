@@ -54,8 +54,10 @@
     <string name="audio_routing_output_label">Preferred output device</string>
     <string name="audio_routing_system_default">System default</string>
     <string name="audio_routing_selected_input">Selected input: %1$s</string>
+    <string name="audio_routing_active_input">Active input: %1$s</string>
     <string name="audio_routing_selected_output">Selected output: %1$s</string>
     <string name="audio_routing_active_output">Active output: %1$s</string>
+    <string name="audio_routing_last_result">Last routing result: %1$s</string>
     <string name="audio_routing_unavailable">Unavailable</string>
     <string name="audio_routing_comm_device_supported">Communication-device routing API available on this Android version.</string>
     <string name="audio_routing_comm_device_unsupported">Communication-device routing API unavailable on this Android version.</string>

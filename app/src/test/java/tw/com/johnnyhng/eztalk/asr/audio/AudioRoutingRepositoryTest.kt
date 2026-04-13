@@ -1,7 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr.audio
 
 import android.media.AudioDeviceInfo
-import android.media.AudioRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,5 +55,16 @@ class AudioRoutingRepositoryTest {
         assertTrue(applied.contains("USB Mic"))
         assertTrue(applied.contains("requested"))
         assertTrue(rejected.contains("rejected"))
+    }
+
+    @Test
+    fun buildPreferredOutputRoutingMessageHandlesSystemDefault() {
+        val message = buildPreferredOutputRoutingMessage(
+            selectedOutput = null,
+            outputApplied = false,
+            apiSupportsPreferredDevice = true
+        )
+
+        assertEquals("Using system default playback route", message)
     }
 }

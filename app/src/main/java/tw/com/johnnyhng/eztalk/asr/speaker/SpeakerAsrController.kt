@@ -38,7 +38,8 @@ internal data class SpeakerAsrState(
 
 internal class SpeakerAsrController(
     private val context: Context,
-    private val onStateChanged: (SpeakerAsrState) -> Unit
+    private val onStateChanged: (SpeakerAsrState) -> Unit,
+    private val onAudioRoutingApplied: (String?, String?) -> Unit = { _, _ -> }
 ) {
     private val controllerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val audioIOManager = AudioIOManager(context)
@@ -79,6 +80,7 @@ internal class SpeakerAsrController(
             audioRecord = managedRecord.audioRecord
             managedRecord.routingMessage?.let { Log.i(TAG, it) }
             if (audioRecord == null) {
+                onAudioRoutingApplied(managedRecord.routingMessage, null)
                 updateState { it.copy(isRecording = false) }
                 recordingJob = null
                 return@launch
@@ -92,6 +94,10 @@ internal class SpeakerAsrController(
                 val buffer = ShortArray(readBufferSize)
 
                 audioRecord?.startRecording()
+                onAudioRoutingApplied(
+                    managedRecord.routingMessage,
+                    audioIOManager.resolveActiveInputLabel(audioRecord)
+                )
                 while (state.isRecording) {
                     val ret = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                     if (ret > 0) {
@@ -275,13 +281,17 @@ internal class SpeakerAsrController(
 }
 
 @Composable
-internal fun rememberSpeakerAsrController(): Pair<SpeakerAsrController, SpeakerAsrState> {
+internal fun rememberSpeakerAsrController(
+    onAudioRoutingApplied: (String?, String?) -> Unit = { _, _ -> }
+): Pair<SpeakerAsrController, SpeakerAsrState> {
     val context = androidx.compose.ui.platform.LocalContext.current
     var state by remember { mutableStateOf(SpeakerAsrState()) }
     val controller = remember {
-        SpeakerAsrController(context) { updatedState ->
-            state = updatedState
-        }
+        SpeakerAsrController(
+            context = context,
+            onStateChanged = { updatedState -> state = updatedState },
+            onAudioRoutingApplied = onAudioRoutingApplied
+        )
     }
 
     DisposableEffect(controller) {

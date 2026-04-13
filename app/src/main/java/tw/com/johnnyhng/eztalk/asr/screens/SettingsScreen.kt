@@ -581,6 +581,13 @@ fun SettingsScreen(
                     )
                     Text(
                         text = stringResource(
+                            R.string.audio_routing_active_input,
+                            audioRoutingStatus.activeInputLabel
+                                ?: context.getString(R.string.audio_routing_unavailable)
+                        )
+                    )
+                    Text(
+                        text = stringResource(
                             R.string.audio_routing_selected_output,
                             audioRoutingStatus.selectedOutputLabel
                                 ?: context.getString(R.string.audio_routing_system_default)
@@ -600,6 +607,12 @@ fun SettingsScreen(
                             stringResource(R.string.audio_routing_comm_device_unsupported)
                         }
                     )
+                    audioRoutingStatus.lastApplyMessage?.let { message ->
+                        Text(
+                            text = stringResource(R.string.audio_routing_last_result, message),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
 
                 Row(

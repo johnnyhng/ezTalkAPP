@@ -249,7 +249,12 @@ fun DataCollectScreen(
                 if (currentlyPlaying == path) {
                     MediaController.stop()
                 } else {
-                    MediaController.play(path)
+                    MediaController.play(
+                        context = context,
+                        filePath = path,
+                        userSettings = userSettings,
+                        onRoutingApplied = homeViewModel::reportAudioRoutingMessage
+                    )
                 }
             },
             onDeleteClick = { idx, path ->

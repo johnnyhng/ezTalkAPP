@@ -261,6 +261,7 @@ fun TranslateScreen(
                 )
                 audioRecord = managedRecord.audioRecord
                 managedRecord.routingMessage?.let { Log.i(TAG, it) }
+                homeViewModel.reportAudioInputRoutingState(managedRecord.routingMessage)
                 if (audioRecord == null) {
                     Log.e(TAG, "Translate microphone recorder initialization failed")
                     isStarted = false
@@ -276,6 +277,10 @@ fun TranslateScreen(
                     val buffer = ShortArray(bufferSize)
 
                     audioRecord?.startRecording()
+                    homeViewModel.reportAudioInputRoutingState(
+                        managedRecord.routingMessage,
+                        audioIOManager.resolveActiveInputLabel(audioRecord)
+                    )
                     while (isStarted) {
                         if (currentlyPlaying != null || isTtsSpeaking) { // Pause recording during playback and TTS
                             delay(100)
@@ -551,7 +556,12 @@ fun TranslateScreen(
                     if (currentlyPlaying == path) {
                         MediaController.stop()
                     } else {
-                        MediaController.play(path)
+                        MediaController.play(
+                            context = context,
+                            filePath = path,
+                            userSettings = userSettings,
+                            onRoutingApplied = homeViewModel::reportAudioRoutingMessage
+                        )
                     }
                 }
             },

@@ -449,7 +449,18 @@ fun HomeScreen(
                     }
                 },
                 onTtsClick = { idx, txt -> handleTtsClick(idx, txt) },
-                onPlayClick = { path -> if (currentlyPlaying == path) MediaController.stop() else MediaController.play(path) },
+                onPlayClick = { path ->
+                    if (currentlyPlaying == path) {
+                        MediaController.stop()
+                    } else {
+                        MediaController.play(
+                            context = context,
+                            filePath = path,
+                            userSettings = userSettings,
+                            onRoutingApplied = homeViewModel::reportAudioRoutingMessage
+                        )
+                    }
+                },
                 onDeleteClick = { idx, path -> if (path.isNotEmpty() && deleteTranscriptFiles(path)) resultList.removeAt(idx) },
                 isRecognizingSpeech = isRecognizingSpeech,
                 currentlyPlaying = currentlyPlaying,

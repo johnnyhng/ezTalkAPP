@@ -54,8 +54,10 @@
     <string name="audio_routing_output_label">偏好輸出裝置</string>
     <string name="audio_routing_system_default">系統預設</string>
     <string name="audio_routing_selected_input">已選輸入：%1$s</string>
+    <string name="audio_routing_active_input">目前輸入：%1$s</string>
     <string name="audio_routing_selected_output">已選輸出：%1$s</string>
     <string name="audio_routing_active_output">目前輸出：%1$s</string>
+    <string name="audio_routing_last_result">最近路由結果：%1$s</string>
     <string name="audio_routing_unavailable">無法取得</string>
     <string name="audio_routing_comm_device_supported">目前 Android 版本可使用 communication-device routing API。</string>
     <string name="audio_routing_comm_device_unsupported">目前 Android 版本不支援 communication-device routing API。</string>

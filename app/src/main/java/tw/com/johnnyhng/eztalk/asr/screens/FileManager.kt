@@ -374,7 +374,12 @@ fun FileManagerScreen(homeViewModel: HomeViewModel = viewModel()) {
                                     if (currentlyPlaying == entry.wavFile.absolutePath) {
                                         MediaController.stop()
                                     } else {
-                                        MediaController.play(entry.wavFile.absolutePath)
+                                        MediaController.play(
+                                            context = context,
+                                            filePath = entry.wavFile.absolutePath,
+                                            userSettings = userSettings,
+                                            onRoutingApplied = homeViewModel::reportAudioRoutingMessage
+                                        )
                                     }
                                 },
                                 enabled = !isFeedbackInProgress && (currentlyPlaying == null || currentlyPlaying == entry.wavFile.absolutePath)

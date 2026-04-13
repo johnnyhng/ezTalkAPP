@@ -1,8 +1,11 @@
 package tw.com.johnnyhng.eztalk.asr.utils
 
+import android.content.Context
 import android.media.MediaPlayer
 import android.util.Log
 import tw.com.johnnyhng.eztalk.asr.TAG
+import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
+import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,12 +39,19 @@ object MediaController {
         }
     }
 
-    fun play(filePath: String) {
+    fun play(
+        context: Context,
+        filePath: String,
+        userSettings: UserSettings,
+        onRoutingApplied: (String?) -> Unit = {}
+    ) {
         cleanup() // Clean up any previous player first.
 
         try {
-            val player = MediaPlayer().apply {
-                setDataSource(filePath)
+            val audioIOManager = AudioIOManager(context.applicationContext)
+            val managedPlayer = audioIOManager.createPlaybackMediaPlayer(filePath, userSettings)
+            onRoutingApplied(managedPlayer.routingMessage)
+            val player = managedPlayer.mediaPlayer?.apply {
                 prepare()
                 start()
                 setOnCompletionListener {
@@ -53,6 +63,11 @@ object MediaController {
                     cleanup()
                     true // Error was handled
                 }
+            }
+            if (player == null) {
+                Log.e(TAG, "MediaPlayer preparation failed for $filePath")
+                cleanup()
+                return
             }
             mediaPlayer = player
             _currentlyPlaying.value = filePath

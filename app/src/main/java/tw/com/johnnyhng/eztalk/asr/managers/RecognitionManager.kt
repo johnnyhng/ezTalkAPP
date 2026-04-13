@@ -54,6 +54,7 @@ class RecognitionManager(private val context: Context) {
     var onPartialResult: (String) -> Unit = {}
     var onFinalResult: (Transcript) -> Unit = {}
     var onError: (String) -> Unit = {}
+    var onAudioRoutingApplied: (String?, String?) -> Unit = { _, _ -> }
 
     @SuppressLint("MissingPermission")
     fun startTranslate(userSettings: UserSettings) {
@@ -99,6 +100,10 @@ class RecognitionManager(private val context: Context) {
                 val buffer = ShortArray(readBufferSize)
 
                 audioRecord?.startRecording()
+                onAudioRoutingApplied(
+                    managedRecord.routingMessage,
+                    audioIOManager.resolveActiveInputLabel(audioRecord)
+                )
                 while (_isStarted.value) {
                     val ret = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                     if (ret > 0) {

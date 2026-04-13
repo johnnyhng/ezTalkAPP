@@ -105,7 +105,9 @@ fun SpeakerScreen(
     val uiState = speakerViewModel.uiState
     val selectedDocument = speakerViewModel.selectedDocument()
     val (playbackController, playbackState) = rememberSpeakerPlaybackController()
-    val (speakerAsrController, speakerAsrState) = rememberSpeakerAsrController()
+    val (speakerAsrController, speakerAsrState) = rememberSpeakerAsrController(
+        onAudioRoutingApplied = homeViewModel::reportAudioInputRoutingState
+    )
     var importTargetDirectory by remember { mutableStateOf<String?>(null) }
     var activeAsrTarget by rememberSaveable { mutableStateOf<SpeakerAsrTarget?>(null) }
     var explorerAsrText by rememberSaveable { mutableStateOf("") }
