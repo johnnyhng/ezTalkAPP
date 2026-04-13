@@ -1,17 +1,14 @@
 package tw.com.johnnyhng.eztalk.asr.speaker
 
 import android.content.Context
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
+import tw.com.johnnyhng.eztalk.asr.audio.SpeechOutputController
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.launch
 import java.util.Locale
 
 internal enum class SpeakerPlaybackResult {
@@ -37,70 +34,21 @@ internal class SpeakerPlaybackController(
     private val context: Context,
     private val onStateChanged: (SpeakerPlaybackState) -> Unit
 ) {
-    private var tts: TextToSpeech? = null
+    private val speechController = SpeechOutputController(
+        context = context,
+        preferredLocale = Locale.TRADITIONAL_CHINESE,
+        onStateChanged = { speechState ->
+            updateState { it.copy(isReady = speechState.isReady) }
+        }
+    )
     private var state = SpeakerPlaybackState()
 
-    fun initialize(scope: kotlinx.coroutines.CoroutineScope) {
-        tts = TextToSpeech(context) { status ->
-            val isReady = if (status == TextToSpeech.SUCCESS) {
-                tts?.language = if (
-                    tts?.isLanguageAvailable(Locale.TRADITIONAL_CHINESE) == TextToSpeech.LANG_AVAILABLE
-                ) {
-                    Locale.TRADITIONAL_CHINESE
-                } else {
-                    Locale.getDefault()
-                }
-                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
-                        scope.launch {
-                            updateState {
-                                it.copy(
-                                    playbackDocumentId = parsed.documentId,
-                                    playbackSegmentIndex = parsed.segmentIndex,
-                                    currentPlayingLineIndex = it.playbackLineIndexes.getOrNull(parsed.segmentIndex),
-                                    currentPlayingDocumentId = parsed.documentId
-                                )
-                            }
-                        }
-                    }
-
-                    override fun onDone(utteranceId: String?) {
-                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
-                        scope.launch {
-                            if (state.playbackDocumentId != parsed.documentId || state.isPlaybackPaused) {
-                                return@launch
-                            }
-                            val nextIndex = parsed.segmentIndex + 1
-                            if (nextIndex < state.playbackSegments.size) {
-                                speakSegment(parsed.documentId, nextIndex)
-                            } else {
-                                completeNaturally(parsed.documentId)
-                            }
-                        }
-                    }
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        val parsed = utteranceId?.let(::parseSpeakerUtteranceId) ?: return
-                        scope.launch {
-                            if (state.playbackDocumentId == parsed.documentId) {
-                                reset()
-                            }
-                        }
-                    }
-                })
-                true
-            } else {
-                false
-            }
-            updateState { it.copy(isReady = isReady) }
-        }
+    fun initialize() {
+        speechController.initialize()
     }
 
     fun dispose() {
-        tts?.stop()
-        tts?.shutdown()
+        speechController.dispose()
         reset()
     }
 
@@ -118,7 +66,7 @@ internal class SpeakerPlaybackController(
         if (!state.isReady) return SpeakerPlaybackResult.NOT_READY
         if (document.fullText.isBlank()) return SpeakerPlaybackResult.EMPTY_TEXT
 
-        tts?.stop()
+        speechController.stop()
         if (isPausedDocument(document.id) && state.playbackSegments.isNotEmpty()) {
             speakSegment(document.id, state.playbackSegmentIndex)
             return SpeakerPlaybackResult.STARTED
@@ -144,7 +92,7 @@ internal class SpeakerPlaybackController(
         if (!state.isReady) return SpeakerPlaybackResult.NOT_READY
         if (line.isBlank()) return SpeakerPlaybackResult.EMPTY_TEXT
 
-        tts?.stop()
+        speechController.stop()
         updateState {
             it.copy(
                 playbackSegments = listOf(line),
@@ -160,7 +108,7 @@ internal class SpeakerPlaybackController(
 
     fun pause(documentId: String?) {
         if (!isPlayingDocument(documentId)) return
-        tts?.stop()
+        speechController.stop()
         updateState {
             it.copy(
                 currentPlayingDocumentId = null,
@@ -170,7 +118,7 @@ internal class SpeakerPlaybackController(
     }
 
     fun stop() {
-        tts?.stop()
+        speechController.stop()
         reset()
     }
 
@@ -198,11 +146,37 @@ internal class SpeakerPlaybackController(
                 currentPlayingDocumentId = documentId
             )
         }
-        tts?.speak(
-            segment,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            buildSpeakerUtteranceId(documentId, segmentIndex)
+        speechController.speak(
+            text = segment,
+            onStart = {
+                val parsed = parseSpeakerUtteranceId(buildSpeakerUtteranceId(documentId, segmentIndex)) ?: return@speak
+                updateState {
+                    it.copy(
+                        playbackDocumentId = parsed.documentId,
+                        playbackSegmentIndex = parsed.segmentIndex,
+                        currentPlayingLineIndex = it.playbackLineIndexes.getOrNull(parsed.segmentIndex),
+                        currentPlayingDocumentId = parsed.documentId
+                    )
+                }
+            },
+            onDone = {
+                val parsed = parseSpeakerUtteranceId(buildSpeakerUtteranceId(documentId, segmentIndex)) ?: return@speak
+                if (state.playbackDocumentId != parsed.documentId || state.isPlaybackPaused) {
+                    return@speak
+                }
+                val nextIndex = parsed.segmentIndex + 1
+                if (nextIndex < state.playbackSegments.size) {
+                    speakSegment(parsed.documentId, nextIndex)
+                } else {
+                    completeNaturally(parsed.documentId)
+                }
+            },
+            onError = {
+                val parsed = parseSpeakerUtteranceId(buildSpeakerUtteranceId(documentId, segmentIndex)) ?: return@speak
+                if (state.playbackDocumentId == parsed.documentId) {
+                    reset()
+                }
+            }
         )
     }
 
@@ -245,7 +219,6 @@ internal class SpeakerPlaybackController(
 @Composable
 internal fun rememberSpeakerPlaybackController(): Pair<SpeakerPlaybackController, SpeakerPlaybackState> {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(SpeakerPlaybackState()) }
     val controller = remember {
         SpeakerPlaybackController(context) { updatedState ->
@@ -254,7 +227,7 @@ internal fun rememberSpeakerPlaybackController(): Pair<SpeakerPlaybackController
     }
 
     DisposableEffect(controller) {
-        controller.initialize(scope)
+        controller.initialize()
         onDispose {
             controller.dispose()
         }

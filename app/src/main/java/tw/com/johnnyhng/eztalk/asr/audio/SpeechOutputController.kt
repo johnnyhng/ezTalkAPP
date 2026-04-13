@@ -27,7 +27,9 @@ internal class SpeechOutputController(
 ) {
     private var tts: TextToSpeech? = null
     private var state = SpeechOutputState()
+    private var pendingOnStart: (() -> Unit)? = null
     private var pendingOnDone: (() -> Unit)? = null
+    private var pendingOnError: (() -> Unit)? = null
 
     fun initialize() {
         if (tts != null) return
@@ -37,6 +39,7 @@ internal class SpeechOutputController(
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
                         updateState { it.copy(isSpeaking = true) }
+                        pendingOnStart?.invoke()
                     }
 
                     override fun onDone(utteranceId: String?) {
@@ -45,12 +48,17 @@ internal class SpeechOutputController(
                             pendingOnDone = null
                             callback()
                         }
+                        pendingOnStart = null
+                        pendingOnError = null
                     }
 
                     @Deprecated("Deprecated in Java")
                     override fun onError(utteranceId: String?) {
                         updateState { it.copy(isSpeaking = false) }
+                        pendingOnError?.invoke()
+                        pendingOnStart = null
                         pendingOnDone = null
+                        pendingOnError = null
                     }
                 })
                 true
@@ -62,31 +70,46 @@ internal class SpeechOutputController(
         }
     }
 
-    fun speak(text: String, onDone: (() -> Unit)? = null): Boolean {
+    fun speak(
+        text: String,
+        onStart: (() -> Unit)? = null,
+        onDone: (() -> Unit)? = null,
+        onError: (() -> Unit)? = null
+    ): Boolean {
         val engine = tts ?: return false
+        pendingOnStart = onStart
         pendingOnDone = onDone
+        pendingOnError = onError
         val utteranceId = UUID.randomUUID().toString()
         val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (result == TextToSpeech.ERROR) {
+            pendingOnStart = null
             pendingOnDone = null
+            pendingOnError = null
             return false
         }
         return true
     }
 
     fun stop() {
+        pendingOnStart = null
         pendingOnDone = null
+        pendingOnError = null
         tts?.stop()
         updateState { it.copy(isSpeaking = false) }
     }
 
     fun dispose() {
+        pendingOnStart = null
         pendingOnDone = null
+        pendingOnError = null
         tts?.stop()
         tts?.shutdown()
         tts = null
         updateState { SpeechOutputState() }
     }
+
+    fun currentState(): SpeechOutputState = state
 
     private fun resolveLocale(tts: TextToSpeech?): Locale {
         val target = preferredLocale
