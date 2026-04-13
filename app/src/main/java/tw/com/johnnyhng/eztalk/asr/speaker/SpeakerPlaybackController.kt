@@ -1,8 +1,7 @@
 package tw.com.johnnyhng.eztalk.asr.speaker
 
 import android.content.Context
-import tw.com.johnnyhng.eztalk.asr.audio.SpeechOutputDriver
-import tw.com.johnnyhng.eztalk.asr.audio.SpeechOutputController
+import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -11,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import java.util.Locale
+import tw.com.johnnyhng.eztalk.asr.audio.SpeechOutputDriver
 
 internal enum class SpeakerPlaybackResult {
     STARTED,
@@ -37,8 +37,7 @@ internal class SpeakerPlaybackController(
     private val speechControllerFactory: ((Context, (Boolean) -> Unit) -> SpeechOutputDriver)? = null
 ) {
     private val speechController: SpeechOutputDriver = (speechControllerFactory ?: { ctx, onReadyChanged ->
-        SpeechOutputController(
-            context = ctx,
+        AudioIOManager(ctx.applicationContext).createSpeechOutputDriver(
             preferredLocale = Locale.TRADITIONAL_CHINESE,
             onStateChanged = { speechState ->
                 onReadyChanged(speechState.isReady)

@@ -144,9 +144,9 @@ internal fun rememberSpeechOutputController(
 ): Pair<SpeechOutputController, SpeechOutputState> {
     val context = LocalContext.current
     var state by remember { mutableStateOf(SpeechOutputState()) }
-    val controller = remember(context, preferredLocale) {
-        SpeechOutputController(
-            context = context,
+    val audioIOManager = remember(context) { AudioIOManager(context.applicationContext) }
+    val controller = remember(audioIOManager, preferredLocale) {
+        audioIOManager.createSpeechOutputDriver(
             preferredLocale = preferredLocale,
             onStateChanged = { updatedState -> state = updatedState }
         )

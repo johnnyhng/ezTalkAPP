@@ -9,6 +9,7 @@ import android.media.MediaRecorder
 import android.util.Log
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import java.util.Locale
 
 internal data class ManagedAudioRecord(
     val audioRecord: AudioRecord?,
@@ -22,7 +23,7 @@ internal data class ManagedMediaPlayer(
 )
 
 internal class AudioIOManager(
-    context: Context,
+    private val context: Context,
     private val audioRoutingRepository: AudioRoutingRepository = AudioRoutingRepository(context)
 ) {
     fun createMicAudioRecord(
@@ -92,6 +93,17 @@ internal class AudioIOManager(
                 routingMessage = "Playback initialization failed"
             )
         }
+    }
+
+    fun createSpeechOutputDriver(
+        preferredLocale: Locale? = null,
+        onStateChanged: (SpeechOutputState) -> Unit
+    ): SpeechOutputController {
+        return SpeechOutputController(
+            context = context,
+            preferredLocale = preferredLocale,
+            onStateChanged = onStateChanged
+        )
     }
 
     private fun buildPlaybackAttributes(allowAppAudioCapture: Boolean): AudioAttributes {
