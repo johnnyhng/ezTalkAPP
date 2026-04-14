@@ -59,7 +59,7 @@ internal class SpeechOutputController(
                 
                 // Align TTS audio attributes with communication routing
                 val attributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
                 tts?.setAudioAttributes(attributes)
@@ -72,6 +72,8 @@ internal class SpeechOutputController(
                     }
 
                     override fun onDone(utteranceId: String?) {
+                        // Small delay to let hardware buffer finish
+                        Thread.sleep(150)
                         updateState { it.copy(isSpeaking = false) }
                         releaseActiveRouting()
                         pendingOnDone?.also { callback ->
