@@ -5,6 +5,8 @@ import android.media.MediaPlayer
 import android.util.Log
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
+import tw.com.johnnyhng.eztalk.asr.audio.AudioOutputRoutingSession
+import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioOutputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 object MediaController {
     private var mediaPlayer: MediaPlayer? = null
+    private var routingSession: AudioOutputRoutingSession = NoopAudioOutputRoutingSession
 
     private val _currentlyPlaying = MutableStateFlow<String?>(null)
     val currentlyPlaying: StateFlow<String?> = _currentlyPlaying.asStateFlow()
@@ -34,6 +37,9 @@ object MediaController {
             }
         }
         mediaPlayer = null
+        routingSession.release()
+        routingSession = NoopAudioOutputRoutingSession
+
         if (_currentlyPlaying.value != null) {
             _currentlyPlaying.value = null
         }
@@ -50,6 +56,7 @@ object MediaController {
         try {
             val audioIOManager = AudioIOManager(context.applicationContext)
             val managedPlayer = audioIOManager.createPlaybackMediaPlayer(filePath, userSettings)
+            routingSession = managedPlayer.routingSession
             audioIOManager.logPlaybackRoutingPreparation(
                 filePath = filePath,
                 preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId,

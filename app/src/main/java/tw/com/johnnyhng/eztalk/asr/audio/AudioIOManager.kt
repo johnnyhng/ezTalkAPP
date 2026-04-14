@@ -24,6 +24,7 @@ internal data class ManagedAudioRecord(
 
 internal data class ManagedMediaPlayer(
     val mediaPlayer: MediaPlayer?,
+    val routingSession: AudioOutputRoutingSession,
     val routingMessage: String? = null
 )
 
@@ -160,6 +161,9 @@ internal class AudioIOManager(
         filePath: String,
         userSettings: UserSettings
     ): ManagedMediaPlayer {
+        val preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
+        val routingSession = prepareAudioOutputRoutingSession(preferredOutputDeviceId)
+
         return try {
             val player = MediaPlayer().apply {
                 setAudioAttributes(buildPlaybackAttributes(userSettings.allowAppAudioCapture))
@@ -167,16 +171,19 @@ internal class AudioIOManager(
             }
             val routingMessage = audioRoutingRepository.applyPreferredOutputDevice(
                 mediaPlayer = player,
-                selectedOutputDeviceId = userSettings.preferredAudioOutputDeviceId
+                selectedOutputDeviceId = preferredOutputDeviceId
             )
             ManagedMediaPlayer(
                 mediaPlayer = player,
+                routingSession = routingSession,
                 routingMessage = routingMessage
             )
         } catch (error: Exception) {
             Log.e(TAG, "Failed to create playback media player for $filePath", error)
+            routingSession.release()
             ManagedMediaPlayer(
                 mediaPlayer = null,
+                routingSession = NoopAudioOutputRoutingSession,
                 routingMessage = "Playback initialization failed"
             )
         }
@@ -246,6 +253,35 @@ internal class AudioIOManager(
         return builder.build()
     }
 
+    private fun prepareAudioOutputRoutingSession(preferredOutputDeviceId: Int?): AudioOutputRoutingSession {
+        if (preferredOutputDeviceId == null) return NoopAudioOutputRoutingSession
+
+        val device = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .firstOrNull { it.id == preferredOutputDeviceId } ?: return NoopAudioOutputRoutingSession
+
+        val previousMode = audioManager.mode
+        Log.i(TAG, "Audio output routing session prepare: device=${device.productName} (type=${device.type}) previousMode=${describeAudioMode(previousMode)}")
+
+        // Force communication mode for specific routing
+        if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER || 
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.setCommunicationDevice(device)
+        } else {
+            if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                audioManager.isSpeakerphoneOn = true
+            }
+        }
+
+        return AudioOutputRoutingSessionImpl(
+            audioManager = audioManager,
+            previousMode = previousMode
+        )
+    }
+
     private fun prepareAudioInputRoutingSession(selectedInputType: Int?): AudioInputRoutingSession {
         if (selectedInputType != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
             return NoopAudioInputRoutingSession
@@ -287,6 +323,29 @@ internal interface AudioInputRoutingSession {
 
 internal object NoopAudioInputRoutingSession : AudioInputRoutingSession {
     override fun release() = Unit
+}
+
+internal interface AudioOutputRoutingSession {
+    fun release()
+}
+
+internal object NoopAudioOutputRoutingSession : AudioOutputRoutingSession {
+    override fun release() = Unit
+}
+
+internal class AudioOutputRoutingSessionImpl(
+    private val audioManager: AudioManager,
+    private val previousMode: Int
+) : AudioOutputRoutingSession {
+    override fun release() {
+        Log.d(TAG, "Releasing audio output routing session")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.clearCommunicationDevice()
+        } else {
+            audioManager.isSpeakerphoneOn = false
+        }
+        audioManager.mode = previousMode
+    }
 }
 
 internal class BluetoothScoAudioInputRoutingSession(
