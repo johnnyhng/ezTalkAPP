@@ -269,10 +269,20 @@ fun TranslateScreen(
                         activeInputLabel
                     )
                     while (isStarted) {
-                        if (currentlyPlaying != null || isTtsSpeaking) { // Pause recording during playback and TTS
+                        if (currentlyPlaying != null || isTtsSpeaking) { 
+                            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                                Log.d(TAG, "Translate: Stopping AudioRecord hardware to release SCO resources")
+                                audioRecord?.stop()
+                            }
                             delay(100)
                             continue
                         }
+                        
+                        if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_STOPPED) {
+                            Log.d(TAG, "Translate: Restarting AudioRecord hardware after playback")
+                            audioRecord?.startRecording()
+                        }
+
                         val ret = audioRecord?.read(buffer, 0, buffer.size)
                         readLogger.onRead(ret ?: -1, buffer, activeInputLabel)
                         if (ret != null && ret > 0) {

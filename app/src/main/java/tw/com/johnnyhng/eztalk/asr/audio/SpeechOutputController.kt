@@ -41,6 +41,7 @@ internal class SpeechOutputController(
     private val preferredLocale: Locale?,
     private val preferredOutputDeviceId: Int?,
     private val audioRoutingRepository: AudioRoutingRepository,
+    private val audioIOManager: AudioIOManager,
     private val onStateChanged: (SpeechOutputState) -> Unit
 ) : SpeechOutputDriver {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -49,6 +50,8 @@ internal class SpeechOutputController(
     private var pendingOnStart: (() -> Unit)? = null
     private var pendingOnDone: (() -> Unit)? = null
     private var pendingOnError: (() -> Unit)? = null
+    
+    private var currentRoutingSession: AudioOutputRoutingSession? = null
 
     override fun initialize() {
         if (tts != null) return
@@ -72,8 +75,6 @@ internal class SpeechOutputController(
                     }
 
                     override fun onDone(utteranceId: String?) {
-                        // Small delay to let hardware buffer finish
-                        Thread.sleep(150)
                         updateState { it.copy(isSpeaking = false) }
                         releaseActiveRouting()
                         pendingOnDone?.also { callback ->
@@ -165,38 +166,18 @@ internal class SpeechOutputController(
 
     private fun applyActiveRouting() {
         if (preferredOutputDeviceId == null) return
+        
+        // Reuse existing session if active
+        if (currentRoutingSession != null) return
 
-        val device = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .firstOrNull { it.id == preferredOutputDeviceId } ?: return
-
-        Log.i(TAG, "Applying active TTS routing to device: ${device.productName} (type=${device.type})")
-
-        // Force communication mode to ensure routing takes effect
-        if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER || 
-            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val result = audioManager.setCommunicationDevice(device)
-            Log.d(TAG, "setCommunicationDevice result: $result")
-        } else {
-            if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
-                audioManager.isSpeakerphoneOn = true
-            }
-        }
+        Log.i(TAG, "SpeechOutputController: requesting output routing session")
+        currentRoutingSession = audioIOManager.prepareAudioOutputRoutingSession(preferredOutputDeviceId)
     }
 
     private fun releaseActiveRouting() {
-        if (preferredOutputDeviceId == null) return
-
-        Log.d(TAG, "Releasing active TTS routing")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.clearCommunicationDevice()
-        } else {
-            audioManager.isSpeakerphoneOn = false
-        }
-        audioManager.mode = AudioManager.MODE_NORMAL
+        Log.d(TAG, "SpeechOutputController: releasing output routing session")
+        currentRoutingSession?.release()
+        currentRoutingSession = null
     }
 
     private fun logSpeechOutputEnvironment(phase: String) {

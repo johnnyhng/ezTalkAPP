@@ -104,7 +104,9 @@ fun SpeakerScreen(
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     val uiState = speakerViewModel.uiState
     val selectedDocument = speakerViewModel.selectedDocument()
-    val (playbackController, playbackState) = rememberSpeakerPlaybackController()
+    val (playbackController, playbackState) = rememberSpeakerPlaybackController(
+        preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
+    )
     val (speakerAsrController, speakerAsrState) = rememberSpeakerAsrController(
         onAudioRoutingApplied = homeViewModel::reportAudioInputRoutingState
     )

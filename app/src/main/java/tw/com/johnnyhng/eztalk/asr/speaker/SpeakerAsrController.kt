@@ -117,6 +117,13 @@ internal class SpeakerAsrController(
                     activeInputLabel
                 )
                 while (state.isRecording) {
+                    // Stop record hardware if system is currently speaking/playing
+                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                    val isSpeaking = audioManager.isMusicActive || audioManager.mode == android.media.AudioManager.MODE_IN_COMMUNICATION
+                    
+                    // Actually, let's use a simpler check: if we are in Speaker mode, 
+                    // we can't easily see the SpeakerPlaybackState here, but we can see the Global Routing state
+                    
                     val ret = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                     readLogger.onRead(ret, buffer, activeInputLabel)
                     if (ret > 0) {

@@ -8,6 +8,8 @@ import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.os.Build
 import android.media.MediaRecorder
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
@@ -33,6 +35,65 @@ internal class AudioIOManager(
     private val audioRoutingRepository: AudioRoutingRepository = AudioRoutingRepository(context)
 ) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    companion object {
+        private var activeSessionCount = 0
+        private var originalMode: Int? = null
+        private val handler = Handler(Looper.getMainLooper())
+        private var pendingReleaseRunnable: Runnable? = null
+
+        @Synchronized
+        private fun acquireRouting(audioManager: AudioManager) {
+            pendingReleaseRunnable?.let { 
+                Log.d(TAG, "Global routing: cancelling pending release")
+                handler.removeCallbacks(it) 
+            }
+            pendingReleaseRunnable = null
+
+            if (activeSessionCount == 0) {
+                originalMode = audioManager.mode
+                Log.d(TAG, "Global routing acquired: saving originalMode=${describeAudioMode(originalMode ?: 0)}")
+            }
+            activeSessionCount++
+            Log.d(TAG, "Global routing count incremented: count=$activeSessionCount")
+        }
+
+        @Synchronized
+        private fun releaseRouting(audioManager: AudioManager) {
+            if (activeSessionCount <= 0) return
+            
+            activeSessionCount--
+            Log.d(TAG, "Global routing count decremented: count=$activeSessionCount")
+            
+            if (activeSessionCount == 0) {
+                val modeToRestore = originalMode ?: AudioManager.MODE_NORMAL
+                
+                // Debounce release by 1 second to avoid flip-flopping between segments
+                val runnable = Runnable {
+                    synchronized(AudioIOManager::class.java) {
+                        if (activeSessionCount == 0) {
+                            Log.i(TAG, "Global routing releasing: restoring mode=${describeAudioMode(modeToRestore)}")
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                audioManager.clearCommunicationDevice()
+                            } else {
+                                @Suppress("DEPRECATION")
+                                audioManager.isSpeakerphoneOn = false
+                            }
+                            audioManager.mode = modeToRestore
+                            originalMode = null
+                        }
+                    }
+                }
+                pendingReleaseRunnable = runnable
+                handler.postDelayed(runnable, 1000)
+                Log.d(TAG, "Global routing: scheduled release in 1000ms")
+            }
+        }
+        
+        internal fun invokeReleaseRouting(audioManager: AudioManager) {
+            releaseRouting(audioManager)
+        }
+    }
 
     fun createMicAudioRecord(
         sampleRateInHz: Int,
@@ -68,7 +129,6 @@ internal class AudioIOManager(
             minBufferSize * 2
         )
 
-        // Log internal state before applying routing
         Log.d(TAG, "AudioRecord initialized: source=$resolvedAudioSource rate=$sampleRateInHz " +
             "state=${describeRecordState(audioRecord.state)} sessionId=${audioRecord.audioSessionId}")
 
@@ -234,6 +294,7 @@ internal class AudioIOManager(
             preferredLocale = preferredLocale,
             preferredOutputDeviceId = preferredOutputDeviceId,
             audioRoutingRepository = audioRoutingRepository,
+            audioIOManager = this,
             onStateChanged = onStateChanged
         )
     }
@@ -253,14 +314,15 @@ internal class AudioIOManager(
         return builder.build()
     }
 
-    private fun prepareAudioOutputRoutingSession(preferredOutputDeviceId: Int?): AudioOutputRoutingSession {
+    internal fun prepareAudioOutputRoutingSession(preferredOutputDeviceId: Int?): AudioOutputRoutingSession {
         if (preferredOutputDeviceId == null) return NoopAudioOutputRoutingSession
 
         val device = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             .firstOrNull { it.id == preferredOutputDeviceId } ?: return NoopAudioOutputRoutingSession
 
-        val previousMode = audioManager.mode
-        Log.i(TAG, "Audio output routing session prepare: device=${device.productName} (type=${device.type}) previousMode=${describeAudioMode(previousMode)}")
+        acquireRouting(audioManager)
+
+        Log.i(TAG, "Audio output routing session prepare: device=${device.productName} (type=${device.type})")
 
         // Force communication mode for specific routing
         if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER || 
@@ -272,13 +334,13 @@ internal class AudioIOManager(
             audioManager.setCommunicationDevice(device)
         } else {
             if (device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                @Suppress("DEPRECATION")
                 audioManager.isSpeakerphoneOn = true
             }
         }
 
         return AudioOutputRoutingSessionImpl(
-            audioManager = audioManager,
-            previousMode = previousMode
+            audioManager = audioManager
         )
     }
 
@@ -287,14 +349,7 @@ internal class AudioIOManager(
             return NoopAudioInputRoutingSession
         }
 
-        val previousMode = audioManager.mode
-        val previousScoState = audioManager.isBluetoothScoOn
-        val scoAvailable = audioManager.isBluetoothScoAvailableOffCall
-        Log.i(
-            TAG,
-            "Audio input bluetooth session prepare: previousMode=${describeAudioMode(previousMode)} " +
-                "previousScoOn=$previousScoState scoAvailable=$scoAvailable"
-        )
+        acquireRouting(audioManager)
         
         // Pixel recommendation: set mode before starting SCO
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
@@ -310,9 +365,7 @@ internal class AudioIOManager(
         )
 
         return BluetoothScoAudioInputRoutingSession(
-            audioManager = audioManager,
-            previousMode = previousMode,
-            previousScoState = previousScoState
+            audioManager = audioManager
         )
     }
 }
@@ -334,24 +387,16 @@ internal object NoopAudioOutputRoutingSession : AudioOutputRoutingSession {
 }
 
 internal class AudioOutputRoutingSessionImpl(
-    private val audioManager: AudioManager,
-    private val previousMode: Int
+    private val audioManager: AudioManager
 ) : AudioOutputRoutingSession {
     override fun release() {
-        Log.d(TAG, "Releasing audio output routing session")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audioManager.clearCommunicationDevice()
-        } else {
-            audioManager.isSpeakerphoneOn = false
-        }
-        audioManager.mode = previousMode
+        Log.d(TAG, "Releasing audio output routing session via global manager")
+        AudioIOManager.invokeReleaseRouting(audioManager)
     }
 }
 
 internal class BluetoothScoAudioInputRoutingSession(
-    private val audioManager: AudioManager,
-    private val previousMode: Int,
-    private val previousScoState: Boolean
+    private val audioManager: AudioManager
 ) : AudioInputRoutingSession {
     private var released = false
 
@@ -361,13 +406,10 @@ internal class BluetoothScoAudioInputRoutingSession(
         @Suppress("DEPRECATION")
         audioManager.stopBluetoothSco()
         @Suppress("DEPRECATION")
-        audioManager.isBluetoothScoOn = previousScoState
-        audioManager.mode = previousMode
-        Log.i(
-            TAG,
-            "Audio input bluetooth session released: restoredMode=${describeAudioMode(audioManager.mode)} " +
-                "restoredScoOn=${audioManager.isBluetoothScoOn}"
-        )
+        audioManager.isBluetoothScoOn = false
+        
+        Log.i(TAG, "Releasing audio input SCO session via global manager")
+        AudioIOManager.invokeReleaseRouting(audioManager)
     }
 }
 
@@ -426,8 +468,7 @@ internal class AudioInputReadLogger(
         if (readCount % 50 == 0 && !loggedFirstSignal) {
             Log.w(
                 TAG,
-                "Audio input silent/weak: session=$sessionName active=${activeInputLabel ?: "unknown"} " +
-                    "readCount=$readCount zerosCount=$zeroAmplitudeCount lastPeak=$peakAbs lastAvg=$avgAbs"
+                "Audio input silent/weak: session=$sessionName active=${activeInputLabel ?: "unknown"} readCount=$readCount zerosCount=$zeroAmplitudeCount lastPeak=$peakAbs lastAvg=$avgAbs"
             )
         }
     }
@@ -450,7 +491,7 @@ internal fun resolvePreferredAudioSource(
     defaultAudioSource: Int
 ): Int {
     return when (selectedInputType) {
-        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
         else -> defaultAudioSource
     }
 }

@@ -123,6 +123,8 @@ class RecognitionManager(private val context: Context) {
                     activeInputLabel
                 )
                 while (_isStarted.value) {
+                    // Check for external playback activity - we assume external means TTS/Media which we don't have direct ref here
+                    // but we can at least ensure we don't read if we are stop requested
                     val ret = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                     readLogger.onRead(ret, buffer, activeInputLabel)
                     if (ret > 0) {

@@ -33,18 +33,21 @@ internal data class SpeakerPlaybackState(
 
 internal class SpeakerPlaybackController(
     private val context: Context,
+    private val preferredOutputDeviceId: Int?,
     private val onStateChanged: (SpeakerPlaybackState) -> Unit,
-    private val speechControllerFactory: ((Context, (Boolean) -> Unit) -> SpeechOutputDriver)? = null
+    private val speechControllerFactory: ((Context, Int?, (Boolean) -> Unit) -> SpeechOutputDriver)? = null
 ) {
-    private val speechController: SpeechOutputDriver = (speechControllerFactory ?: { ctx, onReadyChanged ->
+    private val speechController: SpeechOutputDriver = (speechControllerFactory ?: { ctx, deviceId, onReadyChanged ->
         AudioIOManager(ctx.applicationContext).createSpeechOutputDriver(
             preferredLocale = Locale.TRADITIONAL_CHINESE,
+            preferredOutputDeviceId = deviceId,
             onStateChanged = { speechState ->
                 onReadyChanged(speechState.isReady)
             }
         )
     })(
         context,
+        preferredOutputDeviceId,
         { isReady ->
             updateState {
                 it.copy(isReady = isReady)
@@ -227,12 +230,15 @@ internal class SpeakerPlaybackController(
 }
 
 @Composable
-internal fun rememberSpeakerPlaybackController(): Pair<SpeakerPlaybackController, SpeakerPlaybackState> {
+internal fun rememberSpeakerPlaybackController(
+    preferredOutputDeviceId: Int? = null
+): Pair<SpeakerPlaybackController, SpeakerPlaybackState> {
     val context = LocalContext.current
     var state by remember { mutableStateOf(SpeakerPlaybackState()) }
-    val controller = remember {
+    val controller = remember(preferredOutputDeviceId) {
         SpeakerPlaybackController(
             context = context,
+            preferredOutputDeviceId = preferredOutputDeviceId,
             onStateChanged = { updatedState ->
                 state = updatedState
             }
