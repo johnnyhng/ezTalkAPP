@@ -77,7 +77,8 @@ fun HomeScreen(
     // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
     val (speechController, speechState) = rememberSpeechOutputController(
-        preferredLocale = Locale.TRADITIONAL_CHINESE
+        preferredLocale = Locale.TRADITIONAL_CHINESE,
+        preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
     )
     val isTtsSpeaking = speechState.isSpeaking
     val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }

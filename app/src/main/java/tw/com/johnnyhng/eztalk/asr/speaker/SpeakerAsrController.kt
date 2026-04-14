@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
+import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
+import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import kotlin.math.max
 
@@ -47,6 +49,7 @@ internal class SpeakerAsrController(
 
     private var state = SpeakerAsrState()
     private var audioRecord: AudioRecord? = null
+    private var audioInputRoutingSession: AudioInputRoutingSession = NoopAudioInputRoutingSession
     private var recordingJob: Job? = null
     private val flushChannel = Channel<Unit>(Channel.CONFLATED)
     private val utteranceBuffer = SpeakerAsrUtteranceBuffer()
@@ -78,8 +81,16 @@ internal class SpeakerAsrController(
                 preferredInputDeviceId = userSettings.preferredAudioInputDeviceId
             )
             audioRecord = managedRecord.audioRecord
+            audioInputRoutingSession = managedRecord.routingSession
             managedRecord.routingMessage?.let { Log.i(TAG, it) }
+            audioIOManager.logMicRoutingPreparation(
+                preferredInputDeviceId = userSettings.preferredAudioInputDeviceId,
+                routingMessage = managedRecord.routingMessage
+            )
+            val readLogger = audioIOManager.createAudioInputReadLogger("SpeakerAsrController")
             if (audioRecord == null) {
+                audioInputRoutingSession.release()
+                audioInputRoutingSession = NoopAudioInputRoutingSession
                 onAudioRoutingApplied(managedRecord.routingMessage, null)
                 updateState { it.copy(isRecording = false) }
                 recordingJob = null
@@ -94,12 +105,20 @@ internal class SpeakerAsrController(
                 val buffer = ShortArray(readBufferSize)
 
                 audioRecord?.startRecording()
+                val activeInputLabel = audioIOManager.logMicRoutingActivation(
+                    audioRecord = audioRecord,
+                    preferredInputDeviceId = userSettings.preferredAudioInputDeviceId,
+                    sampleRateInHz = sampleRateInHz,
+                    bufferSize = readBufferSize,
+                    audioSource = managedRecord.audioSource
+                )
                 onAudioRoutingApplied(
                     managedRecord.routingMessage,
-                    audioIOManager.resolveActiveInputLabel(audioRecord)
+                    activeInputLabel
                 )
                 while (state.isRecording) {
                     val ret = audioRecord?.read(buffer, 0, buffer.size) ?: -1
+                    readLogger.onRead(ret, buffer, activeInputLabel)
                     if (ret > 0) {
                         val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
                         samplesChannel.send(samples)
@@ -126,6 +145,8 @@ internal class SpeakerAsrController(
                 }
                 audioRecord?.release()
                 audioRecord = null
+                audioInputRoutingSession.release()
+                audioInputRoutingSession = NoopAudioInputRoutingSession
             }
         }
     }

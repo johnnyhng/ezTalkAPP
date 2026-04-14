@@ -50,10 +50,19 @@ object MediaController {
         try {
             val audioIOManager = AudioIOManager(context.applicationContext)
             val managedPlayer = audioIOManager.createPlaybackMediaPlayer(filePath, userSettings)
+            audioIOManager.logPlaybackRoutingPreparation(
+                filePath = filePath,
+                preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId,
+                routingMessage = managedPlayer.routingMessage
+            )
             onRoutingApplied(managedPlayer.routingMessage)
             val player = managedPlayer.mediaPlayer?.apply {
                 prepare()
                 start()
+                audioIOManager.logPlaybackRoutingActivation(
+                    filePath = filePath,
+                    preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
+                )
                 setOnCompletionListener {
                     // Playback completed. Just clean up.
                     cleanup()

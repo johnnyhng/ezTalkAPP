@@ -68,7 +68,8 @@ fun DataCollectScreen(
     val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
     val (speechController, _) = rememberSpeechOutputController(
-        preferredLocale = Locale.TRADITIONAL_CHINESE
+        preferredLocale = Locale.TRADITIONAL_CHINESE,
+        preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
     )
     var isAutoFlowEnabled by rememberSaveable { mutableStateOf(false) }
     val latestIsSequenceMode by rememberUpdatedState(uiState.isSequenceMode)

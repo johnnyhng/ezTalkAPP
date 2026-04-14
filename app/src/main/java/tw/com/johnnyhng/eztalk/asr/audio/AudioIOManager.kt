@@ -2,6 +2,8 @@ package tw.com.johnnyhng.eztalk.asr.audio
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.os.Build
@@ -10,10 +12,13 @@ import android.util.Log
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import java.util.Locale
+import kotlin.math.abs
 
 internal data class ManagedAudioRecord(
     val audioRecord: AudioRecord?,
     val bufferSize: Int,
+    val audioSource: Int,
+    val routingSession: AudioInputRoutingSession,
     val routingMessage: String? = null
 )
 
@@ -26,6 +31,8 @@ internal class AudioIOManager(
     private val context: Context,
     private val audioRoutingRepository: AudioRoutingRepository = AudioRoutingRepository(context)
 ) {
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
     fun createMicAudioRecord(
         sampleRateInHz: Int,
         channelConfig: Int,
@@ -33,6 +40,12 @@ internal class AudioIOManager(
         preferredInputDeviceId: Int?,
         audioSource: Int = MediaRecorder.AudioSource.MIC
     ): ManagedAudioRecord {
+        val selectedInputType = audioRoutingRepository.resolveSelectedInputType(preferredInputDeviceId)
+        val routingSession = prepareAudioInputRoutingSession(selectedInputType)
+        val resolvedAudioSource = resolvePreferredAudioSource(
+            selectedInputType = selectedInputType,
+            defaultAudioSource = audioSource
+        )
         val minBufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat)
         if (minBufferSize <= 0) {
             val message = "AudioRecord min buffer unavailable: size=$minBufferSize"
@@ -40,17 +53,23 @@ internal class AudioIOManager(
             return ManagedAudioRecord(
                 audioRecord = null,
                 bufferSize = minBufferSize,
+                audioSource = resolvedAudioSource,
+                routingSession = routingSession,
                 routingMessage = message
             )
         }
 
         val audioRecord = AudioRecord(
-            audioSource,
+            resolvedAudioSource,
             sampleRateInHz,
             channelConfig,
             audioFormat,
             minBufferSize * 2
         )
+
+        // Log internal state before applying routing
+        Log.d(TAG, "AudioRecord initialized: source=$resolvedAudioSource rate=$sampleRateInHz " +
+            "state=${describeRecordState(audioRecord.state)} sessionId=${audioRecord.audioSessionId}")
 
         val routingMessage = audioRoutingRepository.applyPreferredInputDevice(
             audioRecord = audioRecord,
@@ -60,8 +79,76 @@ internal class AudioIOManager(
         return ManagedAudioRecord(
             audioRecord = audioRecord,
             bufferSize = minBufferSize,
+            audioSource = resolvedAudioSource,
+            routingSession = routingSession,
             routingMessage = routingMessage
         )
+    }
+
+    private fun describeRecordState(state: Int): String = when (state) {
+        AudioRecord.STATE_INITIALIZED -> "INITIALIZED"
+        AudioRecord.STATE_UNINITIALIZED -> "UNINITIALIZED"
+        else -> "UNKNOWN($state)"
+    }
+
+    fun logMicRoutingPreparation(
+        preferredInputDeviceId: Int?,
+        routingMessage: String?,
+        requestedAudioSource: Int = MediaRecorder.AudioSource.MIC
+    ) {
+        val selectedLabel = audioRoutingRepository.resolveSelectedInputLabel(preferredInputDeviceId)
+            ?: "System default"
+        val selectedInputType = audioRoutingRepository.resolveSelectedInputType(preferredInputDeviceId)
+        val resolvedAudioSource = resolvePreferredAudioSource(
+            selectedInputType = selectedInputType,
+            defaultAudioSource = requestedAudioSource
+        )
+        val availableInputs = audioRoutingRepository.describeAvailableInputDevices()
+        val audioManagerState = audioRoutingRepository.describeAudioManagerState()
+        val scoAvailable = audioManager.isBluetoothScoAvailableOffCall
+        Log.i(
+            TAG,
+            "Audio input prepare: selected=$selectedLabel selectedId=${preferredInputDeviceId ?: "default"} " +
+                "requestedAudioSource=${describeAudioSource(requestedAudioSource)} " +
+                "resolvedAudioSource=${describeAudioSource(resolvedAudioSource)} " +
+                "scoAvailable=$scoAvailable available=[$availableInputs] " +
+                "routingMessage=${routingMessage ?: "none"} " +
+                "audioManagerState=[$audioManagerState]"
+        )
+    }
+
+    fun logMicRoutingActivation(
+        audioRecord: AudioRecord?,
+        preferredInputDeviceId: Int?,
+        sampleRateInHz: Int,
+        bufferSize: Int,
+        audioSource: Int = MediaRecorder.AudioSource.MIC
+    ): String? {
+        val activeInputLabel = resolveActiveInputLabel(audioRecord)
+        val selectedLabel = audioRoutingRepository.resolveSelectedInputLabel(preferredInputDeviceId)
+            ?: "System default"
+        val recordingState = audioRecord?.recordingState
+        val audioManagerState = audioRoutingRepository.describeAudioManagerState()
+        
+        Log.i(
+            TAG,
+            "Audio input active: selected=$selectedLabel selectedId=${preferredInputDeviceId ?: "default"} " +
+                "active=${activeInputLabel ?: "unknown"} sampleRate=$sampleRateInHz bufferSize=$bufferSize " +
+                "audioSource=${describeAudioSource(audioSource)} recordingState=${describeRecordingState(recordingState)} " +
+                "audioManagerState=[$audioManagerState] actualScoOn=${audioManager.isBluetoothScoOn}"
+        )
+        return activeInputLabel
+    }
+
+    private fun describeRecordingState(state: Int?): String = when (state) {
+        AudioRecord.RECORDSTATE_RECORDING -> "RECORDING"
+        AudioRecord.RECORDSTATE_STOPPED -> "STOPPED"
+        null -> "NULL"
+        else -> "UNKNOWN($state)"
+    }
+
+    fun createAudioInputReadLogger(sessionName: String): AudioInputReadLogger {
+        return AudioInputReadLogger(sessionName)
     }
 
     fun resolveActiveInputLabel(audioRecord: AudioRecord?): String? {
@@ -95,13 +182,51 @@ internal class AudioIOManager(
         }
     }
 
+    fun logPlaybackRoutingPreparation(
+        filePath: String,
+        preferredOutputDeviceId: Int?,
+        routingMessage: String?
+    ) {
+        val selectedLabel = audioRoutingRepository.resolveSelectedOutputLabel(preferredOutputDeviceId)
+            ?: "System default"
+        val availableOutputs = audioRoutingRepository.describeAvailableOutputDevices()
+        val communicationOutput = audioRoutingRepository.resolveCommunicationOutputLabel() ?: "none"
+        val audioManagerState = audioRoutingRepository.describeAudioManagerState()
+        Log.i(
+            TAG,
+            "Audio output prepare: file=${filePath.substringAfterLast('/')} " +
+                "selected=$selectedLabel selectedId=${preferredOutputDeviceId ?: "default"} " +
+                "communication=$communicationOutput available=[$availableOutputs] " +
+                "routingMessage=${routingMessage ?: "none"} audioManagerState=[$audioManagerState]"
+        )
+    }
+
+    fun logPlaybackRoutingActivation(
+        filePath: String,
+        preferredOutputDeviceId: Int?
+    ) {
+        val selectedLabel = audioRoutingRepository.resolveSelectedOutputLabel(preferredOutputDeviceId)
+            ?: "System default"
+        val communicationOutput = audioRoutingRepository.resolveCommunicationOutputLabel() ?: "none"
+        val audioManagerState = audioRoutingRepository.describeAudioManagerState()
+        Log.i(
+            TAG,
+            "Audio output active: file=${filePath.substringAfterLast('/')} " +
+                "selected=$selectedLabel selectedId=${preferredOutputDeviceId ?: "default"} " +
+                "communication=$communicationOutput audioManagerState=[$audioManagerState]"
+        )
+    }
+
     fun createSpeechOutputDriver(
         preferredLocale: Locale? = null,
+        preferredOutputDeviceId: Int? = null,
         onStateChanged: (SpeechOutputState) -> Unit
     ): SpeechOutputController {
         return SpeechOutputController(
             context = context,
             preferredLocale = preferredLocale,
+            preferredOutputDeviceId = preferredOutputDeviceId,
+            audioRoutingRepository = audioRoutingRepository,
             onStateChanged = onStateChanged
         )
     }
@@ -120,6 +245,133 @@ internal class AudioIOManager(
 
         return builder.build()
     }
+
+    private fun prepareAudioInputRoutingSession(selectedInputType: Int?): AudioInputRoutingSession {
+        if (selectedInputType != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+            return NoopAudioInputRoutingSession
+        }
+
+        val previousMode = audioManager.mode
+        val previousScoState = audioManager.isBluetoothScoOn
+        val scoAvailable = audioManager.isBluetoothScoAvailableOffCall
+        Log.i(
+            TAG,
+            "Audio input bluetooth session prepare: previousMode=${describeAudioMode(previousMode)} " +
+                "previousScoOn=$previousScoState scoAvailable=$scoAvailable"
+        )
+        
+        // Pixel recommendation: set mode before starting SCO
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        @Suppress("DEPRECATION")
+        audioManager.startBluetoothSco()
+        @Suppress("DEPRECATION")
+        audioManager.isBluetoothScoOn = true
+        
+        Log.i(
+            TAG,
+            "Audio input bluetooth session active: requestedMode=MODE_IN_COMMUNICATION " +
+                "actualMode=${describeAudioMode(audioManager.mode)} scoOn=${audioManager.isBluetoothScoOn}"
+        )
+
+        return BluetoothScoAudioInputRoutingSession(
+            audioManager = audioManager,
+            previousMode = previousMode,
+            previousScoState = previousScoState
+        )
+    }
+}
+
+internal interface AudioInputRoutingSession {
+    fun release()
+}
+
+internal object NoopAudioInputRoutingSession : AudioInputRoutingSession {
+    override fun release() = Unit
+}
+
+internal class BluetoothScoAudioInputRoutingSession(
+    private val audioManager: AudioManager,
+    private val previousMode: Int,
+    private val previousScoState: Boolean
+) : AudioInputRoutingSession {
+    private var released = false
+
+    override fun release() {
+        if (released) return
+        released = true
+        @Suppress("DEPRECATION")
+        audioManager.stopBluetoothSco()
+        @Suppress("DEPRECATION")
+        audioManager.isBluetoothScoOn = previousScoState
+        audioManager.mode = previousMode
+        Log.i(
+            TAG,
+            "Audio input bluetooth session released: restoredMode=${describeAudioMode(audioManager.mode)} " +
+                "restoredScoOn=${audioManager.isBluetoothScoOn}"
+        )
+    }
+}
+
+internal class AudioInputReadLogger(
+    private val sessionName: String
+) {
+    private var readCount = 0
+    private var errorCount = 0
+    private var zeroAmplitudeCount = 0
+    private var loggedFirstRead = false
+    private var loggedFirstSignal = false
+
+    fun onRead(ret: Int, buffer: ShortArray, activeInputLabel: String?) {
+        readCount += 1
+
+        if (ret <= 0) {
+            errorCount += 1
+            if (errorCount <= 3 || errorCount % 20 == 0) {
+                Log.w(
+                    TAG,
+                    "Audio input read issue: session=$sessionName active=${activeInputLabel ?: "unknown"} ret=$ret readCount=$readCount errorCount=$errorCount"
+                )
+            }
+            return
+        }
+
+        var peakAbs = 0
+        var sumAbs = 0L
+        var isAllZeros = true
+        for (index in 0 until ret) {
+            val amplitude = abs(buffer[index].toInt())
+            if (amplitude > 0) isAllZeros = false
+            if (amplitude > peakAbs) peakAbs = amplitude
+            sumAbs += amplitude
+        }
+        val avgAbs = if (ret > 0) sumAbs / ret else 0L
+
+        if (isAllZeros) zeroAmplitudeCount++
+
+        if (!loggedFirstRead) {
+            loggedFirstRead = true
+            Log.i(
+                TAG,
+                "Audio input first read: session=$sessionName active=${activeInputLabel ?: "unknown"} frames=$ret peakAbs=$peakAbs avgAbs=$avgAbs isAllZeros=$isAllZeros"
+            )
+        }
+
+        if (!loggedFirstSignal && peakAbs >= 500) {
+            loggedFirstSignal = true
+            Log.i(
+                TAG,
+                "Audio input signal detected: session=$sessionName active=${activeInputLabel ?: "unknown"} readCount=$readCount peakAbs=$peakAbs avgAbs=$avgAbs"
+            )
+        }
+
+        if (readCount % 50 == 0 && !loggedFirstSignal) {
+            Log.w(
+                TAG,
+                "Audio input silent/weak: session=$sessionName active=${activeInputLabel ?: "unknown"} " +
+                    "readCount=$readCount zerosCount=$zeroAmplitudeCount lastPeak=$peakAbs lastAvg=$avgAbs"
+            )
+        }
+    }
 }
 
 internal fun resolvePlaybackCapturePolicy(
@@ -131,5 +383,31 @@ internal fun resolvePlaybackCapturePolicy(
         AudioAttributes.ALLOW_CAPTURE_BY_ALL
     } else {
         AudioAttributes.ALLOW_CAPTURE_BY_SYSTEM
+    }
+}
+
+internal fun resolvePreferredAudioSource(
+    selectedInputType: Int?,
+    defaultAudioSource: Int
+): Int {
+    return when (selectedInputType) {
+        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        else -> defaultAudioSource
+    }
+}
+
+internal fun describeAudioSource(audioSource: Int): String {
+    return when (audioSource) {
+        MediaRecorder.AudioSource.DEFAULT -> "DEFAULT"
+        MediaRecorder.AudioSource.MIC -> "MIC"
+        MediaRecorder.AudioSource.VOICE_UPLINK -> "VOICE_UPLINK"
+        MediaRecorder.AudioSource.VOICE_DOWNLINK -> "VOICE_DOWNLINK"
+        MediaRecorder.AudioSource.VOICE_CALL -> "VOICE_CALL"
+        MediaRecorder.AudioSource.CAMCORDER -> "CAMCORDER"
+        MediaRecorder.AudioSource.VOICE_RECOGNITION -> "VOICE_RECOGNITION"
+        MediaRecorder.AudioSource.VOICE_COMMUNICATION -> "VOICE_COMMUNICATION"
+        MediaRecorder.AudioSource.UNPROCESSED -> "UNPROCESSED"
+        MediaRecorder.AudioSource.VOICE_PERFORMANCE -> "VOICE_PERFORMANCE"
+        else -> "AudioSource($audioSource)"
     }
 }

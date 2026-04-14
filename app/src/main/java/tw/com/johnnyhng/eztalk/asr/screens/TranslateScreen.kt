@@ -47,6 +47,8 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
+import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
+import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
@@ -74,6 +76,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 private var audioRecord: AudioRecord? = null
+private var audioInputRoutingSession: AudioInputRoutingSession = NoopAudioInputRoutingSession
 private const val sampleRateInHz = 16000
 
 private data class TranslateUiState(
@@ -129,7 +132,8 @@ fun TranslateScreen(
 
     // TTS state
     val (speechController, speechState) = rememberSpeechOutputController(
-        preferredLocale = Locale.TRADITIONAL_CHINESE
+        preferredLocale = Locale.TRADITIONAL_CHINESE,
+        preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
     )
     val isTtsSpeaking = speechState.isSpeaking
 
@@ -228,9 +232,17 @@ fun TranslateScreen(
                     preferredInputDeviceId = userSettings.preferredAudioInputDeviceId
                 )
                 audioRecord = managedRecord.audioRecord
+                audioInputRoutingSession = managedRecord.routingSession
                 managedRecord.routingMessage?.let { Log.i(TAG, it) }
+                audioIOManager.logMicRoutingPreparation(
+                    preferredInputDeviceId = userSettings.preferredAudioInputDeviceId,
+                    routingMessage = managedRecord.routingMessage
+                )
+                val readLogger = audioIOManager.createAudioInputReadLogger("TranslateScreen")
                 homeViewModel.reportAudioInputRoutingState(managedRecord.routingMessage)
                 if (audioRecord == null) {
+                    audioInputRoutingSession.release()
+                    audioInputRoutingSession = NoopAudioInputRoutingSession
                     Log.e(TAG, "Translate microphone recorder initialization failed")
                     isStarted = false
                     return@LaunchedEffect
@@ -245,9 +257,16 @@ fun TranslateScreen(
                     val buffer = ShortArray(bufferSize)
 
                     audioRecord?.startRecording()
+                    val activeInputLabel = audioIOManager.logMicRoutingActivation(
+                        audioRecord = audioRecord,
+                        preferredInputDeviceId = userSettings.preferredAudioInputDeviceId,
+                        sampleRateInHz = sampleRateInHz,
+                        bufferSize = bufferSize,
+                        audioSource = managedRecord.audioSource
+                    )
                     homeViewModel.reportAudioInputRoutingState(
                         managedRecord.routingMessage,
-                        audioIOManager.resolveActiveInputLabel(audioRecord)
+                        activeInputLabel
                     )
                     while (isStarted) {
                         if (currentlyPlaying != null || isTtsSpeaking) { // Pause recording during playback and TTS
@@ -255,6 +274,7 @@ fun TranslateScreen(
                             continue
                         }
                         val ret = audioRecord?.read(buffer, 0, buffer.size)
+                        readLogger.onRead(ret ?: -1, buffer, activeInputLabel)
                         if (ret != null && ret > 0) {
                             val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
                             samplesChannel.send(samples)
@@ -599,6 +619,8 @@ private fun stopAudio() {
     audioRecord?.stop()
     audioRecord?.release()
     audioRecord = null
+    audioInputRoutingSession.release()
+    audioInputRoutingSession = NoopAudioInputRoutingSession
     MediaController.stop()
 }
 

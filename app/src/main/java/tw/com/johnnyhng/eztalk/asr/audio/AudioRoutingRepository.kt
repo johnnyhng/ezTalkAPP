@@ -37,6 +37,64 @@ data class AudioRoutingStatus(
 internal class AudioRoutingRepository(context: Context) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
+    fun describeAvailableInputDevices(): String {
+        val inputs = audioManager
+            .getDevices(AudioManager.GET_DEVICES_INPUTS)
+            .map { it.toUi(isInput = true, isOutput = false) }
+            .sortedBy { it.displayLabel.lowercase() }
+        return formatAudioInputDevicesForLog(inputs)
+    }
+
+    fun describeAvailableOutputDevices(): String {
+        val outputs = audioManager
+            .getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .map { it.toUi(isInput = false, isOutput = true) }
+            .sortedBy { it.displayLabel.lowercase() }
+        return formatAudioOutputDevicesForLog(outputs)
+    }
+
+    fun describeAudioManagerState(): String {
+        val communicationOutput = resolveCommunicationOutputLabel() ?: "none"
+        return "mode=${describeAudioMode(audioManager.mode)} " +
+            "speakerphoneOn=${audioManager.isSpeakerphoneOn} " +
+            "bluetoothScoOn=${audioManager.isBluetoothScoOn} " +
+            "musicActive=${audioManager.isMusicActive} " +
+            "communicationDevice=$communicationOutput"
+    }
+
+    fun resolveSelectedInputLabel(selectedInputDeviceId: Int?): String? {
+        if (selectedInputDeviceId == null) return null
+        return audioManager
+            .getDevices(AudioManager.GET_DEVICES_INPUTS)
+            .firstOrNull { it.id == selectedInputDeviceId }
+            ?.toUi(isInput = true, isOutput = false)
+            ?.displayLabel
+    }
+
+    fun resolveSelectedInputType(selectedInputDeviceId: Int?): Int? {
+        if (selectedInputDeviceId == null) return null
+        return audioManager
+            .getDevices(AudioManager.GET_DEVICES_INPUTS)
+            .firstOrNull { it.id == selectedInputDeviceId }
+            ?.type
+    }
+
+    fun resolveSelectedOutputLabel(selectedOutputDeviceId: Int?): String? {
+        if (selectedOutputDeviceId == null) return null
+        return audioManager
+            .getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .firstOrNull { it.id == selectedOutputDeviceId }
+            ?.toUi(isInput = false, isOutput = true)
+            ?.displayLabel
+    }
+
+    fun resolveCommunicationOutputLabel(): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        return audioManager.communicationDevice
+            ?.toUi(isInput = false, isOutput = true)
+            ?.displayLabel
+    }
+
     fun getStatus(
         selectedInputDeviceId: Int?,
         selectedOutputDeviceId: Int?,
@@ -180,6 +238,33 @@ internal class AudioRoutingRepository(context: Context) {
             AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_USB_ACCESSORY
         )
+    }
+}
+
+internal fun formatAudioInputDevicesForLog(inputs: List<AudioRouteDeviceUi>): String {
+    if (inputs.isEmpty()) return "none"
+    return inputs.joinToString(separator = "; ") { device ->
+        "id=${device.id},label=${device.displayLabel},type=${device.type}"
+    }
+}
+
+internal fun formatAudioOutputDevicesForLog(outputs: List<AudioRouteDeviceUi>): String {
+    if (outputs.isEmpty()) return "none"
+    return outputs.joinToString(separator = "; ") { device ->
+        "id=${device.id},label=${device.displayLabel},type=${device.type}"
+    }
+}
+
+internal fun describeAudioMode(mode: Int): String {
+    return when (mode) {
+        AudioManager.MODE_NORMAL -> "MODE_NORMAL"
+        AudioManager.MODE_RINGTONE -> "MODE_RINGTONE"
+        AudioManager.MODE_IN_CALL -> "MODE_IN_CALL"
+        AudioManager.MODE_IN_COMMUNICATION -> "MODE_IN_COMMUNICATION"
+        AudioManager.MODE_CALL_SCREENING -> "MODE_CALL_SCREENING"
+        AudioManager.MODE_CALL_REDIRECT -> "MODE_CALL_REDIRECT"
+        AudioManager.MODE_COMMUNICATION_REDIRECT -> "MODE_COMMUNICATION_REDIRECT"
+        else -> "MODE_$mode"
     }
 }
 

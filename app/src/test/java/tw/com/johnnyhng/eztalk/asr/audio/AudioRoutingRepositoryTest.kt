@@ -7,6 +7,39 @@ import org.junit.Test
 
 class AudioRoutingRepositoryTest {
     @Test
+    fun formatAudioInputDevicesForLogReturnsCompactSummary() {
+        val devices = listOf(
+            AudioRouteDeviceUi(
+                id = 7,
+                productName = "USB Mic",
+                type = AudioDeviceInfo.TYPE_USB_DEVICE,
+                typeLabel = "USB audio",
+                isInput = true,
+                isOutput = false,
+                isConnected = true,
+                isCommunicationDeviceCapable = false
+            ),
+            AudioRouteDeviceUi(
+                id = 3,
+                productName = "Phone",
+                type = AudioDeviceInfo.TYPE_BUILTIN_MIC,
+                typeLabel = "Built-in mic",
+                isInput = true,
+                isOutput = false,
+                isConnected = true,
+                isCommunicationDeviceCapable = false
+            )
+        )
+
+        val summary = formatAudioInputDevicesForLog(devices)
+
+        assertTrue(summary.contains("id=7"))
+        assertTrue(summary.contains("USB Mic (USB audio)"))
+        assertTrue(summary.contains("id=3"))
+        assertTrue(summary.contains("Phone (Built-in mic)"))
+    }
+
+    @Test
     fun buildPreferredInputRoutingMessageHandlesSystemDefault() {
         val message = buildPreferredInputRoutingMessage(
             selectedInput = null,
