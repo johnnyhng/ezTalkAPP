@@ -104,11 +104,42 @@ private fun localLlmStatusText(
         SpeakerLocalLlmStatus.Checking -> context.getString(R.string.speaker_local_llm_status_checking)
         SpeakerLocalLlmStatus.Available -> context.getString(R.string.speaker_local_llm_status_available)
         SpeakerLocalLlmStatus.Downloadable -> context.getString(R.string.speaker_local_llm_status_downloadable)
-        SpeakerLocalLlmStatus.Downloading -> context.getString(R.string.speaker_local_llm_status_downloading)
+        is SpeakerLocalLlmStatus.Downloading -> context.getString(R.string.speaker_local_llm_status_downloading)
         SpeakerLocalLlmStatus.Unavailable -> context.getString(R.string.speaker_local_llm_status_unavailable)
         is SpeakerLocalLlmStatus.Error -> context.getString(
             R.string.speaker_local_llm_status_error,
             status.message
+        )
+    }
+}
+
+private fun localLlmProgress(
+    status: SpeakerLocalLlmStatus
+): Float? {
+    status as? SpeakerLocalLlmStatus.Downloading ?: return null
+    val totalBytes = status.totalBytes ?: return null
+    if (totalBytes <= 0L) return null
+    val downloadedBytes = status.downloadedBytes ?: return null
+    return (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+}
+
+private fun localLlmProgressText(
+    context: android.content.Context,
+    status: SpeakerLocalLlmStatus
+): String? {
+    status as? SpeakerLocalLlmStatus.Downloading ?: return null
+    val downloadedBytes = status.downloadedBytes ?: return null
+    val totalBytes = status.totalBytes
+    return if (totalBytes != null && totalBytes > 0L) {
+        context.getString(
+            R.string.speaker_local_llm_download_progress,
+            downloadedBytes,
+            totalBytes
+        )
+    } else {
+        context.getString(
+            R.string.speaker_local_llm_download_progress_indeterminate,
+            downloadedBytes
         )
     }
 }
@@ -171,8 +202,10 @@ fun SettingsScreen(
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
     var geminiAuthStatus by remember { mutableStateOf<GeminiAuthStatus>(GeminiAuthStatus.NotSignedIn) }
     var localLlmStatus by remember { mutableStateOf<SpeakerLocalLlmStatus>(SpeakerLocalLlmStatus.Checking) }
+    var isLocalLlmDownloadRunning by remember { mutableStateOf(false) }
     lateinit var refreshGeminiAuthStatus: (GoogleAccountSession?) -> Unit
     lateinit var refreshLocalLlmStatus: () -> Unit
+    lateinit var launchLocalLlmDownload: () -> Unit
 
     val geminiConsentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -228,6 +261,41 @@ fun SettingsScreen(
         localLlmStatus = SpeakerLocalLlmStatus.Checking
         scope.launch {
             localLlmStatus = localLlmAvailabilityChecker.check()
+        }
+    }
+
+    launchLocalLlmDownload = launch@{
+        if (isLocalLlmDownloadRunning) return@launch
+        isLocalLlmDownloadRunning = true
+        scope.launch {
+            localLlmStatus = SpeakerLocalLlmStatus.Downloading()
+            val finalStatus = localLlmAvailabilityChecker.download { status ->
+                localLlmStatus = status
+            }
+            localLlmStatus = finalStatus
+            isLocalLlmDownloadRunning = false
+            when (finalStatus) {
+                SpeakerLocalLlmStatus.Available -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_local_llm_download_complete),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                is SpeakerLocalLlmStatus.Error -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(
+                            R.string.speaker_local_llm_download_failed,
+                            finalStatus.message
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                else -> Unit
+            }
         }
     }
 
@@ -616,6 +684,23 @@ fun SettingsScreen(
                         ),
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    localLlmProgressText(context, localLlmStatus)?.let { progressText ->
+                        Text(
+                            text = progressText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (localLlmStatus is SpeakerLocalLlmStatus.Downloading) {
+                        val progress = localLlmProgress(localLlmStatus)
+                        if (progress != null) {
+                            LinearProgressIndicator(
+                                progress = progress,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
                     Text(
                         text = stringResource(
                             R.string.speaker_cloud_llm_status_label,
@@ -636,8 +721,16 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
+                            onClick = { launchLocalLlmDownload() },
+                            enabled = !isDownloading &&
+                                !isLocalLlmDownloadRunning &&
+                                localLlmStatus == SpeakerLocalLlmStatus.Downloadable
+                        ) {
+                            Text(stringResource(R.string.speaker_local_llm_download))
+                        }
+                        Button(
                             onClick = { refreshLocalLlmStatus() },
-                            enabled = !isDownloading
+                            enabled = !isDownloading && !isLocalLlmDownloadRunning
                         ) {
                             Text(stringResource(R.string.speaker_local_llm_refresh))
                         }

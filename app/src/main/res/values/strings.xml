@@ -45,7 +45,12 @@
     <string name="speaker_llm_execution_mode_summary">Local (Auto) prefers Gemini Nano on-device and falls back to cloud Gemini when local inference is not ready.</string>
     <string name="speaker_local_llm_status_label">Local Gemini Nano: %1$s</string>
     <string name="speaker_cloud_llm_status_label">Cloud Gemini OAuth: %1$s</string>
+    <string name="speaker_local_llm_download">Download Gemini Nano</string>
     <string name="speaker_local_llm_refresh">Refresh local status</string>
+    <string name="speaker_local_llm_download_complete">Gemini Nano download complete</string>
+    <string name="speaker_local_llm_download_failed">Gemini Nano download failed: %1$s</string>
+    <string name="speaker_local_llm_download_progress">Downloaded %1$d / %2$d bytes</string>
+    <string name="speaker_local_llm_download_progress_indeterminate">Downloaded %1$d bytes</string>
     <string name="speaker_local_llm_status_checking">Checking…</string>
     <string name="speaker_local_llm_status_available">Available</string>
     <string name="speaker_local_llm_status_downloadable">Downloadable</string>

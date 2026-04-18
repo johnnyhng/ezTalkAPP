@@ -45,7 +45,12 @@
     <string name="speaker_llm_execution_mode_summary">Local（Auto）會優先使用裝置端 Gemini Nano；若本地推論尚未可用，則自動 fallback 到雲端 Gemini。</string>
     <string name="speaker_local_llm_status_label">Local Gemini Nano：%1$s</string>
     <string name="speaker_cloud_llm_status_label">Cloud Gemini OAuth：%1$s</string>
+    <string name="speaker_local_llm_download">下載 Gemini Nano</string>
     <string name="speaker_local_llm_refresh">重新整理本地狀態</string>
+    <string name="speaker_local_llm_download_complete">Gemini Nano 下載完成</string>
+    <string name="speaker_local_llm_download_failed">Gemini Nano 下載失敗：%1$s</string>
+    <string name="speaker_local_llm_download_progress">已下載 %1$d / %2$d 位元組</string>
+    <string name="speaker_local_llm_download_progress_indeterminate">已下載 %1$d 位元組</string>
     <string name="speaker_local_llm_status_checking">檢查中…</string>
     <string name="speaker_local_llm_status_available">可用</string>
     <string name="speaker_local_llm_status_downloadable">可下載</string>
