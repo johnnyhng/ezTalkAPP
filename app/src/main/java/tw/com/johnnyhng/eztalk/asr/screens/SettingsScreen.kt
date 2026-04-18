@@ -60,6 +60,9 @@ import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
 import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
 import tw.com.johnnyhng.eztalk.asr.llm.GoogleAuthGeminiAccessTokenProvider
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmAvailabilityChecker
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmStatus
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.widgets.RemoteModelsManager
@@ -93,6 +96,23 @@ private fun geminiOAuthErrorMessage(
     }
 }
 
+private fun localLlmStatusText(
+    context: android.content.Context,
+    status: SpeakerLocalLlmStatus
+): String {
+    return when (status) {
+        SpeakerLocalLlmStatus.Checking -> context.getString(R.string.speaker_local_llm_status_checking)
+        SpeakerLocalLlmStatus.Available -> context.getString(R.string.speaker_local_llm_status_available)
+        SpeakerLocalLlmStatus.Downloadable -> context.getString(R.string.speaker_local_llm_status_downloadable)
+        SpeakerLocalLlmStatus.Downloading -> context.getString(R.string.speaker_local_llm_status_downloading)
+        SpeakerLocalLlmStatus.Unavailable -> context.getString(R.string.speaker_local_llm_status_unavailable)
+        is SpeakerLocalLlmStatus.Error -> context.getString(
+            R.string.speaker_local_llm_status_error,
+            status.message
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -110,6 +130,7 @@ fun SettingsScreen(
     var modelMenuExpanded by remember { mutableStateOf(false) }
     var entryScreenMenuExpanded by remember { mutableStateOf(false) }
     var geminiModelMenuExpanded by remember { mutableStateOf(false) }
+    var speakerLlmModeMenuExpanded by remember { mutableStateOf(false) }
     var audioInputMenuExpanded by remember { mutableStateOf(false) }
     var audioOutputMenuExpanded by remember { mutableStateOf(false) }
     var advancedSettingsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -122,6 +143,14 @@ fun SettingsScreen(
         .firstOrNull { it.first == userSettings.geminiModel }
         ?.second
         ?: userSettings.geminiModel
+    val speakerLlmExecutionModeOptions = listOf(
+        SpeakerLlmExecutionMode.AUTO_LOCAL.storageValue to context.getString(R.string.speaker_llm_execution_mode_auto_local),
+        SpeakerLlmExecutionMode.CLOUD.storageValue to context.getString(R.string.speaker_llm_execution_mode_cloud)
+    )
+    val selectedSpeakerLlmExecutionModeLabel = speakerLlmExecutionModeOptions
+        .firstOrNull { it.first == userSettings.speakerLlmExecutionMode }
+        ?.second
+        ?: userSettings.speakerLlmExecutionMode
     val isDownloading by homeViewModel.isDownloadingFlow.collectAsState()
     val downloadProgress by homeViewModel.downloadProgressFlow.collectAsState()
     val canDeleteModel = homeViewModel.canDeleteModel
@@ -138,9 +167,12 @@ fun SettingsScreen(
 
     val signInManager = remember { GoogleSignInManager() }
     val tokenProvider = remember(appContext) { GoogleAuthGeminiAccessTokenProvider(appContext) }
+    val localLlmAvailabilityChecker = remember(appContext) { SpeakerLocalLlmAvailabilityChecker(appContext) }
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
     var geminiAuthStatus by remember { mutableStateOf<GeminiAuthStatus>(GeminiAuthStatus.NotSignedIn) }
+    var localLlmStatus by remember { mutableStateOf<SpeakerLocalLlmStatus>(SpeakerLocalLlmStatus.Checking) }
     lateinit var refreshGeminiAuthStatus: (GoogleAccountSession?) -> Unit
+    lateinit var refreshLocalLlmStatus: () -> Unit
 
     val geminiConsentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -192,6 +224,13 @@ fun SettingsScreen(
         }
     }
 
+    refreshLocalLlmStatus = refresh@{
+        localLlmStatus = SpeakerLocalLlmStatus.Checking
+        scope.launch {
+            localLlmStatus = localLlmAvailabilityChecker.check()
+        }
+    }
+
     LaunchedEffect(signInManager, context, userSettings.userId) {
         val session = signInManager.getCurrentSession(context)
         googleSession = session
@@ -199,6 +238,10 @@ fun SettingsScreen(
             homeViewModel.updateUserId(session.email)
         }
         refreshGeminiAuthStatus(session)
+    }
+
+    LaunchedEffect(Unit) {
+        refreshLocalLlmStatus()
     }
 
     LaunchedEffect(Unit) {
@@ -516,6 +559,96 @@ fun SettingsScreen(
 
             if (advancedSettingsExpanded) {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
+                    Text(
+                        text = stringResource(R.string.speaker_llm_execution_mode_label),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    ExposedDropdownMenuBox(
+                        expanded = speakerLlmModeMenuExpanded,
+                        onExpandedChange = {
+                            if (!isDownloading) {
+                                speakerLlmModeMenuExpanded = !speakerLlmModeMenuExpanded
+                            }
+                        }
+                    ) {
+                        OutlinedTextField(
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            readOnly = true,
+                            value = selectedSpeakerLlmExecutionModeLabel,
+                            onValueChange = {},
+                            label = { Text(stringResource(R.string.speaker_llm_execution_mode_label)) },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = speakerLlmModeMenuExpanded)
+                            },
+                            enabled = !isDownloading
+                        )
+                        ExposedDropdownMenu(
+                            expanded = speakerLlmModeMenuExpanded,
+                            onDismissRequest = { speakerLlmModeMenuExpanded = false },
+                            modifier = Modifier.exposedDropdownSize()
+                        ) {
+                            speakerLlmExecutionModeOptions.forEach { (value, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        homeViewModel.updateSpeakerLlmExecutionMode(value)
+                                        speakerLlmModeMenuExpanded = false
+                                    },
+                                    leadingIcon = {
+                                        RadioButton(
+                                            selected = value == userSettings.speakerLlmExecutionMode,
+                                            onClick = null
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = stringResource(R.string.speaker_llm_execution_mode_summary),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_local_llm_status_label,
+                            localLlmStatusText(context, localLlmStatus)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_cloud_llm_status_label,
+                            when (val status = geminiAuthStatus) {
+                                GeminiAuthStatus.NotSignedIn -> stringResource(R.string.gemini_oauth_status_not_signed_in)
+                                GeminiAuthStatus.Checking -> stringResource(R.string.gemini_oauth_status_checking)
+                                GeminiAuthStatus.Ready -> stringResource(R.string.gemini_oauth_status_ready)
+                                is GeminiAuthStatus.Error -> stringResource(
+                                    R.string.gemini_oauth_status_error,
+                                    status.message
+                                )
+                            }
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { refreshLocalLlmStatus() },
+                            enabled = !isDownloading
+                        ) {
+                            Text(stringResource(R.string.speaker_local_llm_refresh))
+                        }
+                        Button(
+                            onClick = { refreshGeminiAuthStatus(googleSession) },
+                            enabled = !isDownloading && geminiAuthStatus != GeminiAuthStatus.Checking
+                        ) {
+                            Text(stringResource(R.string.check_gemini_access))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(stringResource(R.string.audio_routing_title), style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = stringResource(

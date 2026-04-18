@@ -55,8 +55,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
-import tw.com.johnnyhng.eztalk.asr.llm.GoogleAuthGeminiAccessTokenProvider
-import tw.com.johnnyhng.eztalk.asr.llm.GeminiLlmProvider
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmProviderFactory
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmRuntimeSelection
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmStatus
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.speaker.MultiTextImportResult
 import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerContentCommand
@@ -125,14 +127,24 @@ fun SpeakerScreen(
     var pendingImportConflictFolders by rememberSaveable { mutableStateOf(0) }
     var pendingImportConflictDocuments by rememberSaveable { mutableStateOf(0) }
     val semanticIndexer = remember { SpeakerSemanticIndexer() }
+    val llmProviderFactory = remember(appContext) { SpeakerLlmProviderFactory(appContext) }
     val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
-    val semanticModule = remember(appContext, userSettings.geminiModel) {
+    var llmRuntimeSelection by remember {
+        mutableStateOf(
+            SpeakerLlmRuntimeSelection(
+                provider = null,
+                sourceLabel = "none",
+                localStatus = SpeakerLocalLlmStatus.Checking,
+                executionMode = SpeakerLlmExecutionMode.AUTO_LOCAL
+            )
+        )
+    }
+    val semanticModule = remember(
+        geminiModel,
+        llmRuntimeSelection.provider
+    ) {
         SpeakerSemanticModule(
-            llmProvider = geminiModel?.let {
-                GeminiLlmProvider(
-                    accessTokenProvider = GoogleAuthGeminiAccessTokenProvider(appContext)
-                )
-            },
+            llmProvider = llmRuntimeSelection.provider,
             llmModel = geminiModel ?: "gemini-2.5-flash"
         )
     }
@@ -189,6 +201,20 @@ fun SpeakerScreen(
         activeAsrTarget = SpeakerAsrTarget.CONTENT
         speakerViewModel.updateContentAsrText("")
         speakerAsrController.start(userSettings)
+    }
+
+    LaunchedEffect(userSettings.geminiModel, userSettings.speakerLlmExecutionMode) {
+        val executionMode = SpeakerLlmExecutionMode.fromStorageValue(
+            userSettings.speakerLlmExecutionMode
+        )
+        llmRuntimeSelection = llmProviderFactory.create(
+            geminiModel = geminiModel,
+            executionMode = executionMode
+        )
+        Log.i(
+            TAG,
+            "Speaker LLM runtime mode=${llmRuntimeSelection.executionMode.storageValue} source=${llmRuntimeSelection.sourceLabel} localStatus=${llmRuntimeSelection.localStatus}"
+        )
     }
 
     LaunchedEffect(userSettings.userId) {

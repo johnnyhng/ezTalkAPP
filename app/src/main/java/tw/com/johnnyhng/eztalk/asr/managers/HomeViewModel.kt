@@ -323,6 +323,9 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateGeminiModel(v: String) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(geminiModel = v))
     }
+    fun updateSpeakerLlmExecutionMode(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(speakerLlmExecutionMode = v))
+    }
     fun updatePreferredAudioInputDeviceId(v: Int?) = viewModelScope.launch {
         _audioRoutingActiveInputLabel.value = null
         settingsManager.updateSettings(userSettings.value.copy(preferredAudioInputDeviceId = v))

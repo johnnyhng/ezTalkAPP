@@ -16,6 +16,7 @@ data class UserSettings(
     val mobileModelSha256: String = "",
     val entryScreenRoute: String = "home",
     val geminiModel: String = "gemini-2.5-flash",
+    val speakerLlmExecutionMode: String = "auto_local",
     val preferredAudioInputDeviceId: Int? = null,
     val preferredAudioOutputDeviceId: Int? = null,
     val allowAppAudioCapture: Boolean = false,
