@@ -8,7 +8,7 @@ internal enum class SpeakerLlmExecutionMode(
 
     companion object {
         fun fromStorageValue(value: String): SpeakerLlmExecutionMode {
-            return entries.firstOrNull { it.storageValue == value } ?: AUTO_LOCAL
+            return entries.firstOrNull { it.storageValue == value } ?: CLOUD
         }
     }
 }
