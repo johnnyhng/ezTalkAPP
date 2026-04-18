@@ -701,21 +701,6 @@ fun SettingsScreen(
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         }
                     }
-                    Text(
-                        text = stringResource(
-                            R.string.speaker_cloud_llm_status_label,
-                            when (val status = geminiAuthStatus) {
-                                GeminiAuthStatus.NotSignedIn -> stringResource(R.string.gemini_oauth_status_not_signed_in)
-                                GeminiAuthStatus.Checking -> stringResource(R.string.gemini_oauth_status_checking)
-                                GeminiAuthStatus.Ready -> stringResource(R.string.gemini_oauth_status_ready)
-                                is GeminiAuthStatus.Error -> stringResource(
-                                    R.string.gemini_oauth_status_error,
-                                    status.message
-                                )
-                            }
-                        ),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -733,12 +718,6 @@ fun SettingsScreen(
                             enabled = !isDownloading && !isLocalLlmDownloadRunning
                         ) {
                             Text(stringResource(R.string.speaker_local_llm_refresh))
-                        }
-                        Button(
-                            onClick = { refreshGeminiAuthStatus(googleSession) },
-                            enabled = !isDownloading && geminiAuthStatus != GeminiAuthStatus.Checking
-                        ) {
-                            Text(stringResource(R.string.check_gemini_access))
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
