@@ -43,6 +43,10 @@
     <string name="speaker_llm_execution_mode_auto_local">Local (Auto)</string>
     <string name="speaker_llm_execution_mode_cloud">Cloud LLM</string>
     <string name="speaker_llm_execution_mode_summary">Cloud LLM is the default because local Gemini Nano currently performs worse for Chinese. Switch to Local (Auto) only when you want to test on-device fallback.</string>
+    <string name="home_llm_correction_label">Home LLM correction</string>
+    <string name="home_llm_correction_summary">Use Gemini to refine the initial Home transcript from utterance variants before showing it as modified text.</string>
+    <string name="translate_llm_correction_label">Translate LLM correction</string>
+    <string name="translate_llm_correction_summary">Use Gemini to refine the initial Translate transcript from utterance variants before showing it as modified text.</string>
     <string name="speaker_local_llm_status_label">Local Gemini Nano: %1$s</string>
     <string name="speaker_local_llm_download">Download Gemini Nano</string>
     <string name="speaker_local_llm_refresh">Refresh local status</string>

@@ -24,6 +24,8 @@ private val mobileModelSha256Key = stringPreferencesKey("mobile_model_sha256")
 private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
 private val geminiModelKey = stringPreferencesKey("gemini_model")
 private val speakerLlmExecutionModeKey = stringPreferencesKey("speaker_llm_execution_mode")
+private val enableHomeLlmCorrectionKey = booleanPreferencesKey("enable_home_llm_correction")
+private val enableTranslateLlmCorrectionKey = booleanPreferencesKey("enable_translate_llm_correction")
 private val preferredAudioInputDeviceIdKey = intPreferencesKey("preferred_audio_input_device_id")
 private val preferredAudioOutputDeviceIdKey = intPreferencesKey("preferred_audio_output_device_id")
 private val allowAppAudioCaptureKey = booleanPreferencesKey("allow_app_audio_capture")
@@ -49,6 +51,10 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         geminiModel = preferences[geminiModelKey] ?: defaultUserSettings.geminiModel,
         speakerLlmExecutionMode = preferences[speakerLlmExecutionModeKey]
             ?: defaultUserSettings.speakerLlmExecutionMode,
+        enableHomeLlmCorrection = preferences[enableHomeLlmCorrectionKey]
+            ?: defaultUserSettings.enableHomeLlmCorrection,
+        enableTranslateLlmCorrection = preferences[enableTranslateLlmCorrectionKey]
+            ?: defaultUserSettings.enableTranslateLlmCorrection,
         preferredAudioInputDeviceId = preferences[preferredAudioInputDeviceIdKey],
         preferredAudioOutputDeviceId = preferences[preferredAudioOutputDeviceIdKey],
         allowAppAudioCapture = preferences[allowAppAudioCaptureKey]
@@ -72,6 +78,8 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[entryScreenRouteKey] = sanitizeEntryScreenRoute(settings.entryScreenRoute)
     preferences[geminiModelKey] = settings.geminiModel
     preferences[speakerLlmExecutionModeKey] = settings.speakerLlmExecutionMode
+    preferences[enableHomeLlmCorrectionKey] = settings.enableHomeLlmCorrection
+    preferences[enableTranslateLlmCorrectionKey] = settings.enableTranslateLlmCorrection
     if (settings.preferredAudioInputDeviceId != null) {
         preferences[preferredAudioInputDeviceIdKey] = settings.preferredAudioInputDeviceId
     } else {

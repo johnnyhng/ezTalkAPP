@@ -51,6 +51,8 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
+import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
@@ -112,6 +114,7 @@ fun TranslateScreen(
     homeViewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val clipboardManager = LocalClipboardManager.current
     val activity = LocalContext.current as Activity
     val coroutineScope = rememberCoroutineScope()
@@ -141,6 +144,18 @@ fun TranslateScreen(
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
     val utteranceVariantBuffer = remember { AsrUtteranceVariantBuffer() }
+    val correctionProviderFactory = remember(appContext) {
+        TranscriptCorrectionProviderFactory(appContext)
+    }
+    val correctionProvider = remember(userSettings.geminiModel, correctionProviderFactory) {
+        correctionProviderFactory.create(userSettings.geminiModel)
+    }
+    val transcriptCorrectionModule = remember(correctionProvider, userSettings.geminiModel) {
+        TranscriptCorrectionModule(
+            llmProvider = correctionProvider,
+            llmModel = userSettings.geminiModel
+        )
+    }
 
     // Initialize recognizer in the background
     LaunchedEffect(selectedModel?.name, userSettings.userId, userSettings.mobileModelSha256) {
@@ -413,23 +428,45 @@ fun TranslateScreen(
                                         filename = filename
                                     )
 
-                                    val newTranscript = createTranslateTranscript(
+                                    val baseTranscript = createTranslateTranscript(
                                         recognizedText = result.text,
                                         wavFilePath = wavPath ?: "",
                                         utteranceVariants = utteranceBundle?.variants ?: listOf(result.text)
                                     )
+                                    val correctedTranscript = if (userSettings.enableTranslateLlmCorrection) {
+                                        val correction = transcriptCorrectionModule.correct(
+                                            utteranceVariants = baseTranscript.utteranceVariants.ifEmpty {
+                                                listOf(baseTranscript.recognizedText)
+                                            },
+                                            contextLines = emptyList()
+                                        ).getOrElse { error ->
+                                            Log.w(TAG, "Translate LLM correction failed", error)
+                                            null
+                                        }
+                                        if (correction != null && correction.correctedText != baseTranscript.modifiedText) {
+                                            Log.i(
+                                                TAG,
+                                                "Translate LLM correction applied confidence=${correction.confidence} reason=${correction.reasoning.orEmpty()}"
+                                            )
+                                            baseTranscript.copy(modifiedText = correction.correctedText)
+                                        } else {
+                                            baseTranscript
+                                        }
+                                    } else {
+                                        baseTranscript
+                                    }
 
                                     withContext(Main) {
                                         uiState = uiState.copy(
-                                            transcript = newTranscript,
-                                            textInput = newTranscript.modifiedText,
-                                            localCandidate = newTranscript.localCandidates.firstOrNull(),
-                                            remoteCandidates = newTranscript.remoteCandidates
+                                            transcript = correctedTranscript,
+                                            textInput = correctedTranscript.modifiedText,
+                                            localCandidate = correctedTranscript.localCandidates.firstOrNull(),
+                                            remoteCandidates = correctedTranscript.remoteCandidates
                                         )
 
                                         if (wavPath != null) {
-                                            logTranslateJsonlUpdate("final_recognition", newTranscript)
-                                            persistTranscriptJsonl(context, userId, newTranscript)
+                                            logTranslateJsonlUpdate("final_recognition", correctedTranscript)
+                                            persistTranscriptJsonl(context, userId, correctedTranscript)
                                         }
                                     }
                                 }

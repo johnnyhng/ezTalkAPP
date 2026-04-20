@@ -28,6 +28,8 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
+import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.*
 import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
@@ -48,6 +50,7 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val activity = context as Activity
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
@@ -82,6 +85,18 @@ fun HomeScreen(
     )
     val isTtsSpeaking = speechState.isSpeaking
     val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
+    val correctionProviderFactory = remember(appContext) {
+        TranscriptCorrectionProviderFactory(appContext)
+    }
+    val correctionProvider = remember(userSettings.geminiModel, correctionProviderFactory) {
+        correctionProviderFactory.create(userSettings.geminiModel)
+    }
+    val transcriptCorrectionModule = remember(correctionProvider, userSettings.geminiModel) {
+        TranscriptCorrectionModule(
+            llmProvider = correctionProvider,
+            llmModel = userSettings.geminiModel
+        )
+    }
 
     LaunchedEffect(selectedModel?.name, userSettings.userId, userSettings.mobileModelSha256) {
         if (selectedModel != null) {
@@ -239,16 +254,42 @@ fun HomeScreen(
     // Connect ViewModel events to resultList
     LaunchedEffect(Unit) {
         homeViewModel.finalTranscript.collect { transcript ->
-            if (transcript.modifiedText.isNotBlank()) {
-                if (resultList.isNotEmpty() && resultList.last().wavFilePath.isEmpty()) {
-                    resultList[resultList.size - 1] = transcript
+            val correctedTranscript = if (userSettings.enableHomeLlmCorrection) {
+                val correction = transcriptCorrectionModule.correct(
+                    utteranceVariants = transcript.utteranceVariants.ifEmpty {
+                        listOf(transcript.recognizedText)
+                    },
+                    contextLines = resultList
+                        .takeLast(5)
+                        .map { it.modifiedText }
+                        .filter { it.isNotBlank() }
+                ).getOrElse { error ->
+                    Log.w(TAG, "Home LLM correction failed", error)
+                    null
+                }
+                if (correction != null && correction.correctedText != transcript.modifiedText) {
+                    Log.i(
+                        TAG,
+                        "Home LLM correction applied confidence=${correction.confidence} reason=${correction.reasoning.orEmpty()}"
+                    )
+                    transcript.copy(modifiedText = correction.correctedText)
                 } else {
-                    resultList.add(transcript)
+                    transcript
+                }
+            } else {
+                transcript
+            }
+
+            if (correctedTranscript.modifiedText.isNotBlank()) {
+                if (resultList.isNotEmpty() && resultList.last().wavFilePath.isEmpty()) {
+                    resultList[resultList.size - 1] = correctedTranscript
+                } else {
+                    resultList.add(correctedTranscript)
                 }
                 lazyColumnListState.animateScrollToItem(resultList.size - 1)
                 
                 if (userSettings.effectiveRecognitionUrl.isNotBlank()) {
-                    recognitionQueue.trySend(transcript.wavFilePath)
+                    recognitionQueue.trySend(correctedTranscript.wavFilePath)
                 }
             }
         }

@@ -676,6 +676,48 @@ fun SettingsScreen(
                         text = stringResource(R.string.speaker_llm_execution_mode_summary),
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.home_llm_correction_label),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_llm_correction_summary),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = userSettings.enableHomeLlmCorrection,
+                            onCheckedChange = homeViewModel::updateEnableHomeLlmCorrection,
+                            enabled = !isDownloading
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.translate_llm_correction_label),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.translate_llm_correction_summary),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = userSettings.enableTranslateLlmCorrection,
+                            onCheckedChange = homeViewModel::updateEnableTranslateLlmCorrection,
+                            enabled = !isDownloading
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = stringResource(
