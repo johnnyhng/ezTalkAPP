@@ -76,6 +76,8 @@ fun HomeScreen(
     var transcriptToEditInDialog by remember { mutableStateOf<Pair<Int, Transcript>?>(null) }
     val isEditing = isInlineEditing || transcriptToEditInDialog != null
     val fetchingJobs = remember { mutableStateMapOf<String, Job>() }
+    val correctionJobs = remember { mutableMapOf<String, Job>() }
+    val correctionRunning = remember { mutableStateMapOf<String, Boolean>() }
 
     // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
@@ -96,6 +98,71 @@ fun HomeScreen(
             llmProvider = correctionProvider,
             llmModel = userSettings.geminiModel
         )
+    }
+
+    fun clearCorrectionState(wavPath: String) {
+        correctionJobs.remove(wavPath)?.cancel()
+        correctionRunning.remove(wavPath)
+    }
+
+    fun launchBackgroundCorrection(transcript: Transcript) {
+        val wavPath = transcript.wavFilePath
+        if (!userSettings.enableHomeLlmCorrection || wavPath.isBlank()) return
+
+        clearCorrectionState(wavPath)
+        correctionRunning[wavPath] = true
+        val expectedModifiedText = transcript.modifiedText
+
+        val job = coroutineScope.launch {
+            try {
+                val contextLines = resultList
+                    .filter { it.wavFilePath != wavPath }
+                    .takeLast(5)
+                    .map { it.modifiedText }
+                    .filter { it.isNotBlank() }
+                val correction = withContext(Dispatchers.IO) {
+                    transcriptCorrectionModule.correct(
+                        utteranceVariants = transcript.utteranceVariants.ifEmpty {
+                            listOf(transcript.recognizedText)
+                        },
+                        contextLines = contextLines
+                    ).getOrElse { error ->
+                        Log.w(TAG, "Home LLM correction failed", error)
+                        null
+                        }
+                }
+
+                val updatedTranscript = withContext(Dispatchers.Main) {
+                    val index = resultList.indexOfFirst { it.wavFilePath == wavPath }
+                    if (index == -1) {
+                        null
+                    } else {
+                        val current = resultList[index]
+                        if (!current.mutable || current.modifiedText != expectedModifiedText) {
+                            null
+                        } else if (correction == null || correction.correctedText == current.modifiedText) {
+                            current
+                        } else {
+                            current.copy(modifiedText = correction.correctedText).also {
+                                resultList[index] = it
+                            }
+                        }
+                    }
+                }
+
+                if (updatedTranscript != null && updatedTranscript.modifiedText != expectedModifiedText) {
+                    withContext(Dispatchers.IO) {
+                        logHomeJsonlUpdate("llm_correction_applied", updatedTranscript)
+                        persistTranscriptJsonl(context, userSettings.userId, updatedTranscript)
+                    }
+                }
+            } finally {
+                correctionJobs.remove(wavPath)
+                correctionRunning.remove(wavPath)
+            }
+        }
+
+        correctionJobs[wavPath] = job
     }
 
     LaunchedEffect(selectedModel?.name, userSettings.userId, userSettings.mobileModelSha256) {
@@ -254,43 +321,18 @@ fun HomeScreen(
     // Connect ViewModel events to resultList
     LaunchedEffect(Unit) {
         homeViewModel.finalTranscript.collect { transcript ->
-            val correctedTranscript = if (userSettings.enableHomeLlmCorrection) {
-                val correction = transcriptCorrectionModule.correct(
-                    utteranceVariants = transcript.utteranceVariants.ifEmpty {
-                        listOf(transcript.recognizedText)
-                    },
-                    contextLines = resultList
-                        .takeLast(5)
-                        .map { it.modifiedText }
-                        .filter { it.isNotBlank() }
-                ).getOrElse { error ->
-                    Log.w(TAG, "Home LLM correction failed", error)
-                    null
-                }
-                if (correction != null && correction.correctedText != transcript.modifiedText) {
-                    Log.i(
-                        TAG,
-                        "Home LLM correction applied confidence=${correction.confidence} reason=${correction.reasoning.orEmpty()}"
-                    )
-                    transcript.copy(modifiedText = correction.correctedText)
-                } else {
-                    transcript
-                }
-            } else {
-                transcript
-            }
-
-            if (correctedTranscript.modifiedText.isNotBlank()) {
+            if (transcript.modifiedText.isNotBlank()) {
                 if (resultList.isNotEmpty() && resultList.last().wavFilePath.isEmpty()) {
-                    resultList[resultList.size - 1] = correctedTranscript
+                    resultList[resultList.size - 1] = transcript
                 } else {
-                    resultList.add(correctedTranscript)
+                    resultList.add(transcript)
                 }
                 lazyColumnListState.animateScrollToItem(resultList.size - 1)
-                
+
                 if (userSettings.effectiveRecognitionUrl.isNotBlank()) {
-                    recognitionQueue.trySend(correctedTranscript.wavFilePath)
+                    recognitionQueue.trySend(transcript.wavFilePath)
                 }
+                launchBackgroundCorrection(transcript)
             }
         }
     }
@@ -310,6 +352,9 @@ fun HomeScreen(
         onDispose {
             speechController.stop()
             recognitionQueue.close()
+            correctionJobs.values.forEach { it.cancel() }
+            correctionJobs.clear()
+            correctionRunning.clear()
         }
     }
 
@@ -345,7 +390,13 @@ fun HomeScreen(
                         Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                     }
                 },
-                onClearButtonClick = { resultList.clear() },
+                onClearButtonClick = {
+                    resultList
+                        .map { it.wavFilePath }
+                        .filter { it.isNotBlank() }
+                        .forEach(::clearCorrectionState)
+                    resultList.clear()
+                },
                 isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
                 isAsrModelLoading = isAsrModelLoading,
                 isEditing = isEditing
@@ -433,7 +484,12 @@ fun HomeScreen(
                         )
                     }
                 },
-                onDeleteClick = { idx, path -> if (path.isNotEmpty() && deleteTranscriptFiles(path)) resultList.removeAt(idx) },
+                onDeleteClick = { idx, path ->
+                    if (path.isNotEmpty() && deleteTranscriptFiles(path)) {
+                        clearCorrectionState(path)
+                        resultList.removeAt(idx)
+                    }
+                },
                 isRecognizingSpeech = isRecognizingSpeech,
                 currentlyPlaying = currentlyPlaying,
                 isStarted = isStarted,
@@ -442,7 +498,10 @@ fun HomeScreen(
                 isDataCollectMode = false,
                 inlineEditEnabled = userSettings.inlineEdit,
                 localCandidate = localCandidate,
-                isFetchingCandidates = isFetchingCandidates
+                isFetchingCandidates = isFetchingCandidates,
+                isLlmCorrectionRunning = { transcript ->
+                    transcript.wavFilePath.isNotBlank() && correctionRunning[transcript.wavFilePath] == true
+                }
             )
         }
 

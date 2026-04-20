@@ -45,6 +45,7 @@ fun CandidateList(
     // Editing candidates
     localCandidate: String?,
     isFetchingCandidates: Boolean,
+    isLlmCorrectionRunning: (Transcript) -> Boolean = { false },
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -83,6 +84,7 @@ fun CandidateList(
                     isTtsSpeaking = isTtsSpeaking,
                     isEditing = isInteractionLocked,
                     isDataCollectMode = isDataCollectMode,
+                    isLlmCorrectionRunning = isLlmCorrectionRunning(result),
                     onClick = { if (result.mutable) onItemClick(index, result) },
                     onTtsClick = { onTtsClick(index, result.modifiedText) },
                     onPlayClick = { onPlayClick(result.wavFilePath) },
@@ -142,13 +144,13 @@ fun CandidateItemRow(
     isTtsSpeaking: Boolean,
     isEditing: Boolean,
     isDataCollectMode: Boolean,
+    isLlmCorrectionRunning: Boolean,
     onClick: () -> Unit,
     onTtsClick: () -> Unit,
     onPlayClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(
@@ -156,51 +158,63 @@ fun CandidateItemRow(
                 onClick = onClick
             )
     ) {
-        Text(
-            text = "${index + 1}: ${transcript.modifiedText}",
-            modifier = Modifier.weight(1f)
-        )
-
-        if (isLastItem && isRecognizingSpeech && countdownProgress > 0) {
-            Spacer(modifier = Modifier.width(8.dp))
-            CircularProgressIndicator(
-                progress = countdownProgress,
-                modifier = Modifier.size(24.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "${index + 1}: ${transcript.modifiedText}",
+                modifier = Modifier.weight(1f)
             )
-        }
 
-        if (transcript.wavFilePath.isNotEmpty()) {
-            if (!isDataCollectMode && (transcript.mutable || transcript.removable)) {
+            if (isLastItem && isRecognizingSpeech && countdownProgress > 0) {
+                Spacer(modifier = Modifier.width(8.dp))
+                CircularProgressIndicator(
+                    progress = countdownProgress,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            if (transcript.wavFilePath.isNotEmpty()) {
+                if (!isDataCollectMode && (transcript.mutable || transcript.removable)) {
+                    IconButton(
+                        onClick = onTtsClick,
+                        enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RecordVoiceOver,
+                            contentDescription = stringResource(id = R.string.talk)
+                        )
+                    }
+                }
+
                 IconButton(
-                    onClick = onTtsClick,
-                    enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
+                    onClick = onPlayClick,
+                    enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == transcript.wavFilePath) && !isEditing
                 ) {
                     Icon(
-                        imageVector = Icons.Default.RecordVoiceOver,
-                        contentDescription = stringResource(id = R.string.talk)
+                        imageVector = if (currentlyPlaying == transcript.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
+                        contentDescription = if (currentlyPlaying == transcript.wavFilePath) stringResource(id = R.string.stop) else stringResource(id = R.string.play)
+                    )
+                }
+
+                IconButton(
+                    onClick = onDeleteClick,
+                    enabled = !isStarted && !isTtsSpeaking && currentlyPlaying == null && !isEditing
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(id = R.string.delete)
                     )
                 }
             }
+        }
 
-            IconButton(
-                onClick = onPlayClick,
-                enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == transcript.wavFilePath) && !isEditing
-            ) {
-                Icon(
-                    imageVector = if (currentlyPlaying == transcript.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = if (currentlyPlaying == transcript.wavFilePath) stringResource(id = R.string.stop) else stringResource(id = R.string.play)
-                )
-            }
-
-            IconButton(
-                onClick = onDeleteClick,
-                enabled = !isStarted && !isTtsSpeaking && currentlyPlaying == null && !isEditing
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = stringResource(id = R.string.delete)
-                )
-            }
+        if (isLlmCorrectionRunning && transcript.wavFilePath.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
