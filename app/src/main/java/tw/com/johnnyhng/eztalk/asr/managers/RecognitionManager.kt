@@ -294,7 +294,8 @@ class RecognitionManager(private val context: Context) {
                                 modifiedText = modifiedText,
                                 checked = isDataCollectMode,
                                 mutable = !isDataCollectMode,
-                                utteranceVariants = utteranceBundle?.variants.orEmpty()
+                                utteranceVariants = utteranceBundle?.variants.orEmpty(),
+                                localCandidates = listOf(originalText)
                             ))
                         }
                     } finally {
