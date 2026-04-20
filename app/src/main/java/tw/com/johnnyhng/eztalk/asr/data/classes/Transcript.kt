@@ -8,6 +8,7 @@ data class Transcript(
     var mutable: Boolean = true,
     var removable: Boolean = false,
     var utteranceVariants: List<String> = emptyList(),
+    var englishTranslation: String = "",
     var localCandidates: List<String> = emptyList(),
     var remoteCandidates: List<String> = emptyList()
 )

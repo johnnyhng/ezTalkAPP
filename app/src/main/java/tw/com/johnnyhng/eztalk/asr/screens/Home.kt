@@ -29,6 +29,7 @@ import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
+import tw.com.johnnyhng.eztalk.asr.llm.TranscriptEnglishTranslationModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.*
@@ -78,6 +79,7 @@ fun HomeScreen(
     val fetchingJobs = remember { mutableStateMapOf<String, Job>() }
     val correctionJobs = remember { mutableMapOf<String, Job>() }
     val correctionRunning = remember { mutableStateMapOf<String, Boolean>() }
+    val translationJobs = remember { mutableMapOf<String, Job>() }
 
     // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
@@ -85,7 +87,13 @@ fun HomeScreen(
         preferredLocale = Locale.TRADITIONAL_CHINESE,
         preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
     )
+    val (englishSpeechController, englishSpeechState) = rememberSpeechOutputController(
+        preferredLocale = Locale.US,
+        preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
+    )
     val isTtsSpeaking = speechState.isSpeaking
+    val isEnglishTtsSpeaking = englishSpeechState.isSpeaking
+    val isAnyTtsSpeaking = isTtsSpeaking || isEnglishTtsSpeaking
     val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
     val correctionProviderFactory = remember(appContext) {
         TranscriptCorrectionProviderFactory(appContext)
@@ -99,10 +107,91 @@ fun HomeScreen(
             llmModel = userSettings.geminiModel
         )
     }
+    val transcriptEnglishTranslationModule = remember(correctionProvider, userSettings.geminiModel) {
+        TranscriptEnglishTranslationModule(
+            llmProvider = correctionProvider,
+            llmModel = userSettings.geminiModel
+        )
+    }
 
     fun clearCorrectionState(wavPath: String) {
         correctionJobs.remove(wavPath)?.cancel()
         correctionRunning.remove(wavPath)
+    }
+
+    fun clearTranslationState(wavPath: String) {
+        translationJobs.remove(wavPath)?.cancel()
+    }
+
+    fun launchBackgroundEnglishTranslation(transcript: Transcript) {
+        val wavPath = transcript.wavFilePath
+        val expectedSourceText = transcript.modifiedText.trim()
+        if (!userSettings.enableHomeEnglishTranslation || wavPath.isBlank() || expectedSourceText.isBlank()) {
+            return
+        }
+
+        clearTranslationState(wavPath)
+        val job = coroutineScope.launch {
+            try {
+                val translatedText = withContext(Dispatchers.IO) {
+                    transcriptEnglishTranslationModule.translate(expectedSourceText).getOrElse { error ->
+                        Log.w(TAG, "Home English translation failed", error)
+                        null
+                    }
+                } ?: return@launch
+
+                val updatedTranscript = withContext(Dispatchers.Main) {
+                    val index = resultList.indexOfFirst { it.wavFilePath == wavPath }
+                    if (index == -1) {
+                        null
+                    } else {
+                        val current = resultList[index]
+                        if (current.modifiedText.trim() != expectedSourceText ||
+                            translatedText == current.englishTranslation
+                        ) {
+                            null
+                        } else {
+                            current.copy(englishTranslation = translatedText).also {
+                                resultList[index] = it
+                            }
+                        }
+                    }
+                }
+
+                updatedTranscript?.let {
+                    withContext(Dispatchers.IO) {
+                        logHomeJsonlUpdate("english_translation_applied", it)
+                        persistTranscriptJsonl(context, userSettings.userId, it)
+                    }
+                }
+            } finally {
+                translationJobs.remove(wavPath)
+            }
+        }
+        translationJobs[wavPath] = job
+    }
+
+    fun updateTranscriptAndRefreshEnglish(
+        index: Int,
+        updatedTranscript: Transcript,
+        previousModifiedText: String? = null
+    ) {
+        val normalizedTranscript = if (
+            userSettings.enableHomeEnglishTranslation &&
+            previousModifiedText != null &&
+            previousModifiedText != updatedTranscript.modifiedText
+        ) {
+            updatedTranscript.copy(englishTranslation = "")
+        } else {
+            updatedTranscript
+        }
+        resultList[index] = normalizedTranscript
+        if (userSettings.enableHomeEnglishTranslation &&
+            normalizedTranscript.wavFilePath.isNotBlank() &&
+            normalizedTranscript.modifiedText.isNotBlank()
+        ) {
+            launchBackgroundEnglishTranslation(normalizedTranscript)
+        }
     }
 
     fun launchBackgroundCorrection(transcript: Transcript) {
@@ -143,7 +232,10 @@ fun HomeScreen(
                         } else if (correction == null || correction.correctedText == current.modifiedText) {
                             current
                         } else {
-                            current.copy(modifiedText = correction.correctedText).also {
+                            current.copy(
+                                modifiedText = correction.correctedText,
+                                englishTranslation = ""
+                            ).also {
                                 resultList[index] = it
                             }
                         }
@@ -151,6 +243,7 @@ fun HomeScreen(
                 }
 
                 if (updatedTranscript != null && updatedTranscript.modifiedText != expectedModifiedText) {
+                    launchBackgroundEnglishTranslation(updatedTranscript)
                     withContext(Dispatchers.IO) {
                         logHomeJsonlUpdate("llm_correction_applied", updatedTranscript)
                         persistTranscriptJsonl(context, userSettings.userId, updatedTranscript)
@@ -214,6 +307,7 @@ fun HomeScreen(
     // Handlers
     fun handleTtsClick(index: Int, text: String) {
         MediaController.stop()
+        englishSpeechController.stop()
         speechController.speak(text)
         
         val item = resultList[index]
@@ -235,11 +329,23 @@ fun HomeScreen(
                         if (cIndex == -1) {
                             null
                         } else {
-                            reduceTranscriptAfterConfirmation(
+                            val reduced = reduceTranscriptAfterConfirmation(
                                 transcript = resultList[cIndex],
                                 newText = text,
                                 lockTranscript = true
-                            ).also { resultList[cIndex] = it }
+                            )
+                            val normalized = if (userSettings.enableHomeEnglishTranslation &&
+                                reduced.modifiedText != resultList[cIndex].modifiedText
+                            ) {
+                                reduced.copy(englishTranslation = "")
+                            } else {
+                                reduced
+                            }
+                            resultList[cIndex] = normalized
+                            if (userSettings.enableHomeEnglishTranslation) {
+                                launchBackgroundEnglishTranslation(normalized)
+                            }
+                            normalized
                         }
                     }
 
@@ -261,10 +367,15 @@ fun HomeScreen(
                 newText = text,
                 lockTranscript = userSettings.enableTtsFeedback
             )
-            resultList[index] = updated
+            updateTranscriptAndRefreshEnglish(
+                index = index,
+                updatedTranscript = updated,
+                previousModifiedText = item.modifiedText
+            )
             coroutineScope.launch(Dispatchers.IO) {
-                logHomeJsonlUpdate("tts_without_feedback", updated)
-                persistTranscriptJsonl(context, userSettings.userId, updated)
+                val latestTranscript = resultList.getOrNull(index) ?: return@launch
+                logHomeJsonlUpdate("tts_without_feedback", latestTranscript)
+                persistTranscriptJsonl(context, userSettings.userId, latestTranscript)
             }
         }
     }
@@ -291,10 +402,15 @@ fun HomeScreen(
                         newText = text,
                         lockTranscript = true
                     )
-                    resultList[index] = updatedItem
+                    updateTranscriptAndRefreshEnglish(
+                        index = index,
+                        updatedTranscript = updatedItem,
+                        previousModifiedText = item.modifiedText
+                    )
                     withContext(Dispatchers.IO) {
-                        logHomeJsonlUpdate("dialog_tts_feedback_success", updatedItem)
-                        persistTranscriptJsonl(context, userSettings.userId, updatedItem)
+                        val latestTranscript = resultList.getOrNull(index) ?: return@withContext
+                        logHomeJsonlUpdate("dialog_tts_feedback_success", latestTranscript)
+                        persistTranscriptJsonl(context, userSettings.userId, latestTranscript)
                     }
                     transcriptToEditInDialog = null
                 } else {
@@ -309,17 +425,27 @@ fun HomeScreen(
                 newText = text,
                 lockTranscript = userSettings.enableTtsFeedback
             )
-            resultList[index] = updatedItem
+            updateTranscriptAndRefreshEnglish(
+                index = index,
+                updatedTranscript = updatedItem,
+                previousModifiedText = item.modifiedText
+            )
             coroutineScope.launch(Dispatchers.IO) {
-                logHomeJsonlUpdate("dialog_tts_without_feedback", updatedItem)
-                persistTranscriptJsonl(context, userSettings.userId, updatedItem)
+                val latestTranscript = resultList.getOrNull(index) ?: return@launch
+                logHomeJsonlUpdate("dialog_tts_without_feedback", latestTranscript)
+                persistTranscriptJsonl(context, userSettings.userId, latestTranscript)
             }
             transcriptToEditInDialog = null
         }
     }
 
     // Connect ViewModel events to resultList
-    LaunchedEffect(Unit) {
+    LaunchedEffect(
+        userSettings.enableHomeLlmCorrection,
+        userSettings.enableHomeEnglishTranslation,
+        userSettings.effectiveRecognitionUrl,
+        userSettings.userId
+    ) {
         homeViewModel.finalTranscript.collect { transcript ->
             if (transcript.modifiedText.isNotBlank()) {
                 if (resultList.isNotEmpty() && resultList.last().wavFilePath.isEmpty()) {
@@ -333,6 +459,7 @@ fun HomeScreen(
                     recognitionQueue.trySend(transcript.wavFilePath)
                 }
                 launchBackgroundCorrection(transcript)
+                launchBackgroundEnglishTranslation(transcript)
             }
         }
     }
@@ -351,10 +478,28 @@ fun HomeScreen(
     DisposableEffect(Unit) {
         onDispose {
             speechController.stop()
+            englishSpeechController.stop()
             recognitionQueue.close()
             correctionJobs.values.forEach { it.cancel() }
             correctionJobs.clear()
             correctionRunning.clear()
+            translationJobs.values.forEach { it.cancel() }
+            translationJobs.clear()
+        }
+    }
+
+    LaunchedEffect(userSettings.enableHomeEnglishTranslation) {
+        if (!userSettings.enableHomeEnglishTranslation) {
+            translationJobs.values.forEach { it.cancel() }
+            translationJobs.clear()
+        } else {
+            resultList
+                .filter {
+                    it.wavFilePath.isNotBlank() &&
+                        it.modifiedText.isNotBlank() &&
+                        it.englishTranslation.isBlank()
+                }
+                .forEach(::launchBackgroundEnglishTranslation)
         }
     }
 
@@ -394,10 +539,13 @@ fun HomeScreen(
                     resultList
                         .map { it.wavFilePath }
                         .filter { it.isNotBlank() }
-                        .forEach(::clearCorrectionState)
+                        .forEach {
+                            clearCorrectionState(it)
+                            clearTranslationState(it)
+                        }
                     resultList.clear()
                 },
-                isPlaybackActive = currentlyPlaying != null || isTtsSpeaking,
+                isPlaybackActive = currentlyPlaying != null || isAnyTtsSpeaking,
                 isAsrModelLoading = isAsrModelLoading,
                 isEditing = isEditing
             )
@@ -472,6 +620,11 @@ fun HomeScreen(
                     }
                 },
                 onTtsClick = { idx, txt -> handleTtsClick(idx, txt) },
+                onEnglishTtsClick = { transcript ->
+                    MediaController.stop()
+                    speechController.stop()
+                    englishSpeechController.speak(transcript.englishTranslation)
+                },
                 onPlayClick = { path ->
                     if (currentlyPlaying == path) {
                         MediaController.stop()
@@ -487,18 +640,20 @@ fun HomeScreen(
                 onDeleteClick = { idx, path ->
                     if (path.isNotEmpty() && deleteTranscriptFiles(path)) {
                         clearCorrectionState(path)
+                        clearTranslationState(path)
                         resultList.removeAt(idx)
                     }
                 },
                 isRecognizingSpeech = isRecognizingSpeech,
                 currentlyPlaying = currentlyPlaying,
                 isStarted = isStarted,
-                isTtsSpeaking = isTtsSpeaking,
+                isTtsSpeaking = isAnyTtsSpeaking,
                 countdownProgress = countdownProgress,
                 isDataCollectMode = false,
                 inlineEditEnabled = userSettings.inlineEdit,
                 localCandidate = localCandidate,
                 isFetchingCandidates = isFetchingCandidates,
+                showEnglishTranslation = userSettings.enableHomeEnglishTranslation,
                 isLlmCorrectionRunning = { transcript ->
                     transcript.wavFilePath.isNotBlank() && correctionRunning[transcript.wavFilePath] == true
                 }
@@ -519,10 +674,15 @@ fun HomeScreen(
                         newText = newText,
                         lockTranscript = false
                     )
-                    resultList[index] = updatedItem
+                    updateTranscriptAndRefreshEnglish(
+                        index = index,
+                        updatedTranscript = updatedItem,
+                        previousModifiedText = transcript.modifiedText
+                    )
                     coroutineScope.launch(Dispatchers.IO) {
-                        logHomeJsonlUpdate("dialog_confirm", updatedItem)
-                        persistTranscriptJsonl(context, userSettings.userId, updatedItem)
+                        val latestTranscript = resultList.getOrNull(index) ?: return@launch
+                        logHomeJsonlUpdate("dialog_confirm", latestTranscript)
+                        persistTranscriptJsonl(context, userSettings.userId, latestTranscript)
                     }
                     transcriptToEditInDialog = null
                 },

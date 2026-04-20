@@ -18,6 +18,7 @@ data class UserSettings(
     val geminiModel: String = "gemini-2.5-flash",
     val speakerLlmExecutionMode: String = "cloud",
     val enableHomeLlmCorrection: Boolean = false,
+    val enableHomeEnglishTranslation: Boolean = false,
     val enableTranslateLlmCorrection: Boolean = false,
     val preferredAudioInputDeviceId: Int? = null,
     val preferredAudioOutputDeviceId: Int? = null,

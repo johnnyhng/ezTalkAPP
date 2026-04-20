@@ -25,6 +25,7 @@ private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
 private val geminiModelKey = stringPreferencesKey("gemini_model")
 private val speakerLlmExecutionModeKey = stringPreferencesKey("speaker_llm_execution_mode")
 private val enableHomeLlmCorrectionKey = booleanPreferencesKey("enable_home_llm_correction")
+private val enableHomeEnglishTranslationKey = booleanPreferencesKey("enable_home_english_translation")
 private val enableTranslateLlmCorrectionKey = booleanPreferencesKey("enable_translate_llm_correction")
 private val preferredAudioInputDeviceIdKey = intPreferencesKey("preferred_audio_input_device_id")
 private val preferredAudioOutputDeviceIdKey = intPreferencesKey("preferred_audio_output_device_id")
@@ -53,6 +54,8 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
             ?: defaultUserSettings.speakerLlmExecutionMode,
         enableHomeLlmCorrection = preferences[enableHomeLlmCorrectionKey]
             ?: defaultUserSettings.enableHomeLlmCorrection,
+        enableHomeEnglishTranslation = preferences[enableHomeEnglishTranslationKey]
+            ?: defaultUserSettings.enableHomeEnglishTranslation,
         enableTranslateLlmCorrection = preferences[enableTranslateLlmCorrectionKey]
             ?: defaultUserSettings.enableTranslateLlmCorrection,
         preferredAudioInputDeviceId = preferences[preferredAudioInputDeviceIdKey],
@@ -79,6 +82,7 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[geminiModelKey] = settings.geminiModel
     preferences[speakerLlmExecutionModeKey] = settings.speakerLlmExecutionMode
     preferences[enableHomeLlmCorrectionKey] = settings.enableHomeLlmCorrection
+    preferences[enableHomeEnglishTranslationKey] = settings.enableHomeEnglishTranslation
     preferences[enableTranslateLlmCorrectionKey] = settings.enableTranslateLlmCorrection
     if (settings.preferredAudioInputDeviceId != null) {
         preferences[preferredAudioInputDeviceIdKey] = settings.preferredAudioInputDeviceId

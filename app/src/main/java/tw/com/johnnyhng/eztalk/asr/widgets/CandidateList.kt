@@ -46,6 +46,8 @@ fun CandidateList(
     localCandidate: String?,
     isFetchingCandidates: Boolean,
     isLlmCorrectionRunning: (Transcript) -> Boolean = { false },
+    showEnglishTranslation: Boolean = false,
+    onEnglishTtsClick: (Transcript) -> Unit = {},
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -85,6 +87,8 @@ fun CandidateList(
                     isEditing = isInteractionLocked,
                     isDataCollectMode = isDataCollectMode,
                     isLlmCorrectionRunning = isLlmCorrectionRunning(result),
+                    showEnglishTranslation = showEnglishTranslation,
+                    onEnglishTtsClick = { onEnglishTtsClick(result) },
                     onClick = { if (result.mutable) onItemClick(index, result) },
                     onTtsClick = { onTtsClick(index, result.modifiedText) },
                     onPlayClick = { onPlayClick(result.wavFilePath) },
@@ -145,6 +149,8 @@ fun CandidateItemRow(
     isEditing: Boolean,
     isDataCollectMode: Boolean,
     isLlmCorrectionRunning: Boolean,
+    showEnglishTranslation: Boolean,
+    onEnglishTtsClick: () -> Unit,
     onClick: () -> Unit,
     onTtsClick: () -> Unit,
     onPlayClick: () -> Unit,
@@ -215,6 +221,31 @@ fun CandidateItemRow(
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+
+        if (showEnglishTranslation && transcript.englishTranslation.isNotBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${stringResource(R.string.home_english_translation_prefix)}: ${transcript.englishTranslation}",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (transcript.wavFilePath.isNotEmpty()) {
+                    IconButton(
+                        onClick = onEnglishTtsClick,
+                        enabled = !isStarted && currentlyPlaying == null && !isTtsSpeaking && !isEditing
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RecordVoiceOver,
+                            contentDescription = stringResource(id = R.string.talk)
+                        )
+                    }
+                }
+            }
         }
     }
 }

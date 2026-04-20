@@ -329,6 +329,9 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateEnableHomeLlmCorrection(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(enableHomeLlmCorrection = v))
     }
+    fun updateEnableHomeEnglishTranslation(v: Boolean) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(enableHomeEnglishTranslation = v))
+    }
     fun updateEnableTranslateLlmCorrection(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(enableTranslateLlmCorrection = v))
     }

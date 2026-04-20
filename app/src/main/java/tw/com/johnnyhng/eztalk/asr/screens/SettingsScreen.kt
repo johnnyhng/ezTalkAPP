@@ -699,6 +699,27 @@ fun SettingsScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
+                        text = stringResource(R.string.home_english_translation_label),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_english_translation_summary),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = userSettings.enableHomeEnglishTranslation,
+                            onCheckedChange = homeViewModel::updateEnableHomeEnglishTranslation,
+                            enabled = !isDownloading
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
                         text = stringResource(R.string.translate_llm_correction_label),
                         style = MaterialTheme.typography.titleMedium
                     )

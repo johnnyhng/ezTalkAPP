@@ -94,6 +94,7 @@ fun saveJsonl(
     mutable: Boolean = true,
     removable: Boolean = false,
     utteranceVariants: List<String>? = null,
+    englishTranslation: String? = null,
     localCandidates: List<String>? = null,
     remoteCandidates: List<String>? = null
 ): String? {
@@ -114,6 +115,7 @@ fun saveJsonl(
             mutable = mutable,
             removable = removable,
             utteranceVariants = utteranceVariants,
+            englishTranslation = englishTranslation,
             localCandidates = localCandidates,
             remoteCandidates = remoteCandidates
         )
@@ -185,6 +187,7 @@ internal fun buildTranscriptJsonLine(
     mutable: Boolean = true,
     removable: Boolean = false,
     utteranceVariants: List<String>? = null,
+    englishTranslation: String? = null,
     localCandidates: List<String>? = null,
     remoteCandidates: List<String>? = null
 ): String {
@@ -196,6 +199,9 @@ internal fun buildTranscriptJsonLine(
         put("removable", removable)
         utteranceVariants?.let {
             put("utterance_variants", JSONArray(it))
+        }
+        englishTranslation?.takeIf { it.isNotBlank() }?.let {
+            put("english_translation", it)
         }
         localCandidates?.let {
             put("local_candidates", JSONArray(it))
