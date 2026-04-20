@@ -27,13 +27,13 @@ internal suspend fun awaitCandidateFetchBeforeFeedback(fetchJob: Job?) {
 internal fun createTranslateTranscript(
     recognizedText: String,
     wavFilePath: String,
-    localCandidates: List<String> = listOf(recognizedText)
+    utteranceVariants: List<String> = listOf(recognizedText)
 ): Transcript {
     return Transcript(
         recognizedText = recognizedText,
         wavFilePath = wavFilePath,
         modifiedText = recognizedText,
-        localCandidates = localCandidates
+        utteranceVariants = utteranceVariants
     )
 }
 

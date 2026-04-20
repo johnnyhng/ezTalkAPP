@@ -164,18 +164,7 @@ fun HomeScreen(
                     updated?.let {
                         withContext(Dispatchers.IO) {
                             logHomeJsonlUpdate("tts_feedback_success", it)
-                            saveJsonl(
-                                context = context,
-                                userId = userSettings.userId,
-                                filename = File(it.wavFilePath).nameWithoutExtension,
-                                originalText = it.recognizedText,
-                                modifiedText = it.modifiedText,
-                                checked = it.checked,
-                                mutable = it.mutable,
-                                removable = it.removable,
-                                localCandidates = it.localCandidates,
-                                remoteCandidates = it.remoteCandidates
-                            )
+                            persistTranscriptJsonl(context, userSettings.userId, it)
                         }
                     }
                 } else {
@@ -193,18 +182,7 @@ fun HomeScreen(
             resultList[index] = updated
             coroutineScope.launch(Dispatchers.IO) {
                 logHomeJsonlUpdate("tts_without_feedback", updated)
-                saveJsonl(
-                    context = context,
-                    userId = userSettings.userId,
-                    filename = File(updated.wavFilePath).nameWithoutExtension,
-                    originalText = updated.recognizedText,
-                    modifiedText = updated.modifiedText,
-                    checked = updated.checked,
-                    mutable = updated.mutable,
-                    removable = updated.removable,
-                    localCandidates = updated.localCandidates,
-                    remoteCandidates = updated.remoteCandidates
-                )
+                persistTranscriptJsonl(context, userSettings.userId, updated)
             }
         }
     }
@@ -234,18 +212,7 @@ fun HomeScreen(
                     resultList[index] = updatedItem
                     withContext(Dispatchers.IO) {
                         logHomeJsonlUpdate("dialog_tts_feedback_success", updatedItem)
-                        saveJsonl(
-                            context = context,
-                            userId = userSettings.userId,
-                            filename = File(updatedItem.wavFilePath).nameWithoutExtension,
-                            originalText = updatedItem.recognizedText,
-                            modifiedText = updatedItem.modifiedText,
-                            checked = updatedItem.checked,
-                            mutable = updatedItem.mutable,
-                            removable = updatedItem.removable,
-                            localCandidates = updatedItem.localCandidates,
-                            remoteCandidates = updatedItem.remoteCandidates
-                        )
+                        persistTranscriptJsonl(context, userSettings.userId, updatedItem)
                     }
                     transcriptToEditInDialog = null
                 } else {
@@ -263,18 +230,7 @@ fun HomeScreen(
             resultList[index] = updatedItem
             coroutineScope.launch(Dispatchers.IO) {
                 logHomeJsonlUpdate("dialog_tts_without_feedback", updatedItem)
-                saveJsonl(
-                    context = context,
-                    userId = userSettings.userId,
-                    filename = File(updatedItem.wavFilePath).nameWithoutExtension,
-                    originalText = updatedItem.recognizedText,
-                    modifiedText = updatedItem.modifiedText,
-                    checked = updatedItem.checked,
-                    mutable = updatedItem.mutable,
-                    removable = updatedItem.removable,
-                    localCandidates = updatedItem.localCandidates,
-                    remoteCandidates = updatedItem.remoteCandidates
-                )
+                persistTranscriptJsonl(context, userSettings.userId, updatedItem)
             }
             transcriptToEditInDialog = null
         }
@@ -399,17 +355,10 @@ fun HomeScreen(
                                                         }
                                                     }
                                                     logHomeJsonlUpdate("local_rerecognition", updatedItem)
-                                                    saveJsonl(
-                                                        context = context,
-                                                        userId = userSettings.userId,
-                                                        filename = File(res.wavFilePath).nameWithoutExtension,
-                                                        originalText = updatedItem.recognizedText,
-                                                        modifiedText = updatedItem.modifiedText,
-                                                        checked = updatedItem.checked,
-                                                        mutable = updatedItem.mutable,
-                                                        removable = updatedItem.removable,
-                                                        localCandidates = updatedItem.localCandidates,
-                                                        remoteCandidates = updatedItem.remoteCandidates
+                                                    persistTranscriptJsonl(
+                                                        context,
+                                                        userSettings.userId,
+                                                        updatedItem
                                                     )
                                                 }
                                             }
@@ -473,18 +422,7 @@ fun HomeScreen(
                     resultList[index] = updatedItem
                     coroutineScope.launch(Dispatchers.IO) {
                         logHomeJsonlUpdate("dialog_confirm", updatedItem)
-                        saveJsonl(
-                            context = context,
-                            userId = userSettings.userId,
-                            filename = File(updatedItem.wavFilePath).nameWithoutExtension,
-                            originalText = updatedItem.recognizedText,
-                            modifiedText = updatedItem.modifiedText,
-                            checked = updatedItem.checked,
-                            mutable = updatedItem.mutable,
-                            removable = updatedItem.removable,
-                            localCandidates = updatedItem.localCandidates,
-                            remoteCandidates = updatedItem.remoteCandidates
-                        )
+                        persistTranscriptJsonl(context, userSettings.userId, updatedItem)
                     }
                     transcriptToEditInDialog = null
                 },

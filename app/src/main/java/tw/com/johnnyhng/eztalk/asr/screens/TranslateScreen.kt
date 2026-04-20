@@ -416,7 +416,7 @@ fun TranslateScreen(
                                     val newTranscript = createTranslateTranscript(
                                         recognizedText = result.text,
                                         wavFilePath = wavPath ?: "",
-                                        localCandidates = utteranceBundle?.variants ?: listOf(result.text)
+                                        utteranceVariants = utteranceBundle?.variants ?: listOf(result.text)
                                     )
 
                                     withContext(Main) {

@@ -93,6 +93,7 @@ fun saveJsonl(
     checked: Boolean,
     mutable: Boolean = true,
     removable: Boolean = false,
+    utteranceVariants: List<String>? = null,
     localCandidates: List<String>? = null,
     remoteCandidates: List<String>? = null
 ): String? {
@@ -112,6 +113,7 @@ fun saveJsonl(
             checked = checked,
             mutable = mutable,
             removable = removable,
+            utteranceVariants = utteranceVariants,
             localCandidates = localCandidates,
             remoteCandidates = remoteCandidates
         )
@@ -182,6 +184,7 @@ internal fun buildTranscriptJsonLine(
     checked: Boolean,
     mutable: Boolean = true,
     removable: Boolean = false,
+    utteranceVariants: List<String>? = null,
     localCandidates: List<String>? = null,
     remoteCandidates: List<String>? = null
 ): String {
@@ -191,6 +194,9 @@ internal fun buildTranscriptJsonLine(
         put("checked", checked)
         put("mutable", mutable)
         put("removable", removable)
+        utteranceVariants?.let {
+            put("utterance_variants", JSONArray(it))
+        }
         localCandidates?.let {
             put("local_candidates", JSONArray(it))
         }

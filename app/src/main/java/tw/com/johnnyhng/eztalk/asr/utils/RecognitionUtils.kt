@@ -23,6 +23,7 @@ internal data class RemoteCandidateMetadata(
     val checked: Boolean,
     val mutable: Boolean,
     val removable: Boolean,
+    val utteranceVariants: List<String>,
     val localCandidates: List<String>,
     val remoteCandidates: List<String>
 )
@@ -52,6 +53,7 @@ internal fun buildRemoteCandidateMetadata(
         latestJsonlData.optBoolean("canCheck", true)
     ) ?: true
     val removable = latestJsonlData?.optBoolean("removable", false) ?: false
+    val utteranceVariants = latestJsonlData?.optStringList("utterance_variants").orEmpty()
     val localCandidates = latestJsonlData?.optStringList("local_candidates").orEmpty()
 
     return RemoteCandidateMetadata(
@@ -60,6 +62,7 @@ internal fun buildRemoteCandidateMetadata(
         checked = checked,
         mutable = mutable,
         removable = removable,
+        utteranceVariants = utteranceVariants,
         localCandidates = localCandidates,
         remoteCandidates = remoteCandidates
     )
@@ -138,6 +141,7 @@ internal fun persistTranscriptJsonl(
         checked = transcript.checked,
         mutable = transcript.mutable,
         removable = transcript.removable,
+        utteranceVariants = transcript.utteranceVariants,
         localCandidates = transcript.localCandidates,
         remoteCandidates = transcript.remoteCandidates
     )
@@ -154,13 +158,19 @@ internal fun syncTranscriptCandidatesFromJsonl(
             .absolutePath
     ) ?: return transcript
 
+    val utteranceVariantsFromJson = json.optStringList("utterance_variants")
     val localCandidatesFromJson = json.optStringList("local_candidates")
     val remoteCandidatesFromJson = json.optStringList("remote_candidates")
-    if (localCandidatesFromJson.isEmpty() && remoteCandidatesFromJson.isEmpty()) {
+    if (utteranceVariantsFromJson.isEmpty() && localCandidatesFromJson.isEmpty() && remoteCandidatesFromJson.isEmpty()) {
         return transcript
     }
 
     return transcript.copy(
+        utteranceVariants = if (utteranceVariantsFromJson.isNotEmpty()) {
+            utteranceVariantsFromJson
+        } else {
+            transcript.utteranceVariants
+        },
         localCandidates = if (localCandidatesFromJson.isNotEmpty()) {
             localCandidatesFromJson
         } else {
@@ -321,6 +331,7 @@ suspend fun getRemoteCandidates(
                     checked = metadata.checked,
                     mutable = metadata.mutable,
                     removable = metadata.removable,
+                    utteranceVariants = metadata.utteranceVariants,
                     localCandidates = metadata.localCandidates,
                     remoteCandidates = metadata.remoteCandidates
                 )

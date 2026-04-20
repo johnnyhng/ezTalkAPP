@@ -277,16 +277,24 @@ class RecognitionManager(private val context: Context) {
                                 TAG,
                                 "DataCollect jsonl update: reason=final_utterance, file=${File(wavPath).name}, modified=$modifiedText, checked=$isDataCollectMode, mutable=${!isDataCollectMode}"
                             )
-                            saveJsonl(context, userId, filename, originalText, modifiedText, isDataCollectMode, !isDataCollectMode)
+                            saveJsonl(
+                                context = context,
+                                userId = userId,
+                                filename = filename,
+                                originalText = originalText,
+                                modifiedText = modifiedText,
+                                checked = isDataCollectMode,
+                                mutable = !isDataCollectMode,
+                                utteranceVariants = utteranceBundle?.variants.orEmpty()
+                            )
                             
                             onFinalResult(Transcript(
                                 recognizedText = originalText,
                                 wavFilePath = wavPath,
                                 modifiedText = modifiedText,
                                 checked = isDataCollectMode,
-                                mutable = !isDataCollectMode
-                                ,
-                                localCandidates = utteranceBundle?.variants.orEmpty()
+                                mutable = !isDataCollectMode,
+                                utteranceVariants = utteranceBundle?.variants.orEmpty()
                             ))
                         }
                     } finally {
