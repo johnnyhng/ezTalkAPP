@@ -25,6 +25,7 @@ internal class TranscriptCorrectionPromptBuilder {
                 - Prefer the longest variant that is semantically complete.
                 - If all variants are noisy or fragmented, infer the most plausible sentence by reconciling phonetic similarity.
                 - Ignore obvious noise fragments and filler words.
+                - If the corrected text contains Simplified Chinese, convert it to Traditional Chinese before returning it.
                 - If confidence is below 0.85, return an empty corrected_text.
                 - Always return strict JSON only.
                 - confidence must be a number between 0.0 and 1.0.
