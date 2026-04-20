@@ -33,7 +33,8 @@ internal fun createTranslateTranscript(
         recognizedText = recognizedText,
         wavFilePath = wavFilePath,
         modifiedText = recognizedText,
-        utteranceVariants = utteranceVariants
+        utteranceVariants = utteranceVariants,
+        localCandidates = listOf(recognizedText)
     )
 }
 
