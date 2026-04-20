@@ -16,6 +16,7 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
 import java.io.File
@@ -52,6 +53,7 @@ class RecognitionManager(private val context: Context) {
     // Internal channels
     private val flushChannel = Channel<Unit>(Channel.CONFLATED)
     private var recognitionJob: Job? = null
+    private val utteranceVariantBuffer = AsrUtteranceVariantBuffer()
 
     // Callbacks for UI updates
     var onPartialResult: (String) -> Unit = {}
@@ -207,6 +209,7 @@ class RecognitionManager(private val context: Context) {
                 offset += windowSize
                 if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
                     isSpeechStarted = true
+                    utteranceVariantBuffer.reset()
                     _isRecognizingSpeech.value = true
                     startTime = System.currentTimeMillis()
                     if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
@@ -222,6 +225,7 @@ class RecognitionManager(private val context: Context) {
                         stream.acceptWaveform(buffer.subList(0, offset).toFloatArray(), sampleRateInHz)
                         SimulateStreamingAsr.recognizer.decode(stream)
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                        utteranceVariantBuffer.add(result.text)
                         if (result.text.isNotBlank()) {
                             onPartialResult(result.text)
                         }
@@ -258,6 +262,8 @@ class RecognitionManager(private val context: Context) {
                         stream.acceptWaveform(concatenated, sampleRateInHz)
                         SimulateStreamingAsr.recognizer.decode(stream)
                         val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                        utteranceVariantBuffer.add(result.text)
+                        val utteranceBundle = utteranceVariantBuffer.build(version = 0)
                         
                         val originalText = result.text
                         val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
@@ -279,6 +285,8 @@ class RecognitionManager(private val context: Context) {
                                 modifiedText = modifiedText,
                                 checked = isDataCollectMode,
                                 mutable = !isDataCollectMode
+                                ,
+                                localCandidates = utteranceBundle?.variants.orEmpty()
                             ))
                         }
                     } finally {
@@ -292,6 +300,7 @@ class RecognitionManager(private val context: Context) {
                     offset = 0
                     startOffset = 0
                     lastSpeechDetectedOffset = 0
+                    utteranceVariantBuffer.reset()
                     _isRecognizingSpeech.value = false
                     _countdownProgress.value = 0f
                 }
