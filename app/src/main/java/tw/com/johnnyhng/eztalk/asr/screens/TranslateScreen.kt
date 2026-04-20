@@ -52,6 +52,7 @@ import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
+import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
 import tw.com.johnnyhng.eztalk.asr.utils.feedbackToBackend
 import tw.com.johnnyhng.eztalk.asr.utils.loadTranslateCandidates
@@ -139,6 +140,7 @@ fun TranslateScreen(
 
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
+    val utteranceVariantBuffer = remember { AsrUtteranceVariantBuffer() }
 
     // Initialize recognizer in the background
     LaunchedEffect(selectedModel?.name, userSettings.userId, userSettings.mobileModelSha256) {
@@ -306,6 +308,7 @@ fun TranslateScreen(
 
                     // Reset UI for new recording
                     withContext(Main) {
+                        utteranceVariantBuffer.reset()
                         uiState = uiState.copy(
                             textInput = "",
                             transcript = null,
@@ -346,6 +349,7 @@ fun TranslateScreen(
                                             stream.acceptWaveform(audioForRealtime, sampleRateInHz)
                                             SimulateStreamingAsr.recognizer.decode(stream)
                                             val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                            utteranceVariantBuffer.add(result.text)
                                             if (isStarted) { // check user hasn't stopped
                                                 withContext(Main) {
                                                     uiState = uiState.copy(textInput = result.text)
@@ -393,8 +397,10 @@ fun TranslateScreen(
                                 stream.acceptWaveform(audioToRecognize, sampleRateInHz)
                                 SimulateStreamingAsr.recognizer.decode(stream)
                                 val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                utteranceVariantBuffer.add(result.text)
 
                                 if (result.text.isNotBlank()) {
+                                    val utteranceBundle = utteranceVariantBuffer.build(version = 0)
                                     val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                                     val filename = "${timestamp}.app"
 
@@ -409,7 +415,8 @@ fun TranslateScreen(
 
                                     val newTranscript = createTranslateTranscript(
                                         recognizedText = result.text,
-                                        wavFilePath = wavPath ?: ""
+                                        wavFilePath = wavPath ?: "",
+                                        localCandidates = utteranceBundle?.variants ?: listOf(result.text)
                                     )
 
                                     withContext(Main) {
@@ -428,6 +435,7 @@ fun TranslateScreen(
                                 }
                             } finally {
                                 stream.release()
+                                utteranceVariantBuffer.reset()
                             }
                         }
                         withContext(Main) {
