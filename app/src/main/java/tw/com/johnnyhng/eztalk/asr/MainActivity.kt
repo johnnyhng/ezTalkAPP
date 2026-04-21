@@ -272,87 +272,93 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorScheme.primaryContainer,
-                    titleContentColor = colorScheme.primary,
-                ),
-                navigationIcon = {
-                    androidx.compose.foundation.layout.Row {
-                        IconButton(
-                            onClick = {
-                                if (googleSession == null) {
-                                    googleSignInLauncher.launch(googleSignInClient.signInIntent)
-                                } else {
-                                    signInManager.signOut(context) { result ->
-                                        result
-                                            .onSuccess {
-                                                googleSession = null
-                                                homeViewModel.updateUserId("user@example.com")
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(R.string.sign_out),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                            .onFailure { error ->
-                                                Log.w(TAG, "Google sign out failed", error)
-                                                Toast.makeText(context, "Google sign out failed", Toast.LENGTH_SHORT).show()
-                                            }
+            if (currentRoute != NavRoutes.Experiment.route) {
+                CenterAlignedTopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = colorScheme.primaryContainer,
+                        titleContentColor = colorScheme.primary,
+                    ),
+                    navigationIcon = {
+                        androidx.compose.foundation.layout.Row {
+                            IconButton(
+                                onClick = {
+                                    if (googleSession == null) {
+                                        googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                    } else {
+                                        signInManager.signOut(context) { result ->
+                                            result
+                                                .onSuccess {
+                                                    googleSession = null
+                                                    homeViewModel.updateUserId("user@example.com")
+                                                    Toast.makeText(
+                                                        context,
+                                                        context.getString(R.string.sign_out),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                                .onFailure { error ->
+                                                    Log.w(TAG, "Google sign out failed", error)
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Google sign out failed",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                        }
                                     }
                                 }
-                            }
-                        ) {
-                            if (googleSession != null && profilePhoto.value != null) {
-                                Image(
-                                    bitmap = profilePhoto.value!!,
-                                    contentDescription = stringResource(R.string.sign_out),
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (googleSession == null) {
-                                        Icons.Outlined.AccountCircle
-                                    } else {
-                                        Icons.Filled.AccountCircle
-                                    },
-                                    contentDescription = stringResource(
-                                        if (googleSession == null) R.string.sign_in_with_google else R.string.sign_out
+                            ) {
+                                if (googleSession != null && profilePhoto.value != null) {
+                                    Image(
+                                        bitmap = profilePhoto.value!!,
+                                        contentDescription = stringResource(R.string.sign_out),
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
                                     )
+                                } else {
+                                    Icon(
+                                        imageVector = if (googleSession == null) {
+                                            Icons.Outlined.AccountCircle
+                                        } else {
+                                            Icons.Filled.AccountCircle
+                                        },
+                                        contentDescription = stringResource(
+                                            if (googleSession == null) R.string.sign_in_with_google else R.string.sign_out
+                                        )
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Help.route) }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                                    contentDescription = stringResource(R.string.help)
                                 )
                             }
                         }
-                        IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Help.route) }) {
+                    },
+                    title = {
+                        Text(
+                            stringResource(R.string.app_top_title),
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    actions = {
+                        IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.FileManager.route) }) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                                contentDescription = stringResource(R.string.help)
+                                imageVector = Icons.Filled.Folder,
+                                contentDescription = stringResource(R.string.file_manager)
                             )
                         }
-                    }
-                },
-                title = {
-                    Text(
-                        stringResource(R.string.app_top_title),
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.FileManager.route) }) {
-                        Icon(
-                            imageVector = Icons.Filled.Folder,
-                            contentDescription = stringResource(R.string.file_manager)
-                        )
-                    }
-                    IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Settings.route) }) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = stringResource(R.string.settings)
-                        )
-                    }
-                },
-            )
+                        IconButton(onClick = { navController.navigateSingleTopTo(NavRoutes.Settings.route) }) {
+                            Icon(
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = stringResource(R.string.settings)
+                            )
+                        }
+                    },
+                )
+            }
         },
         content = { padding ->
             Column(Modifier.padding(padding)) {
@@ -365,7 +371,9 @@ fun MainScreen(
             }
         },
         bottomBar = {
-            BottomNavigationBar(navController = navController)
+            if (currentRoute != NavRoutes.Experiment.route) {
+                BottomNavigationBar(navController = navController)
+            }
         }
     )
 }
