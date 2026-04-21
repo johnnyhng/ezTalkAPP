@@ -22,8 +22,9 @@ class SpeakerPlaybackControllerTest {
         val driver = FakeSpeechOutputDriver()
         val controller = SpeakerPlaybackController(
             context = context,
+            preferredOutputDeviceId = null,
             onStateChanged = {},
-            speechControllerFactory = { _, onReadyChanged ->
+            speechControllerFactory = { _, _, onReadyChanged ->
                 driver.onReadyChanged = onReadyChanged
                 driver
             }
@@ -58,8 +59,9 @@ class SpeakerPlaybackControllerTest {
         val driver = FakeSpeechOutputDriver()
         val controller = SpeakerPlaybackController(
             context = context,
+            preferredOutputDeviceId = null,
             onStateChanged = {},
-            speechControllerFactory = { _, onReadyChanged ->
+            speechControllerFactory = { _, _, onReadyChanged ->
                 driver.onReadyChanged = onReadyChanged
                 driver
             }
@@ -101,8 +103,9 @@ class SpeakerPlaybackControllerTest {
     fun playDocumentReturnsNotReadyWhenSpeechDriverNotReady() {
         val controller = SpeakerPlaybackController(
             context = context,
+            preferredOutputDeviceId = null,
             onStateChanged = {},
-            speechControllerFactory = { _, _ -> FakeSpeechOutputDriver(readyOnInitialize = false) }
+            speechControllerFactory = { _, _, _ -> FakeSpeechOutputDriver(readyOnInitialize = false) }
         )
 
         controller.initialize()
