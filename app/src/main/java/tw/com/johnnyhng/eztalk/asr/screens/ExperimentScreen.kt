@@ -126,34 +126,18 @@ fun ExperimentScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Initial Phrases
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    stringResource(R.string.experiment_initial_phrases),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    traditionalChineseInitialPhrases.forEach { phrase ->
-                        OutlinedButton(onClick = { experimentViewModel.inputInitialPhrase(phrase) }) {
-                            Text(phrase, style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
-                }
-            }
-
-            // Word Candidates
+            // Merged Section: Word Candidates or Initial Phrases
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        stringResource(R.string.experiment_word_candidates),
+                        text = if (uiState.inputText.isBlank()) {
+                            stringResource(R.string.experiment_initial_phrases)
+                        } else {
+                            stringResource(R.string.experiment_word_candidates)
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -169,16 +153,26 @@ fun ExperimentScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    uiState.candidates.filter { it.length <= 3 }.forEach { candidate ->
-                        ElevatedButton(
-                            onClick = { experimentViewModel.applyCandidate(candidate) },
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) {
-                            Text(candidate, style = MaterialTheme.typography.titleMedium)
+                    if (uiState.inputText.isBlank()) {
+                        traditionalChineseInitialPhrases.forEach { phrase ->
+                            ElevatedButton(onClick = { experimentViewModel.inputInitialPhrase(phrase) }) {
+                                Text(phrase, style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    } else {
+                        uiState.candidates.filter { it.length <= 3 }.forEach { candidate ->
+                            ElevatedButton(
+                                onClick = { experimentViewModel.applyCandidate(candidate) },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Text(candidate, style = MaterialTheme.typography.titleMedium)
+                            }
                         }
                     }
                 }
             }
+
+            // Sentence Candidates
 
             // Sentence Candidates
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
