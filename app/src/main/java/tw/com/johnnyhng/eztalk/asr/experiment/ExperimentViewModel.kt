@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import kotlinx.coroutines.withTimeoutOrNull
+
 @OptIn(FlowPreview::class)
 internal class ExperimentViewModel(
     private val suggestionProvider: ZhuyinSuggestionProvider = ZhuyinSuggestionModule()
@@ -82,11 +84,13 @@ internal class ExperimentViewModel(
         viewModelScope.launch {
             val context = _uiState.value.copy(inputText = text).toZhuyinPromptContext()
             
-            val wordDeferred = async { suggestionProvider.suggestWords(context) }
-            val sentenceDeferred = async { suggestionProvider.suggestSentences(context) }
+            val wordResult = withTimeoutOrNull(10000L) {
+                suggestionProvider.suggestWords(context)
+            } ?: Result.failure(Exception("Word suggestion request timed out after 10s"))
 
-            val wordResult = wordDeferred.await()
-            val sentenceResult = sentenceDeferred.await()
+            val sentenceResult = withTimeoutOrNull(10000L) {
+                suggestionProvider.suggestSentences(context)
+            } ?: Result.failure(Exception("Sentence suggestion request timed out after 10s"))
 
             _uiState.update { state ->
                 // Guard against stale text
@@ -99,8 +103,9 @@ internal class ExperimentViewModel(
                     hasRequestedSuggestions = true,
                     wordCandidates = wordResult.getOrDefault(emptyList()),
                     sentenceCandidates = sentenceResult.getOrDefault(emptyList()),
-                    errorMessage = wordResult.exceptionOrNull()?.message 
-                        ?: sentenceResult.exceptionOrNull()?.message
+                    errorMessage = if (wordResult.isFailure) wordResult.exceptionOrNull()?.message
+                        else if (sentenceResult.isFailure) sentenceResult.exceptionOrNull()?.message
+                        else null
                 )
             }
         }
