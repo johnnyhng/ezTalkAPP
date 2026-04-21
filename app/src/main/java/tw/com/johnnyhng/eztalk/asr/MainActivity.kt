@@ -2,6 +2,7 @@ package tw.com.johnnyhng.eztalk.asr
 
 import android.Manifest
 import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.os.Bundle
@@ -76,6 +77,7 @@ import tw.com.johnnyhng.eztalk.asr.utils.TLSExpireResolver
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 import tw.com.johnnyhng.eztalk.asr.screens.DataCollectScreen
+import tw.com.johnnyhng.eztalk.asr.screens.ExperimentScreen
 import tw.com.johnnyhng.eztalk.asr.screens.FileManagerScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HelpScreen
 import tw.com.johnnyhng.eztalk.asr.screens.HomeScreen
@@ -169,6 +171,17 @@ fun MainScreen(
     val signInManager = remember { GoogleSignInManager() }
     val googleSignInClient = remember { signInManager.getSignInClient(context) }
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route ?: initialEntryRoute
+
+    LaunchedEffect(context, currentRoute) {
+        val activity = context as? Activity ?: return@LaunchedEffect
+        activity.requestedOrientation = if (currentRoute == NavRoutes.Experiment.route) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -398,6 +411,10 @@ fun NavigationHost(
 
         composable(NavRoutes.DataCollect.route) {
             DataCollectScreen(homeViewModel = homeViewModel)
+        }
+
+        composable(NavRoutes.Experiment.route) {
+            ExperimentScreen()
         }
 
         composable(NavRoutes.FileManager.route) {

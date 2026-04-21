@@ -189,7 +189,8 @@ fun SettingsScreen(
         NavRoutes.Home.route to context.getString(R.string.home),
         NavRoutes.Translate.route to context.getString(R.string.translate),
         NavRoutes.Speaker.route to context.getString(R.string.speaker),
-        NavRoutes.DataCollect.route to context.getString(R.string.data_collect)
+        NavRoutes.DataCollect.route to context.getString(R.string.data_collect),
+        NavRoutes.Experiment.route to context.getString(R.string.experiment)
     )
     val selectedEntryScreenLabel = entryScreenOptions
         .firstOrNull { it.first == userSettings.entryScreenRoute }

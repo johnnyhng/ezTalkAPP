@@ -94,6 +94,7 @@
     <string name="home">首頁</string>
     <string name="translate">翻譯</string>
     <string name="data_collect">資料採集</string>
+    <string name="experiment">Experiment</string>
     <string name="file_manager">檔案管理</string>
     <string name="speaker">演講者</string>
     <string name="settings">設定</string>
