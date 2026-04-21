@@ -29,6 +29,7 @@ internal class ExperimentViewModel(
                 .collect { text ->
                     if (text.isNotBlank()) {
                         requestSuggestions(ExperimentSuggestionMode.WORD)
+                        requestSuggestions(ExperimentSuggestionMode.SENTENCE)
                     }
                 }
         }

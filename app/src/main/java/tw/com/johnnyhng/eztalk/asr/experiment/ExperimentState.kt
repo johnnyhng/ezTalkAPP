@@ -9,7 +9,8 @@ internal data class ExperimentUiState(
     val inputText: String = "",
     val selectedEmotion: ZhuyinEmotion = traditionalChineseEmotions.first(),
     val suggestionMode: ExperimentSuggestionMode = ExperimentSuggestionMode.WORD,
-    val candidates: List<String> = emptyList(),
+    val wordCandidates: List<String> = emptyList(),
+    val sentenceCandidates: List<String> = emptyList(),
     val conversationHistory: List<String> = emptyList(),
     val isLoading: Boolean = false,
     val isThinking: Boolean = false,
@@ -25,7 +26,8 @@ internal fun reduceExperimentCharacterInput(
     val textValue = if (value == "␣") " " else value
     return state.copy(
         inputText = state.inputText + textValue,
-        candidates = emptyList(),
+        wordCandidates = emptyList(),
+        sentenceCandidates = emptyList(),
         hasRequestedSuggestions = false,
         errorMessage = null
     )
@@ -37,7 +39,8 @@ internal fun reduceExperimentInitialPhraseInput(
 ): ExperimentUiState {
     return state.copy(
         inputText = state.inputText + phrase,
-        candidates = emptyList(),
+        wordCandidates = emptyList(),
+        sentenceCandidates = emptyList(),
         hasRequestedSuggestions = false,
         errorMessage = null
     )
@@ -46,7 +49,8 @@ internal fun reduceExperimentInitialPhraseInput(
 internal fun reduceExperimentBackspace(state: ExperimentUiState): ExperimentUiState {
     return state.copy(
         inputText = state.inputText.dropLast(1),
-        candidates = emptyList(),
+        wordCandidates = emptyList(),
+        sentenceCandidates = emptyList(),
         hasRequestedSuggestions = false,
         errorMessage = null
     )
@@ -60,7 +64,8 @@ internal fun reduceExperimentClear(state: ExperimentUiState): ExperimentUiState 
     }
     return state.copy(
         inputText = "",
-        candidates = emptyList(),
+        wordCandidates = emptyList(),
+        sentenceCandidates = emptyList(),
         conversationHistory = nextHistory,
         hasRequestedSuggestions = false,
         errorMessage = null
@@ -84,7 +89,8 @@ internal fun reduceExperimentSuggestionLoading(
         isThinking = mode == ExperimentSuggestionMode.WORD,
         isSentenceThinking = mode == ExperimentSuggestionMode.SENTENCE,
         hasRequestedSuggestions = true,
-        candidates = emptyList(),
+        wordCandidates = if (mode == ExperimentSuggestionMode.WORD) emptyList() else state.wordCandidates,
+        sentenceCandidates = if (mode == ExperimentSuggestionMode.SENTENCE) emptyList() else state.sentenceCandidates,
         errorMessage = null
     )
 }
@@ -98,7 +104,8 @@ internal fun reduceExperimentSuggestionSuccess(
         isThinking = false,
         isSentenceThinking = false,
         hasRequestedSuggestions = true,
-        candidates = candidates,
+        wordCandidates = if (state.suggestionMode == ExperimentSuggestionMode.WORD) candidates else state.wordCandidates,
+        sentenceCandidates = if (state.suggestionMode == ExperimentSuggestionMode.SENTENCE) candidates else state.sentenceCandidates,
         errorMessage = null
     )
 }
@@ -111,7 +118,8 @@ internal fun reduceExperimentSuggestionFailure(
         isLoading = false,
         isThinking = false,
         isSentenceThinking = false,
-        candidates = emptyList(),
+        wordCandidates = if (state.suggestionMode == ExperimentSuggestionMode.WORD) emptyList() else state.wordCandidates,
+        sentenceCandidates = if (state.suggestionMode == ExperimentSuggestionMode.SENTENCE) emptyList() else state.sentenceCandidates,
         hasRequestedSuggestions = true,
         errorMessage = message
     )
@@ -121,13 +129,15 @@ internal fun reduceExperimentCandidateApply(
     state: ExperimentUiState,
     candidate: String
 ): ExperimentUiState {
-    val nextText = when (state.suggestionMode) {
-        ExperimentSuggestionMode.WORD -> appendZhuyinCandidate(state.inputText, candidate)
-        ExperimentSuggestionMode.SENTENCE -> candidate
+    val nextText = if (state.wordCandidates.contains(candidate)) {
+        appendZhuyinCandidate(state.inputText, candidate)
+    } else {
+        candidate
     }
     return state.copy(
         inputText = nextText,
-        candidates = emptyList(),
+        wordCandidates = emptyList(),
+        sentenceCandidates = emptyList(),
         hasRequestedSuggestions = false,
         errorMessage = null
     )

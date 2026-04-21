@@ -15,7 +15,8 @@ class ExperimentStateTest {
         )
 
         assertEquals("ㄋ ", state.inputText)
-        assertTrue(state.candidates.isEmpty())
+        assertTrue(state.wordCandidates.isEmpty())
+        assertTrue(state.sentenceCandidates.isEmpty())
         assertNull(state.errorMessage)
     }
 
@@ -29,11 +30,16 @@ class ExperimentStateTest {
     @Test
     fun backspaceDropsLastCharacterAndClearsCandidates() {
         val state = reduceExperimentBackspace(
-            ExperimentUiState(inputText = "我想ㄒ", candidates = listOf("休息"))
+            ExperimentUiState(
+                inputText = "我想ㄒ",
+                wordCandidates = listOf("休息"),
+                sentenceCandidates = listOf("我想休息。")
+            )
         )
 
         assertEquals("我想", state.inputText)
-        assertTrue(state.candidates.isEmpty())
+        assertTrue(state.wordCandidates.isEmpty())
+        assertTrue(state.sentenceCandidates.isEmpty())
     }
 
     @Test
@@ -66,39 +72,48 @@ class ExperimentStateTest {
     @Test
     fun suggestionLoadingSetsModeAndLoadingState() {
         val state = reduceExperimentSuggestionLoading(
-            ExperimentUiState(candidates = listOf("你"), errorMessage = "old"),
+            ExperimentUiState(wordCandidates = listOf("你"), errorMessage = "old"),
             ExperimentSuggestionMode.SENTENCE
         )
 
         assertEquals(ExperimentSuggestionMode.SENTENCE, state.suggestionMode)
         assertTrue(state.isLoading)
+        assertTrue(state.isSentenceThinking)
+        assertFalse(state.isThinking)
         assertTrue(state.hasRequestedSuggestions)
-        assertTrue(state.candidates.isEmpty())
+        assertTrue(state.sentenceCandidates.isEmpty())
+        assertEquals(listOf("你"), state.wordCandidates) // WORD candidates preserved
         assertNull(state.errorMessage)
     }
 
     @Test
     fun suggestionSuccessStoresCandidatesAndStopsLoading() {
         val state = reduceExperimentSuggestionSuccess(
-            ExperimentUiState(isLoading = true),
+            ExperimentUiState(isLoading = true, suggestionMode = ExperimentSuggestionMode.WORD),
             listOf("你", "您")
         )
 
         assertFalse(state.isLoading)
+        assertFalse(state.isThinking)
         assertTrue(state.hasRequestedSuggestions)
-        assertEquals(listOf("你", "您"), state.candidates)
+        assertEquals(listOf("你", "您"), state.wordCandidates)
     }
 
     @Test
-    fun suggestionFailureStoresMessageAndClearsCandidates() {
+    fun suggestionFailureStoresMessageAndClearsModeCandidates() {
         val state = reduceExperimentSuggestionFailure(
-            ExperimentUiState(isLoading = true, candidates = listOf("你")),
+            ExperimentUiState(
+                isLoading = true,
+                suggestionMode = ExperimentSuggestionMode.WORD,
+                wordCandidates = listOf("你")
+            ),
             "Gemini failed"
         )
 
         assertFalse(state.isLoading)
+        assertFalse(state.isThinking)
         assertTrue(state.hasRequestedSuggestions)
-        assertTrue(state.candidates.isEmpty())
+        assertTrue(state.wordCandidates.isEmpty())
         assertEquals("Gemini failed", state.errorMessage)
     }
 
@@ -108,13 +123,13 @@ class ExperimentStateTest {
             ExperimentUiState(
                 inputText = "我想ㄒ",
                 suggestionMode = ExperimentSuggestionMode.WORD,
-                candidates = listOf("休息")
+                wordCandidates = listOf("休息")
             ),
             "休息"
         )
 
         assertEquals("我想休息", state.inputText)
-        assertTrue(state.candidates.isEmpty())
+        assertTrue(state.wordCandidates.isEmpty())
         assertFalse(state.hasRequestedSuggestions)
     }
 
@@ -123,12 +138,14 @@ class ExperimentStateTest {
         val state = reduceExperimentCandidateApply(
             ExperimentUiState(
                 inputText = "ㄨㄛˇy",
-                suggestionMode = ExperimentSuggestionMode.SENTENCE
+                suggestionMode = ExperimentSuggestionMode.SENTENCE,
+                sentenceCandidates = listOf("我要喝水。")
             ),
             "我要喝水。"
         )
 
         assertEquals("我要喝水。", state.inputText)
+        assertTrue(state.sentenceCandidates.isEmpty())
     }
 
     @Test

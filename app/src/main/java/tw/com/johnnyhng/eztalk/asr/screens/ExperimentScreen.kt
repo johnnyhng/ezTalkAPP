@@ -160,7 +160,7 @@ fun ExperimentScreen(
                             }
                         }
                     } else {
-                        uiState.candidates.filter { it.length <= 3 }.forEach { candidate ->
+                        uiState.wordCandidates.forEach { candidate ->
                             ElevatedButton(
                                 onClick = { experimentViewModel.applyCandidate(candidate) },
                                 modifier = Modifier.heightIn(min = 48.dp)
@@ -171,8 +171,6 @@ fun ExperimentScreen(
                     }
                 }
             }
-
-            // Sentence Candidates
 
             // Sentence Candidates
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -203,7 +201,7 @@ fun ExperimentScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    uiState.candidates.filter { it.length > 3 }.forEach { candidate ->
+                    uiState.sentenceCandidates.forEach { candidate ->
                         Surface(
                             onClick = { experimentViewModel.applyCandidate(candidate) },
                             modifier = Modifier.fillMaxWidth(),
