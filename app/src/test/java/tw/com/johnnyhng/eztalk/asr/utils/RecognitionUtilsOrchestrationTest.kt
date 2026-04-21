@@ -14,6 +14,28 @@ class RecognitionUtilsOrchestrationTest {
     private val unusedContext = ContextWrapper(null)
 
     @Test
+    fun mergeRemoteCandidatesIntoUtteranceVariantsAppendsDistinctRemoteCandidatesWhenEnabled() {
+        val result = mergeRemoteCandidatesIntoUtteranceVariants(
+            utteranceVariants = listOf("local-1", "shared"),
+            remoteCandidates = listOf("remote-1", "shared", " "),
+            enabled = true
+        )
+
+        assertEquals(listOf("local-1", "shared", "remote-1"), result)
+    }
+
+    @Test
+    fun mergeRemoteCandidatesIntoUtteranceVariantsKeepsLocalVariantsWhenDisabled() {
+        val result = mergeRemoteCandidatesIntoUtteranceVariants(
+            utteranceVariants = listOf("local-1"),
+            remoteCandidates = listOf("remote-1"),
+            enabled = false
+        )
+
+        assertEquals(listOf("local-1"), result)
+    }
+
+    @Test
     fun resolveRemoteCandidatesReturnsCachedCandidatesWithoutCallingNetworkOrSave() {
         var postCalls = 0
         var savedMetadata: RemoteCandidateMetadata? = null
@@ -214,6 +236,36 @@ class RecognitionUtilsOrchestrationTest {
         assertEquals("local-rerun", result.localCandidate)
         assertEquals(listOf("remote-1", "remote-2"), result.remoteCandidates)
         assertEquals(listOf("remote-1", "remote-2"), result.transcript.remoteCandidates)
+    }
+
+    @Test
+    fun loadTranslateCandidatesMergesRemoteCandidatesIntoUtteranceVariantsWhenEnabled() = runBlocking {
+        val transcript = Transcript(
+            recognizedText = "orig",
+            modifiedText = "orig",
+            wavFilePath = "/tmp/sample.wav",
+            utteranceVariants = listOf("local-variant")
+        )
+
+        val result = loadTranslateCandidates(
+            context = unusedContext,
+            userId = "tester@example.com",
+            transcript = transcript,
+            recognitionUrl = "https://example.com/process_audio",
+            allowInsecureTls = true,
+            audioReader = { floatArrayOf(1f, 2f, 3f) },
+            recognizerBlock = { "local-rerun" },
+            includeRemoteCandidatesInUtteranceVariants = true,
+            localTranscriptBlock = {
+                transcript.copy(localCandidates = listOf("local-rerun"))
+            },
+            readJsonlBlock = { null },
+            remoteCandidatesBlock = { _, _, _, _, _, _ -> listOf("remote-1", "local-variant") }
+        )
+
+        assertEquals(listOf("remote-1", "local-variant"), result.remoteCandidates)
+        assertEquals(listOf("remote-1", "local-variant"), result.transcript.remoteCandidates)
+        assertEquals(listOf("local-variant", "remote-1"), result.transcript.utteranceVariants)
     }
 
     @Test
