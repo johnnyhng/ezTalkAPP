@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -104,6 +105,15 @@ fun ExperimentScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = experimentViewModel::requestSentenceSuggestions,
+                        enabled = !uiState.isLoading && uiState.inputText.isNotBlank()
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.experiment_sentence_candidates)
+                        )
+                    }
                     IconButton(onClick = experimentViewModel::backspace) {
                         Icon(
                             Icons.AutoMirrored.Filled.Backspace,
@@ -189,13 +199,6 @@ fun ExperimentScreen(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp
                         )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Button(
-                        onClick = experimentViewModel::requestSentenceSuggestions,
-                        enabled = !uiState.isLoading && uiState.inputText.isNotBlank()
-                    ) {
-                        Text(stringResource(R.string.experiment_sentence_candidates))
                     }
                 }
                 Column(
