@@ -99,224 +99,52 @@ Chinese characters, and partial roman letters as input.
 
 ## Proposed Android Architecture
 
-### Package Layout
+### Reactive Suggestion Flow
 
-Add a new package:
+To match the "Project VOICE" fluid experience, shift from manual button triggers to a reactive flow:
 
-```text
-app/src/main/java/tw/com/johnnyhng/eztalk/asr/experiment/
-```
+- `ExperimentViewModel` uses a `MutableStateFlow` for `inputText`.
+- A `Debounce` operator (500-800ms) triggers `requestWordSuggestions()` automatically.
+- Sentence suggestions remain manual or semi-automatic to avoid excessive API costs.
+- Add a `isThinking` state to `ExperimentUiState` to drive visual feedback during LLM calls.
 
-Suggested files:
+### Three-Column Landscape Layout ("Command Center")
 
-- `ZhuyinModels.kt`
-  - key group models
-  - candidate models
-  - emotion/tone models
-- `ZhuyinTextEngine.kt`
-  - append behavior
-  - trailing Zhuyin stripping
-  - small pure functions
-- `ZhuyinPromptBuilders.kt`
-  - word prompt builder
-  - sentence prompt builder
-- `ZhuyinSuggestionModule.kt`
-  - builds `LlmRequest`
-  - calls `LlmProvider`
-  - parses JSON candidates
-- `ExperimentViewModel.kt`
-  - screen state
-  - key input
-  - candidate loading
-  - candidate selection
-  - clear/backspace/history
+Reorganize `ExperimentScreen.kt` to use a 2:5:3 width distribution:
 
-Keep UI composables under:
-
-```text
-app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/ExperimentScreen.kt
-```
-
-or split UI-only composables into:
-
-```text
-app/src/main/java/tw/com/johnnyhng/eztalk/asr/ui/experiment/
-```
-
-if the screen grows.
-
-### Reuse Existing LLM Stack
-
-Use existing classes:
-
-- `TranscriptCorrectionProviderFactory`
-- `GeminiLlmProvider`
-- `GoogleAuthGeminiAccessTokenProvider`
-- `LlmRequest`
-- `LlmOutputFormat.JSON`
-
-Use the selected Gemini model from `UserSettings.geminiModel`. If it is `none`
-or blank, show a disabled/error state in Experiment instead of making a request.
-
-## UI Plan
-
-The `Experiment` tab is already route-scoped to landscape. Use the extra width
-for an input-assist layout:
-
-- Top region: current composed text and selected mode.
-- Left rail: initial phrases and emotion selector.
-- Center region: candidate words/sentences.
-- Bottom region: Zhuyin grouped keyboard.
-- Utility buttons: backspace, clear, word suggestions, sentence suggestions.
-
-Interaction flow:
-
-1. User taps initial phrase or Zhuyin key.
-2. Text buffer updates immediately.
-3. User taps word suggestion or sentence suggestion.
-4. App calls Gemini through existing provider.
-5. Candidate list renders.
-6. User taps candidate.
-7. Word candidate applies with `appendWord()`. Sentence candidate replaces or
-   commits the current sentence depending on selected mode.
-
-Initial implementation can omit speech output and persistence. Add those only
-after the core input loop is usable.
+1. **Left Rail (20%): Context & History**
+   - Emotion/Tone selector.
+   - Initial phrases.
+   - Recent phrase history (tappable to re-insert).
+2. **Center Column (50%): Canvas & Sentences**
+   - Main input display (expanded).
+   - Sentence Suggestion results (priority display).
+   - "Thinking" status shimmer.
+3. **Right Rail (30%): Word Candidates & Utils**
+   - Word/Character completions.
+   - Utility actions (Clear, Backspace, Copy).
 
 ## Implementation Phases
 
-### Phase 1: Pure Domain And Tests
+### Phase 1-5: Baseline Integration (Completed)
+*Native landscape UI, manual suggestions, core Zhuyin engine.*
 
-- Add Zhuyin key grid models.
-- Add `stripTrailingZhuyin()` and `appendZhuyinCandidate()`.
-- Add unit tests for:
-  - pure Zhuyin input replaced by candidate
-  - mixed Chinese plus trailing Zhuyin
-  - tone marks
-  - candidate starting with `-`
-  - no trailing Zhuyin
+### Phase 6: Reactive Suggestions & Polishing
+- Implement debounced auto-suggestions in `ExperimentViewModel`.
+- Transition UI to the Three-Column "Command Center" layout.
+- Add "Thinking" indicators (e.g., Pulsing icons or Shimmer) to candidate areas.
+- Improve candidate button styling to match Project VOICE "pill" aesthetics.
 
-Verification:
-
-```bash
-./gradlew :app:testDebugUnitTest
-```
-
-### Phase 2: Prompt Builders And Parser
-
-- Add word and sentence prompt builders.
-- Add JSON response parser for candidate arrays.
-- Add tests for prompt contents and parser behavior.
-
-Verification:
-
-```bash
-./gradlew :app:testDebugUnitTest
-```
-
-### Phase 3: Suggestion Module
-
-- Add `ZhuyinSuggestionModule`.
-- Reuse `LlmProvider`.
-- Return typed success/error states.
-- Add fake provider tests.
-
-Verification:
-
-```bash
-./gradlew :app:testDebugUnitTest
-```
-
-### Phase 4: Experiment ViewModel
-
-- Add state reducer for:
-  - key input
-  - initial phrase input
-  - emotion selection
-  - loading/error/candidate state
-  - applying candidates
-  - backspace/clear
-- Keep dependencies injectable for tests.
-
-Verification:
-
-```bash
-./gradlew :app:testDebugUnitTest
-./gradlew :app:compileDebugKotlin
-```
-
-### Phase 5: Compose UI
-
-- Replace empty `ExperimentScreen` with the native landscape UI.
-- Keep controls stable in size to avoid layout shifts.
-- Use Material icons for utility actions where available.
-- Add strings for labels and error states in English and zh-TW resources.
-
-Verification:
-
-```bash
-./gradlew :app:compileDebugKotlin
-```
-
-Manual checks:
-
-- Switching into Experiment forces landscape.
-- Switching out returns portrait.
-- Keyboard keys do not overlap in landscape.
-- Empty/no-model/error states are readable.
-- Candidate selection updates text as expected.
-
-## Risks And Decisions
-
-- Do not import Lit/Web components; they do not fit this Android app.
-- Do not add a WebView unless native implementation proves too expensive.
-- Keep Project VOICE behavior isolated in Experiment until validated.
-- Prefer JSON prompts over numbered-list parsing for reliability.
-- Keep the first version local to Gemini cloud provider. Local Gemini Nano can
-  be evaluated later using the existing local-LLM code paths.
-- Preserve Apache-2.0 attribution if copying substantial upstream prompt or
-  keyboard content verbatim.
-
-## Done Criteria
-
-- `Experiment` tab provides a usable Zhuyin input loop.
-- Word and sentence candidates come from Gemini and are selectable.
-- Core text behavior is covered by unit tests.
-- Existing tabs continue to compile and navigate normally.
-- `./gradlew :app:compileDebugKotlin` passes.
+### Phase 7: Contextual Depth
+- Pass `conversationHistory` to Gemini for thematic suggestions.
+- Implement "Smart Clear" (moves current text to history).
+- Add character-replacement animations.
 
 ## Implementation Status
 
-Completed on branch `project-VOICE`:
-
-- Added native `Experiment` tab route and forced landscape behavior.
-- Added Zhuyin keyboard models, Traditional Chinese initial phrases, and
-  emotion metadata.
-- Added pure text engine functions for trailing Zhuyin stripping, candidate
-  append behavior, and character-based segmentation/joining.
-- Added JSON-oriented word and sentence prompt builders.
-- Added JSON candidate parser tolerant of plain JSON, fenced JSON, and embedded
-  JSON text.
-- Added `ZhuyinSuggestionModule` using the existing `LlmProvider` stack.
-- Added `ExperimentUiState`, reducer helpers, and `ExperimentViewModel`.
-- Replaced the empty `ExperimentScreen` with native Compose controls for text
-  input, initial phrases, emotion selection, word/sentence suggestions,
-  candidates, and grouped Zhuyin key selection.
-- Added English and zh-TW resources for Experiment labels.
-- Added focused JVM unit tests for models, text behavior, prompts, parsing,
-  suggestion requests, and state reducers.
-
-Verified:
-
-```bash
-./gradlew :app:testDebugUnitTest --tests 'tw.com.johnnyhng.eztalk.asr.experiment.*'
-./gradlew :app:compileDebugKotlin
-```
-
-Remaining manual validation:
-
-- Sign in with Google, confirm Gemini OAuth access, and request candidates on
-  device.
-- Confirm landscape/portrait restoration on the target Android device.
-- Tune the candidate prompt if Gemini responses are too broad or too verbose in
-  live use.
+- **Baseline:** Completed (Native UI, Zhuyin Engine, Manual Suggestions).
+- **Refinement (Project VOICE parity):** In Progress.
+  - [x] Hide Title/Tab bars for full-screen immersion.
+  - [ ] Debounced auto-suggestions.
+  - [ ] Three-column layout refactor.
+  - [ ] Visual "Thinking" feedback.
