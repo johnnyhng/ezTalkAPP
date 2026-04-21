@@ -22,3 +22,13 @@ internal fun segmentTraditionalChinese(text: String): List<String> {
 internal fun joinTraditionalChinese(segments: List<String>): String {
     return segments.joinToString(separator = "")
 }
+
+internal fun stripPrefix(inputText: String, fullText: String): String {
+    val prefix = stripTrailingZhuyin(inputText).trim()
+    if (prefix.isEmpty()) return fullText
+    if (fullText.startsWith(prefix)) {
+        return fullText.substring(prefix.length).trimStart()
+    }
+    // Fallback: if it doesn't start with prefix, return as is
+    return fullText
+}

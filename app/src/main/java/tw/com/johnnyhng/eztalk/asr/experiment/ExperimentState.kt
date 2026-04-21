@@ -97,29 +97,31 @@ internal fun reduceExperimentSuggestionLoading(
 
 internal fun reduceExperimentSuggestionSuccess(
     state: ExperimentUiState,
-    candidates: List<String>
+    candidates: List<String>,
+    mode: ExperimentSuggestionMode
 ): ExperimentUiState {
     return state.copy(
-        isLoading = false,
-        isThinking = false,
-        isSentenceThinking = false,
+        isLoading = state.isThinking && state.isSentenceThinking, // only false if BOTH finished
+        isThinking = if (mode == ExperimentSuggestionMode.WORD) false else state.isThinking,
+        isSentenceThinking = if (mode == ExperimentSuggestionMode.SENTENCE) false else state.isSentenceThinking,
         hasRequestedSuggestions = true,
-        wordCandidates = if (state.suggestionMode == ExperimentSuggestionMode.WORD) candidates else state.wordCandidates,
-        sentenceCandidates = if (state.suggestionMode == ExperimentSuggestionMode.SENTENCE) candidates else state.sentenceCandidates,
+        wordCandidates = if (mode == ExperimentSuggestionMode.WORD) candidates else state.wordCandidates,
+        sentenceCandidates = if (mode == ExperimentSuggestionMode.SENTENCE) candidates else state.sentenceCandidates,
         errorMessage = null
     )
 }
 
 internal fun reduceExperimentSuggestionFailure(
     state: ExperimentUiState,
-    message: String
+    message: String,
+    mode: ExperimentSuggestionMode
 ): ExperimentUiState {
     return state.copy(
-        isLoading = false,
-        isThinking = false,
-        isSentenceThinking = false,
-        wordCandidates = if (state.suggestionMode == ExperimentSuggestionMode.WORD) emptyList() else state.wordCandidates,
-        sentenceCandidates = if (state.suggestionMode == ExperimentSuggestionMode.SENTENCE) emptyList() else state.sentenceCandidates,
+        isLoading = state.isThinking && state.isSentenceThinking,
+        isThinking = if (mode == ExperimentSuggestionMode.WORD) false else state.isThinking,
+        isSentenceThinking = if (mode == ExperimentSuggestionMode.SENTENCE) false else state.isSentenceThinking,
+        wordCandidates = if (mode == ExperimentSuggestionMode.WORD) emptyList() else state.wordCandidates,
+        sentenceCandidates = if (mode == ExperimentSuggestionMode.SENTENCE) emptyList() else state.sentenceCandidates,
         hasRequestedSuggestions = true,
         errorMessage = message
     )

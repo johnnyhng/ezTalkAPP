@@ -46,6 +46,7 @@ import tw.com.johnnyhng.eztalk.asr.experiment.ExperimentSuggestionMode
 import tw.com.johnnyhng.eztalk.asr.experiment.ExperimentViewModel
 import tw.com.johnnyhng.eztalk.asr.experiment.ExperimentViewModelFactory
 import tw.com.johnnyhng.eztalk.asr.experiment.ZhuyinSuggestionModule
+import tw.com.johnnyhng.eztalk.asr.experiment.stripPrefix
 import tw.com.johnnyhng.eztalk.asr.experiment.traditionalChineseEmotions
 import tw.com.johnnyhng.eztalk.asr.experiment.traditionalChineseInitialPhrases
 import tw.com.johnnyhng.eztalk.asr.experiment.zhuyinSingleRowKeyGroups
@@ -209,7 +210,7 @@ fun ExperimentScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ) {
                             Text(
-                                text = candidate,
+                                text = stripPrefix(uiState.inputText, candidate),
                                 modifier = Modifier.padding(12.dp),
                                 style = MaterialTheme.typography.bodyLarge
                             )

@@ -89,8 +89,9 @@ class ExperimentStateTest {
     @Test
     fun suggestionSuccessStoresCandidatesAndStopsLoading() {
         val state = reduceExperimentSuggestionSuccess(
-            ExperimentUiState(isLoading = true, suggestionMode = ExperimentSuggestionMode.WORD),
-            listOf("你", "您")
+            ExperimentUiState(isLoading = true, isThinking = true, suggestionMode = ExperimentSuggestionMode.WORD),
+            listOf("你", "您"),
+            ExperimentSuggestionMode.WORD
         )
 
         assertFalse(state.isLoading)
@@ -104,10 +105,12 @@ class ExperimentStateTest {
         val state = reduceExperimentSuggestionFailure(
             ExperimentUiState(
                 isLoading = true,
+                isThinking = true,
                 suggestionMode = ExperimentSuggestionMode.WORD,
                 wordCandidates = listOf("你")
             ),
-            "Gemini failed"
+            "Gemini failed",
+            ExperimentSuggestionMode.WORD
         )
 
         assertFalse(state.isLoading)
@@ -116,6 +119,7 @@ class ExperimentStateTest {
         assertTrue(state.wordCandidates.isEmpty())
         assertEquals("Gemini failed", state.errorMessage)
     }
+
 
     @Test
     fun applyWordCandidateUsesZhuyinAppendSemantics() {
