@@ -50,6 +50,8 @@
     <string name="translate_llm_correction_label">Translate LLM 校正</string>
     <string name="translate_llm_correction_summary">使用 Gemini 根據 utterance variants 修正 Translate 的初始轉錄，並把結果作為顯示用 modified text。</string>
     <string name="home_english_translation_prefix">EN</string>
+    <string name="include_remote_candidates_in_variants_label">將 backend candidates 加入 utterance variants</string>
+    <string name="include_remote_candidates_in_variants_summary">backend candidates 回來後，加入 Home 與 Translate 的 utteranceVariants。預設開啟。</string>
     <string name="speaker_local_llm_status_label">Local Gemini Nano：%1$s</string>
     <string name="speaker_local_llm_download">下載 Gemini Nano</string>
     <string name="speaker_local_llm_refresh">重新整理本地狀態</string>

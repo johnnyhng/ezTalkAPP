@@ -20,6 +20,7 @@ data class UserSettings(
     val enableHomeLlmCorrection: Boolean = false,
     val enableHomeEnglishTranslation: Boolean = false,
     val enableTranslateLlmCorrection: Boolean = false,
+    val includeRemoteCandidatesInUtteranceVariants: Boolean = true,
     val preferredAudioInputDeviceId: Int? = null,
     val preferredAudioOutputDeviceId: Int? = null,
     val allowAppAudioCapture: Boolean = false,

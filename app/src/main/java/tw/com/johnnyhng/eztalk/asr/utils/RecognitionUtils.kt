@@ -38,6 +38,18 @@ internal fun parseRemoteCandidates(response: JSONObject?): List<String> {
     return List(candidates.length()) { index -> candidates.optString(index) }.filter { it.isNotBlank() }
 }
 
+internal fun mergeRemoteCandidatesIntoUtteranceVariants(
+    utteranceVariants: List<String>,
+    remoteCandidates: List<String>,
+    enabled: Boolean
+): List<String> {
+    if (!enabled) return utteranceVariants
+    return (utteranceVariants + remoteCandidates)
+        .map(String::trim)
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
 internal fun buildRemoteCandidateMetadata(
     latestJsonlData: JSONObject?,
     fallbackOriginalText: String,
@@ -224,6 +236,7 @@ internal suspend fun loadTranslateCandidates(
     allowInsecureTls: Boolean,
     audioReader: (String) -> FloatArray?,
     recognizerBlock: (FloatArray) -> String,
+    includeRemoteCandidatesInUtteranceVariants: Boolean = false,
     localTranscriptBlock: suspend (Transcript) -> Transcript? = { currentTranscript ->
         resolveLocalCandidateTranscript(
             context = context,
@@ -290,6 +303,14 @@ internal suspend fun loadTranslateCandidates(
         syncedTranscript.copy(remoteCandidates = finalRemoteCandidates)
     } else {
         syncedTranscript
+    }.let { transcriptWithRemoteCandidates ->
+        transcriptWithRemoteCandidates.copy(
+            utteranceVariants = mergeRemoteCandidatesIntoUtteranceVariants(
+                utteranceVariants = transcriptWithRemoteCandidates.utteranceVariants,
+                remoteCandidates = finalRemoteCandidates,
+                enabled = includeRemoteCandidatesInUtteranceVariants
+            )
+        )
     }
 
     TranslateCandidateLoadResult(

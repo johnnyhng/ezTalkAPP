@@ -265,7 +265,11 @@ fun HomeScreen(
     }
 
     // Background recognition queue processor
-    LaunchedEffect(userSettings.effectiveRecognitionUrl, userSettings.userId) {
+    LaunchedEffect(
+        userSettings.effectiveRecognitionUrl,
+        userSettings.userId,
+        userSettings.includeRemoteCandidatesInUtteranceVariants
+    ) {
         for (wavPath in recognitionQueue) {
             val url = userSettings.effectiveRecognitionUrl
             if (url.isBlank()) continue
@@ -290,7 +294,24 @@ fun HomeScreen(
                         withContext(Dispatchers.Main) {
                             val index = resultList.indexOfFirst { r -> r.wavFilePath == wavPath }
                             if (index != -1) {
-                                resultList[index] = resultList[index].copy(remoteCandidates = sentences)
+                                val current = resultList[index]
+                                val mergedVariants = mergeRemoteCandidatesIntoUtteranceVariants(
+                                    utteranceVariants = current.utteranceVariants,
+                                    remoteCandidates = sentences,
+                                    enabled = userSettings.includeRemoteCandidatesInUtteranceVariants
+                                )
+                                Log.d(
+                                    TAG,
+                                    "Home remote candidates merged into variants: file=${File(wavPath).name}, enabled=${userSettings.includeRemoteCandidatesInUtteranceVariants}, remote=${sentences.size}, beforeVariants=${current.utteranceVariants.size}, afterVariants=${mergedVariants.size}"
+                                )
+                                val updated = current.copy(
+                                    remoteCandidates = sentences,
+                                    utteranceVariants = mergedVariants
+                                )
+                                resultList[index] = updated
+                                withContext(Dispatchers.IO) {
+                                    persistTranscriptJsonl(context, userSettings.userId, updated)
+                                }
                             }
                         }
                     }

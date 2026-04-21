@@ -739,6 +739,27 @@ fun SettingsScreen(
                             enabled = !isDownloading
                         )
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.include_remote_candidates_in_variants_label),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.include_remote_candidates_in_variants_summary),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = userSettings.includeRemoteCandidatesInUtteranceVariants,
+                            onCheckedChange = homeViewModel::updateIncludeRemoteCandidatesInUtteranceVariants,
+                            enabled = !isDownloading
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = stringResource(

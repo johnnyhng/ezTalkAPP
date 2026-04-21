@@ -50,6 +50,8 @@
     <string name="translate_llm_correction_label">Translate LLM correction</string>
     <string name="translate_llm_correction_summary">Use Gemini to refine the initial Translate transcript from utterance variants before showing it as modified text.</string>
     <string name="home_english_translation_prefix">EN</string>
+    <string name="include_remote_candidates_in_variants_label">Add backend candidates to utterance variants</string>
+    <string name="include_remote_candidates_in_variants_summary">When backend candidates return, append them to utteranceVariants for Home and Translate. Default is on.</string>
     <string name="speaker_local_llm_status_label">Local Gemini Nano: %1$s</string>
     <string name="speaker_local_llm_download">Download Gemini Nano</string>
     <string name="speaker_local_llm_refresh">Refresh local status</string>

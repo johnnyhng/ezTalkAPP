@@ -335,6 +335,9 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateEnableTranslateLlmCorrection(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(enableTranslateLlmCorrection = v))
     }
+    fun updateIncludeRemoteCandidatesInUtteranceVariants(v: Boolean) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(includeRemoteCandidatesInUtteranceVariants = v))
+    }
     fun updatePreferredAudioInputDeviceId(v: Int?) = viewModelScope.launch {
         _audioRoutingActiveInputLabel.value = null
         settingsManager.updateSettings(userSettings.value.copy(preferredAudioInputDeviceId = v))

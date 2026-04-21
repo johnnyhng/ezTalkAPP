@@ -167,7 +167,10 @@ fun TranslateScreen(
     }
 
     // Fetch candidates when a new transcript is available
-    LaunchedEffect(uiState.transcript?.wavFilePath) {
+    LaunchedEffect(
+        uiState.transcript?.wavFilePath,
+        userSettings.includeRemoteCandidatesInUtteranceVariants
+    ) {
         fetchJob = coroutineContext[Job] // Capture the job of this effect
         val transcript = uiState.transcript
         if (transcript != null && transcript.wavFilePath.isNotEmpty()) {
@@ -184,6 +187,8 @@ fun TranslateScreen(
                     transcript = transcript,
                     recognitionUrl = userSettings.effectiveRecognitionUrl,
                     allowInsecureTls = userSettings.allowInsecureTls,
+                    includeRemoteCandidatesInUtteranceVariants =
+                        userSettings.includeRemoteCandidatesInUtteranceVariants,
                     audioReader = ::readWavFileToFloatArray,
                     recognizerBlock = { audioData ->
                         val recognizer = SimulateStreamingAsr.recognizer
