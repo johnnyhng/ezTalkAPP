@@ -9,6 +9,8 @@ This document explains the current structure and runtime flow of `ezTalkAPP` fro
 - local offline ASR using Sherpa-ONNX
 - VAD-based utterance segmentation
 - optional remote candidate generation
+- optional LLM correction for Home and Translate
+- optional Home Chinese-to-English translation
 - optional backend feedback/upload
 - local WAV + JSONL persistence per user
 
@@ -54,11 +56,14 @@ Their roles are:
   - main list-based recognition workflow
   - subscribes to partial/final transcripts from `HomeViewModel`
   - fetches remote candidates in the background
+  - runs optional background LLM correction without blocking the next recording
+  - runs optional background English translation and English TTS
   - handles TTS confirmation, editing, playback, deletion, and backend feedback
 - [TranslateScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/TranslateScreen.kt)
   - single-utterance editing flow
   - focuses on one active transcript at a time
   - fetches local and remote candidates for that transcript
+  - runs optional LLM correction after initial recognition and after utterance variant refresh
 - [DataCollectScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/DataCollectScreen.kt)
   - recording flow for a prescribed text prompt
   - supports sequence mode, retry, skip, and auto-advance
@@ -117,6 +122,7 @@ The key utility files live under [app/src/main/java/tw/com/johnnyhng/eztalk/asr/
 - [RecognitionUtils.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/RecognitionUtils.kt)
   - fetches remote candidates
   - caches them into the same `.jsonl`
+  - merges remote candidates into `utteranceVariants` when that setting is enabled
 - [Api.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/utils/Api.kt)
   - upload / feedback / recognition HTTP calls
   - decides whether feedback uses `PUT /updates`, `POST /process_audio`, or `POST /transfer`
@@ -155,6 +161,8 @@ Important fields:
 - `checked`: whether the item has been reviewed / confirmed
 - `mutable`: whether it is still editable
 - `removable`: whether it has already gone through feedback flow
+- `utteranceVariants`: distinct ASR variants collected during the utterance and optionally enriched with backend candidates
+- `englishTranslation`: optional Home English translation for the current `modifiedText`
 - `localCandidates`: optional locally re-recognized alternatives cached from saved audio
 - `remoteCandidates`: optional remote alternatives
 
@@ -170,6 +178,11 @@ Important settings include:
 - `backendUrl`
 - `enableTtsFeedback`
 - `selectedModelName`
+- `enableHomeLlmCorrection`
+- `enableTranslateLlmCorrection`
+- `includeRemoteCandidatesInUtteranceVariants`
+- `enableHomeEnglishTranslation`
+- `geminiModel`
 
 Current behavior:
 
@@ -321,12 +334,14 @@ What happens there:
 - raw microphone samples are read into a channel
 - a processing coroutine feeds the samples into VAD
 - once speech is active, periodic partial decoding produces live transcript updates
+- each non-blank partial/final result is added to an utterance variant buffer
 - once silence exceeds `lingerMs`, final decoding happens
 
 For finalization:
 
 - the utterance is decoded one more time
 - `originalText` is set from the recognizer result
+- `utteranceVariants` is set from the deduplicated utterance variant buffer
 - `modifiedText` is:
   - the same as `originalText` in translate/home mode
   - the prompt text in data collect mode
@@ -344,6 +359,7 @@ It does all of the following:
 - subscribes to `partialText` and shows live in-progress entries
 - subscribes to `finalTranscript` and replaces the last temporary item with a persisted one
 - uses a background `recognitionQueue` to fetch remote candidates after an utterance is saved
+- runs optional LLM correction and optional English translation as background jobs
 - supports inline editing and dialog editing
 - supports TTS confirmation
 - supports backend feedback
@@ -355,8 +371,12 @@ When a final transcript arrives:
 
 - it is inserted into `resultList`
 - if `effectiveRecognitionUrl` is configured, its `wavFilePath` is pushed into `recognitionQueue`
+- if `enableHomeLlmCorrection` is enabled, a background correction job starts using the current `utteranceVariants`
+- if `enableHomeEnglishTranslation` is enabled, a background translation job starts from the current `modifiedText`
 - a background worker calls `getRemoteCandidates(...)`
 - remote candidates are written into the item and also stored into the `.jsonl`
+- when `includeRemoteCandidatesInUtteranceVariants` is enabled, remote candidates are merged into `utteranceVariants`
+- if the merge changes `utteranceVariants`, Home queues another LLM correction pass with the richer variant set
 
 When the user opens inline edit for a saved item:
 
@@ -364,6 +384,23 @@ When the user opens inline edit for a saved item:
 - the local result is written into `localCandidates`
 - `local_candidates` is cached into the same `.jsonl`
 - later saves preserve both `local_candidates` and `remote_candidates`
+
+### Home LLM correction and English translation
+
+Home LLM correction is intentionally asynchronous:
+
+- the UI shows a linear progress indicator under the row while correction is running
+- correction does not block countdown completion, the next recording, or real-time local ASR
+- correction updates `modifiedText` only if the transcript is still mutable and the text has not changed since the job was launched
+- if correction changes `modifiedText`, `englishTranslation` is cleared and translation is re-run when Home English translation is enabled
+- every persisted update logs `utteranceVariants` count and content so logs can verify which variants were used
+
+Home English translation is also asynchronous:
+
+- it is controlled by `enableHomeEnglishTranslation`
+- it stores output in `english_translation`
+- it uses a separate English TTS controller
+- it is invalidated and refreshed when `modifiedText` changes through correction, editing, dialog confirmation, or TTS confirmation
 
 ### Remote model flow
 
@@ -428,6 +465,9 @@ For saved utterances in this screen:
 - the initial local ASR text is also stored into `localCandidates`
 - later whole-file local re-recognition reuses or refreshes `local_candidates`
 - both local and remote candidates are preserved when the transcript is saved back to JSONL
+- remote candidates may be merged into `utteranceVariants` when `includeRemoteCandidatesInUtteranceVariants` is enabled
+- when `enableTranslateLlmCorrection` is enabled, correction first runs on the initial variants and can run again after candidate refresh changes `utteranceVariants`
+- the post-refresh correction is guarded by the current text, so it does not overwrite user edits made while candidate loading is in flight
 - when `enableTtsFeedback` is on, TTS feedback waits for the in-flight candidate fetch job before calling backend feedback, to avoid racing against remote-candidate persistence
 
 This screen is useful when the user wants to focus on one utterance rather than a running transcript list.
@@ -505,6 +545,8 @@ Typical fields in the JSONL metadata:
 - `checked`
 - `mutable`
 - `removable`
+- `utterance_variants` if available
+- `english_translation` if available
 - `local_candidates` if available
 - `remote_candidates` if available
 
@@ -523,9 +565,37 @@ The behavior is:
 3. otherwise call remote recognition
 4. parse `sentence_candidates`
 5. re-read JSONL to avoid overwriting newer edits
-6. overwrite the JSONL with the same metadata plus `remote_candidates`, while preserving any existing `local_candidates`
+6. overwrite the JSONL with the same metadata plus `remote_candidates`, while preserving existing `utterance_variants`, `english_translation`, and `local_candidates`
+7. Home / Translate may merge remote candidates into `utteranceVariants` when `includeRemoteCandidatesInUtteranceVariants` is enabled
 
 This means remote candidates are cached locally and reused across later edits or screen reloads, and they coexist with cached local candidates.
+
+## LLM correction flow
+
+LLM correction is implemented by:
+
+- [TranscriptCorrectionModule.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/llm/TranscriptCorrectionModule.kt)
+- [TranscriptCorrectionProviderFactory.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/llm/TranscriptCorrectionProviderFactory.kt)
+- [TranscriptCorrectionPromptBuilder.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/prompt/TranscriptCorrectionPromptBuilder.kt)
+
+The correction input is `utteranceVariants`, not just `modifiedText`. The prompt asks the model to choose or reconstruct the intended utterance from variants and to output JSON:
+
+```json
+{
+  "corrected_text": "corrected text",
+  "confidence": 0.0,
+  "reasoning": "short reason"
+}
+```
+
+Only responses with non-blank `corrected_text` and `confidence >= 0.85` are automatically applied. The prompt also instructs the model to convert Simplified Chinese to Traditional Chinese when needed.
+
+Race-condition guardrails:
+
+- Home correction stores the expected `modifiedText` when the job starts and applies only if the row still matches it
+- Translate post-refresh correction only runs when the text field still matches the transcript text captured before candidate loading
+- remote candidate refresh patches `remoteCandidates` and `utteranceVariants`, but does not directly overwrite `modifiedText`
+- JSONL writes preserve existing candidate and translation metadata where possible
 
 ## Backend feedback flow
 
