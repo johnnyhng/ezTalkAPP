@@ -42,7 +42,7 @@ import java.util.*
 private fun logHomeJsonlUpdate(reason: String, transcript: Transcript) {
     Log.d(
         TAG,
-        "Home jsonl update: reason=$reason, file=${File(transcript.wavFilePath).name}, modified=${transcript.modifiedText}, checked=${transcript.checked}, mutable=${transcript.mutable}, localCandidates=${transcript.localCandidates.size}, remoteCandidates=${transcript.remoteCandidates.size}"
+        "Home jsonl update: reason=$reason, file=${File(transcript.wavFilePath).name}, modified=${transcript.modifiedText}, checked=${transcript.checked}, mutable=${transcript.mutable}, localCandidates=${transcript.localCandidates.size}, remoteCandidates=${transcript.remoteCandidates.size}, utteranceVariants=${transcript.utteranceVariants.size}:${transcript.utteranceVariants}"
     )
 }
 
@@ -302,7 +302,7 @@ fun HomeScreen(
                                 )
                                 Log.d(
                                     TAG,
-                                    "Home remote candidates merged into variants: file=${File(wavPath).name}, enabled=${userSettings.includeRemoteCandidatesInUtteranceVariants}, remote=${sentences.size}, beforeVariants=${current.utteranceVariants.size}, afterVariants=${mergedVariants.size}"
+                                    "Home remote candidates merged into variants: file=${File(wavPath).name}, enabled=${userSettings.includeRemoteCandidatesInUtteranceVariants}, remote=${sentences.size}, beforeVariants=${current.utteranceVariants.size}, afterVariants=${mergedVariants.size}, utteranceVariants=$mergedVariants"
                                 )
                                 val updated = current.copy(
                                     remoteCandidates = sentences,
@@ -310,7 +310,15 @@ fun HomeScreen(
                                 )
                                 resultList[index] = updated
                                 withContext(Dispatchers.IO) {
+                                    logHomeJsonlUpdate("remote_candidates_loaded", updated)
                                     persistTranscriptJsonl(context, userSettings.userId, updated)
+                                }
+                                if (mergedVariants != current.utteranceVariants) {
+                                    Log.d(
+                                        TAG,
+                                        "Home LLM correction queued after utterance variants update: file=${File(wavPath).name}"
+                                    )
+                                    launchBackgroundCorrection(updated)
                                 }
                             }
                         }

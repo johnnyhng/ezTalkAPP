@@ -105,7 +105,7 @@ private data class TranslateUiState(
 private fun logTranslateJsonlUpdate(reason: String, transcript: Transcript) {
     Log.d(
         TAG,
-        "Translate jsonl update: reason=$reason, file=${File(transcript.wavFilePath).name}, modified=${transcript.modifiedText}, checked=${transcript.checked}, mutable=${transcript.mutable}, localCandidates=${transcript.localCandidates.size}, remoteCandidates=${transcript.remoteCandidates.size}"
+        "Translate jsonl update: reason=$reason, file=${File(transcript.wavFilePath).name}, modified=${transcript.modifiedText}, checked=${transcript.checked}, mutable=${transcript.mutable}, localCandidates=${transcript.localCandidates.size}, remoteCandidates=${transcript.remoteCandidates.size}, utteranceVariants=${transcript.utteranceVariants.size}:${transcript.utteranceVariants}"
     )
 }
 
@@ -202,13 +202,54 @@ fun TranslateScreen(
                         }
                     }
                 )
+                val variantsChanged = loaded.transcript.utteranceVariants != transcript.utteranceVariants
+                val correctedTranscript = if (
+                    userSettings.enableTranslateLlmCorrection &&
+                    variantsChanged &&
+                    loaded.transcript.mutable &&
+                    uiState.textInput == transcript.modifiedText
+                ) {
+                    val correction = withContext(IO) {
+                        transcriptCorrectionModule.correct(
+                            utteranceVariants = loaded.transcript.utteranceVariants.ifEmpty {
+                                listOf(loaded.transcript.recognizedText)
+                            },
+                            contextLines = emptyList()
+                        ).getOrElse { error ->
+                            Log.w(TAG, "Translate LLM correction failed after utterance variants update", error)
+                            null
+                        }
+                    }
+                    if (correction != null && correction.correctedText != loaded.transcript.modifiedText) {
+                        Log.i(
+                            TAG,
+                            "Translate LLM correction applied after utterance variants update confidence=${correction.confidence} reason=${correction.reasoning.orEmpty()}"
+                        )
+                        loaded.transcript.copy(modifiedText = correction.correctedText)
+                    } else {
+                        loaded.transcript
+                    }
+                } else {
+                    loaded.transcript
+                }
+
                 if (loaded.transcript.localCandidates != transcript.localCandidates) {
-                    logTranslateJsonlUpdate("local_rerecognition", loaded.transcript)
+                    logTranslateJsonlUpdate("local_rerecognition", correctedTranscript)
+                }
+                if (
+                    loaded.transcript.remoteCandidates != transcript.remoteCandidates ||
+                    variantsChanged ||
+                    correctedTranscript.modifiedText != loaded.transcript.modifiedText
+                ) {
+                    logTranslateJsonlUpdate("candidate_refresh", correctedTranscript)
+                    withContext(IO) {
+                        persistTranscriptJsonl(context, userSettings.userId, correctedTranscript)
+                    }
                 }
                 uiState = uiState.copy(
-                    transcript = loaded.transcript,
-                    localCandidate = loaded.localCandidate,
-                    remoteCandidates = loaded.remoteCandidates
+                    transcript = correctedTranscript,
+                    localCandidate = correctedTranscript.localCandidates.firstOrNull(),
+                    remoteCandidates = correctedTranscript.remoteCandidates
                 )
             } finally {
                 uiState = uiState.copy(isFetchingCandidates = false)

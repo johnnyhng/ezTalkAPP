@@ -43,7 +43,7 @@ internal class TranscriptCorrectionModule(
 
         Log.i(
             TAG,
-            "Transcript correction request built model=$llmModel variants=${sanitizedVariants.size} contextLines=${contextLines.size}"
+            "Transcript correction request built model=$llmModel variants=${sanitizedVariants.size}:$sanitizedVariants contextLines=${contextLines.size}"
         )
 
         return provider.generate(request).map { response ->

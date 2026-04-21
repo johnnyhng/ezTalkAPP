@@ -275,7 +275,7 @@ class RecognitionManager(private val context: Context) {
                         if (wavPath != null) {
                             Log.d(
                                 TAG,
-                                "DataCollect jsonl update: reason=final_utterance, file=${File(wavPath).name}, modified=$modifiedText, checked=$isDataCollectMode, mutable=${!isDataCollectMode}"
+                                "DataCollect jsonl update: reason=final_utterance, file=${File(wavPath).name}, modified=$modifiedText, checked=$isDataCollectMode, mutable=${!isDataCollectMode}, utteranceVariants=${utteranceBundle?.variants.orEmpty().size}:${utteranceBundle?.variants.orEmpty()}"
                             )
                             saveJsonl(
                                 context = context,
