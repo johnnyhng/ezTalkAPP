@@ -72,6 +72,7 @@ class ExperimentStateTest {
 
         assertEquals(ExperimentSuggestionMode.SENTENCE, state.suggestionMode)
         assertTrue(state.isLoading)
+        assertTrue(state.hasRequestedSuggestions)
         assertTrue(state.candidates.isEmpty())
         assertNull(state.errorMessage)
     }
@@ -84,6 +85,7 @@ class ExperimentStateTest {
         )
 
         assertFalse(state.isLoading)
+        assertTrue(state.hasRequestedSuggestions)
         assertEquals(listOf("你", "您"), state.candidates)
     }
 
@@ -95,6 +97,7 @@ class ExperimentStateTest {
         )
 
         assertFalse(state.isLoading)
+        assertTrue(state.hasRequestedSuggestions)
         assertTrue(state.candidates.isEmpty())
         assertEquals("Gemini failed", state.errorMessage)
     }
@@ -112,6 +115,7 @@ class ExperimentStateTest {
 
         assertEquals("我想休息", state.inputText)
         assertTrue(state.candidates.isEmpty())
+        assertFalse(state.hasRequestedSuggestions)
     }
 
     @Test

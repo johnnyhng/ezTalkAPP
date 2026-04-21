@@ -12,6 +12,7 @@ internal data class ExperimentUiState(
     val candidates: List<String> = emptyList(),
     val conversationHistory: List<String> = emptyList(),
     val isLoading: Boolean = false,
+    val hasRequestedSuggestions: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -23,6 +24,7 @@ internal fun reduceExperimentCharacterInput(
     return state.copy(
         inputText = state.inputText + textValue,
         candidates = emptyList(),
+        hasRequestedSuggestions = false,
         errorMessage = null
     )
 }
@@ -34,6 +36,7 @@ internal fun reduceExperimentInitialPhraseInput(
     return state.copy(
         inputText = state.inputText + phrase,
         candidates = emptyList(),
+        hasRequestedSuggestions = false,
         errorMessage = null
     )
 }
@@ -42,6 +45,7 @@ internal fun reduceExperimentBackspace(state: ExperimentUiState): ExperimentUiSt
     return state.copy(
         inputText = state.inputText.dropLast(1),
         candidates = emptyList(),
+        hasRequestedSuggestions = false,
         errorMessage = null
     )
 }
@@ -56,6 +60,7 @@ internal fun reduceExperimentClear(state: ExperimentUiState): ExperimentUiState 
         inputText = "",
         candidates = emptyList(),
         conversationHistory = nextHistory,
+        hasRequestedSuggestions = false,
         errorMessage = null
     )
 }
@@ -74,6 +79,7 @@ internal fun reduceExperimentSuggestionLoading(
     return state.copy(
         suggestionMode = mode,
         isLoading = true,
+        hasRequestedSuggestions = true,
         candidates = emptyList(),
         errorMessage = null
     )
@@ -85,6 +91,7 @@ internal fun reduceExperimentSuggestionSuccess(
 ): ExperimentUiState {
     return state.copy(
         isLoading = false,
+        hasRequestedSuggestions = true,
         candidates = candidates,
         errorMessage = null
     )
@@ -97,6 +104,7 @@ internal fun reduceExperimentSuggestionFailure(
     return state.copy(
         isLoading = false,
         candidates = emptyList(),
+        hasRequestedSuggestions = true,
         errorMessage = message
     )
 }
@@ -112,6 +120,7 @@ internal fun reduceExperimentCandidateApply(
     return state.copy(
         inputText = nextText,
         candidates = emptyList(),
+        hasRequestedSuggestions = false,
         errorMessage = null
     )
 }

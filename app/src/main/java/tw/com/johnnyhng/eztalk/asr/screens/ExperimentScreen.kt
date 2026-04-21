@@ -30,11 +30,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.experiment.ExperimentSuggestionMode
 import tw.com.johnnyhng.eztalk.asr.experiment.ExperimentViewModel
 import tw.com.johnnyhng.eztalk.asr.experiment.ExperimentViewModelFactory
@@ -68,6 +72,13 @@ fun ExperimentScreen(
         factory = viewModelFactory
     )
     val uiState by experimentViewModel.uiState.collectAsState()
+    var selectedKeyGroupLabel by rememberSaveable {
+        androidx.compose.runtime.mutableStateOf(zhuyinSingleRowKeyGroups.first().label)
+    }
+    val selectedKeyGroup = remember(selectedKeyGroupLabel) {
+        zhuyinSingleRowKeyGroups.firstOrNull { it.label == selectedKeyGroupLabel }
+            ?: zhuyinSingleRowKeyGroups.first()
+    }
 
     Column(
         modifier = Modifier
@@ -95,10 +106,16 @@ fun ExperimentScreen(
                     fontWeight = FontWeight.Medium
                 )
                 IconButton(onClick = experimentViewModel::backspace) {
-                    Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = "Backspace")
+                    Icon(
+                        Icons.AutoMirrored.Filled.Backspace,
+                        contentDescription = stringResource(R.string.experiment_backspace)
+                    )
                 }
                 IconButton(onClick = experimentViewModel::clear) {
-                    Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                    Icon(
+                        Icons.Filled.Clear,
+                        contentDescription = stringResource(R.string.clear)
+                    )
                 }
             }
         }
@@ -111,7 +128,7 @@ fun ExperimentScreen(
                 modifier = Modifier.width(220.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("初始詞", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.experiment_initial_phrases), style = MaterialTheme.typography.titleSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -123,7 +140,7 @@ fun ExperimentScreen(
                     }
                 }
 
-                Text("語氣", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.experiment_emotion), style = MaterialTheme.typography.titleSmall)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -147,13 +164,13 @@ fun ExperimentScreen(
                         onClick = experimentViewModel::requestWordSuggestions,
                         enabled = !uiState.isLoading && uiState.inputText.isNotBlank()
                     ) {
-                        Text("詞候選")
+                        Text(stringResource(R.string.experiment_word_candidates))
                     }
                     Button(
                         onClick = experimentViewModel::requestSentenceSuggestions,
                         enabled = !uiState.isLoading && uiState.inputText.isNotBlank()
                     ) {
-                        Text("句候選")
+                        Text(stringResource(R.string.experiment_sentence_candidates))
                     }
                 }
 
@@ -169,48 +186,71 @@ fun ExperimentScreen(
                 }
                 Text(
                     text = when (uiState.suggestionMode) {
-                        ExperimentSuggestionMode.WORD -> "詞候選"
-                        ExperimentSuggestionMode.SENTENCE -> "句候選"
+                        ExperimentSuggestionMode.WORD -> stringResource(R.string.experiment_word_candidates)
+                        ExperimentSuggestionMode.SENTENCE -> stringResource(R.string.experiment_sentence_candidates)
                     },
                     style = MaterialTheme.typography.titleSmall
                 )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    uiState.candidates.forEach { candidate ->
-                        ElevatedButton(onClick = { experimentViewModel.applyCandidate(candidate) }) {
-                            Text(candidate)
+                if (uiState.hasRequestedSuggestions && !uiState.isLoading && uiState.candidates.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.experiment_no_candidates),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        uiState.candidates.forEach { candidate ->
+                            ElevatedButton(onClick = { experimentViewModel.applyCandidate(candidate) }) {
+                                Text(candidate)
+                            }
                         }
                     }
                 }
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            zhuyinSingleRowKeyGroups.forEach { group ->
-                Column(
-                    modifier = Modifier.width(92.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = group.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    group.rows.flatMap { row -> row.map { it.toString() } }.forEach { key ->
-                        OutlinedButton(
-                            onClick = { experimentViewModel.inputCharacter(key) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(key)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                zhuyinSingleRowKeyGroups.forEach { group ->
+                    FilterChip(
+                        selected = selectedKeyGroupLabel == group.label,
+                        onClick = { selectedKeyGroupLabel = group.label },
+                        label = {
+                            Text(
+                                text = group.label,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
+                    )
+                }
+            }
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                selectedKeyGroup.rows.flatMap { row -> row.map { it.toString() } }.forEach { key ->
+                    OutlinedButton(
+                        onClick = { experimentViewModel.inputCharacter(key) },
+                        modifier = Modifier.width(72.dp)
+                    ) {
+                        Text(
+                            text = key,
+                            style = MaterialTheme.typography.titleMedium
+                        )
                     }
                 }
             }

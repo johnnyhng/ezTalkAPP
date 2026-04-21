@@ -284,3 +284,39 @@ Manual checks:
 - Core text behavior is covered by unit tests.
 - Existing tabs continue to compile and navigate normally.
 - `./gradlew :app:compileDebugKotlin` passes.
+
+## Implementation Status
+
+Completed on branch `project-VOICE`:
+
+- Added native `Experiment` tab route and forced landscape behavior.
+- Added Zhuyin keyboard models, Traditional Chinese initial phrases, and
+  emotion metadata.
+- Added pure text engine functions for trailing Zhuyin stripping, candidate
+  append behavior, and character-based segmentation/joining.
+- Added JSON-oriented word and sentence prompt builders.
+- Added JSON candidate parser tolerant of plain JSON, fenced JSON, and embedded
+  JSON text.
+- Added `ZhuyinSuggestionModule` using the existing `LlmProvider` stack.
+- Added `ExperimentUiState`, reducer helpers, and `ExperimentViewModel`.
+- Replaced the empty `ExperimentScreen` with native Compose controls for text
+  input, initial phrases, emotion selection, word/sentence suggestions,
+  candidates, and grouped Zhuyin key selection.
+- Added English and zh-TW resources for Experiment labels.
+- Added focused JVM unit tests for models, text behavior, prompts, parsing,
+  suggestion requests, and state reducers.
+
+Verified:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests 'tw.com.johnnyhng.eztalk.asr.experiment.*'
+./gradlew :app:compileDebugKotlin
+```
+
+Remaining manual validation:
+
+- Sign in with Google, confirm Gemini OAuth access, and request candidates on
+  device.
+- Confirm landscape/portrait restoration on the target Android device.
+- Tune the candidate prompt if Gemini responses are too broad or too verbose in
+  live use.

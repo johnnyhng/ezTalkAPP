@@ -95,6 +95,12 @@
     <string name="translate">翻譯</string>
     <string name="data_collect">資料採集</string>
     <string name="experiment">Experiment</string>
+    <string name="experiment_initial_phrases">初始詞</string>
+    <string name="experiment_emotion">語氣</string>
+    <string name="experiment_word_candidates">詞候選</string>
+    <string name="experiment_sentence_candidates">句候選</string>
+    <string name="experiment_no_candidates">沒有候選</string>
+    <string name="experiment_backspace">退格</string>
     <string name="file_manager">檔案管理</string>
     <string name="speaker">演講者</string>
     <string name="settings">設定</string>
