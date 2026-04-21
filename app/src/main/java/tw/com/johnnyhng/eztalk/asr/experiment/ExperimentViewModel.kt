@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,8 +29,7 @@ internal class ExperimentViewModel(
                 .debounce(600)
                 .collect { text ->
                     if (text.isNotBlank()) {
-                        requestSuggestions(ExperimentSuggestionMode.WORD)
-                        requestSuggestions(ExperimentSuggestionMode.SENTENCE)
+                        requestAllSuggestions(text)
                     }
                 }
         }
@@ -60,30 +60,47 @@ internal class ExperimentViewModel(
     }
 
     fun requestWordSuggestions() {
-        requestSuggestions(ExperimentSuggestionMode.WORD)
+        requestAllSuggestions(_uiState.value.inputText)
     }
 
     fun requestSentenceSuggestions() {
-        requestSuggestions(ExperimentSuggestionMode.SENTENCE)
+        requestAllSuggestions(_uiState.value.inputText)
     }
 
-    private fun requestSuggestions(mode: ExperimentSuggestionMode) {
-        _uiState.update { reduceExperimentSuggestionLoading(it, mode) }
+    private fun requestAllSuggestions(text: String) {
+        if (text.isBlank()) return
+
+        _uiState.update { state ->
+            state.copy(
+                isLoading = true,
+                isThinking = true,
+                isSentenceThinking = true,
+                errorMessage = null
+            )
+        }
+
         viewModelScope.launch {
-            val context = _uiState.value.toZhuyinPromptContext()
-            val result = when (mode) {
-                ExperimentSuggestionMode.WORD -> suggestionProvider.suggestWords(context)
-                ExperimentSuggestionMode.SENTENCE -> suggestionProvider.suggestSentences(context)
-            }
+            val context = _uiState.value.copy(inputText = text).toZhuyinPromptContext()
+            
+            val wordDeferred = async { suggestionProvider.suggestWords(context) }
+            val sentenceDeferred = async { suggestionProvider.suggestSentences(context) }
+
+            val wordResult = wordDeferred.await()
+            val sentenceResult = sentenceDeferred.await()
+
             _uiState.update { state ->
-                result.fold(
-                    onSuccess = { reduceExperimentSuggestionSuccess(state, it) },
-                    onFailure = { error ->
-                        reduceExperimentSuggestionFailure(
-                            state,
-                            error.message ?: error.javaClass.simpleName
-                        )
-                    }
+                // Guard against stale text
+                if (state.inputText != text) return@update state
+
+                state.copy(
+                    isLoading = false,
+                    isThinking = false,
+                    isSentenceThinking = false,
+                    hasRequestedSuggestions = true,
+                    wordCandidates = wordResult.getOrDefault(emptyList()),
+                    sentenceCandidates = sentenceResult.getOrDefault(emptyList()),
+                    errorMessage = wordResult.exceptionOrNull()?.message 
+                        ?: sentenceResult.exceptionOrNull()?.message
                 )
             }
         }

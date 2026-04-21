@@ -39,7 +39,10 @@ internal class ZhuyinSuggestionModule(
         )
 
         return provider.generate(request).map { response ->
-            parseZhuyinCandidates(response.rawText)
+            android.util.Log.d("ZhuyinSuggestion", "Raw LLM Response: ${response.rawText}")
+            val candidates = parseZhuyinCandidates(response.rawText)
+            android.util.Log.d("ZhuyinSuggestion", "Parsed Candidates: $candidates")
+            candidates
         }
     }
 }
