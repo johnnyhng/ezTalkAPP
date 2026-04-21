@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Clear
@@ -72,100 +75,129 @@ fun ExperimentScreen(
         factory = viewModelFactory
     )
     val uiState by experimentViewModel.uiState.collectAsState()
-    var selectedKeyGroupLabel by rememberSaveable {
-        androidx.compose.runtime.mutableStateOf(zhuyinSingleRowKeyGroups.first().label)
-    }
-    val selectedKeyGroup = remember(selectedKeyGroupLabel) {
-        zhuyinSingleRowKeyGroups.firstOrNull { it.label == selectedKeyGroupLabel }
-            ?: zhuyinSingleRowKeyGroups.first()
-    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 1. Canvas: Text Area (Full Width)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 76.dp),
+                .heightIn(min = 100.dp),
             tonalElevation = 2.dp,
-            shape = MaterialTheme.shapes.small
+            shape = MaterialTheme.shapes.medium
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = uiState.inputText.ifBlank { " " },
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Medium
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
                 )
-                IconButton(onClick = experimentViewModel::backspace) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Backspace,
-                        contentDescription = stringResource(R.string.experiment_backspace)
-                    )
-                }
-                IconButton(onClick = experimentViewModel::clear) {
-                    Icon(
-                        Icons.Filled.Clear,
-                        contentDescription = stringResource(R.string.clear)
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.width(220.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(stringResource(R.string.experiment_initial_phrases), style = MaterialTheme.typography.titleSmall)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    traditionalChineseInitialPhrases.forEach { phrase ->
-                        OutlinedButton(onClick = { experimentViewModel.inputInitialPhrase(phrase) }) {
-                            Text(phrase)
-                        }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    IconButton(onClick = experimentViewModel::backspace) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Backspace,
+                            contentDescription = stringResource(R.string.experiment_backspace)
+                        )
                     }
-                }
-
-                Text(stringResource(R.string.experiment_emotion), style = MaterialTheme.typography.titleSmall)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    traditionalChineseEmotions.forEach { emotion ->
-                        FilterChip(
-                            selected = uiState.selectedEmotion == emotion,
-                            onClick = { experimentViewModel.selectEmotion(emotion) },
-                            label = { Text("${emotion.emoji} ${emotion.label}") }
+                    IconButton(onClick = experimentViewModel::clear) {
+                        Icon(
+                            Icons.Filled.Clear,
+                            contentDescription = stringResource(R.string.clear)
                         )
                     }
                 }
             }
+        }
 
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = experimentViewModel::requestWordSuggestions,
-                        enabled = !uiState.isLoading && uiState.inputText.isNotBlank()
-                    ) {
-                        Text(stringResource(R.string.experiment_word_candidates))
+        // 2. Scrollable Content Area
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Initial Phrases
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.experiment_initial_phrases),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    traditionalChineseInitialPhrases.forEach { phrase ->
+                        OutlinedButton(onClick = { experimentViewModel.inputInitialPhrase(phrase) }) {
+                            Text(phrase, style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
+                }
+            }
+
+            // Word Candidates
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.experiment_word_candidates),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (uiState.isThinking) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    uiState.candidates.filter { it.length <= 3 }.forEach { candidate ->
+                        ElevatedButton(
+                            onClick = { experimentViewModel.applyCandidate(candidate) },
+                            modifier = Modifier.heightIn(min = 48.dp)
+                        ) {
+                            Text(candidate, style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
+            }
+
+            // Sentence Candidates
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.experiment_sentence_candidates),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (uiState.isSentenceThinking) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
                     Button(
                         onClick = experimentViewModel::requestSentenceSuggestions,
                         enabled = !uiState.isLoading && uiState.inputText.isNotBlank()
@@ -173,84 +205,23 @@ fun ExperimentScreen(
                         Text(stringResource(R.string.experiment_sentence_candidates))
                     }
                 }
-
-                if (uiState.isLoading) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                }
-                uiState.errorMessage?.let { message ->
-                    Text(
-                        text = message,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                Text(
-                    text = when (uiState.suggestionMode) {
-                        ExperimentSuggestionMode.WORD -> stringResource(R.string.experiment_word_candidates)
-                        ExperimentSuggestionMode.SENTENCE -> stringResource(R.string.experiment_sentence_candidates)
-                    },
-                    style = MaterialTheme.typography.titleSmall
-                )
-                if (uiState.hasRequestedSuggestions && !uiState.isLoading && uiState.candidates.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.experiment_no_candidates),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                } else {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        uiState.candidates.forEach { candidate ->
-                            ElevatedButton(onClick = { experimentViewModel.applyCandidate(candidate) }) {
-                                Text(candidate)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                zhuyinSingleRowKeyGroups.forEach { group ->
-                    FilterChip(
-                        selected = selectedKeyGroupLabel == group.label,
-                        onClick = { selectedKeyGroupLabel = group.label },
-                        label = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    uiState.candidates.filter { it.length > 3 }.forEach { candidate ->
+                        Surface(
+                            onClick = { experimentViewModel.applyCandidate(candidate) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
                             Text(
-                                text = group.label,
-                                fontWeight = FontWeight.Bold
+                                text = candidate,
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodyLarge
                             )
                         }
-                    )
-                }
-            }
-
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                selectedKeyGroup.rows.flatMap { row -> row.map { it.toString() } }.forEach { key ->
-                    OutlinedButton(
-                        onClick = { experimentViewModel.inputCharacter(key) },
-                        modifier = Modifier.width(72.dp)
-                    ) {
-                        Text(
-                            text = key,
-                            style = MaterialTheme.typography.titleMedium
-                        )
                     }
                 }
             }

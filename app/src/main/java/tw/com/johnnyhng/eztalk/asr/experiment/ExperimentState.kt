@@ -12,6 +12,8 @@ internal data class ExperimentUiState(
     val candidates: List<String> = emptyList(),
     val conversationHistory: List<String> = emptyList(),
     val isLoading: Boolean = false,
+    val isThinking: Boolean = false,
+    val isSentenceThinking: Boolean = false,
     val hasRequestedSuggestions: Boolean = false,
     val errorMessage: String? = null
 )
@@ -79,6 +81,8 @@ internal fun reduceExperimentSuggestionLoading(
     return state.copy(
         suggestionMode = mode,
         isLoading = true,
+        isThinking = mode == ExperimentSuggestionMode.WORD,
+        isSentenceThinking = mode == ExperimentSuggestionMode.SENTENCE,
         hasRequestedSuggestions = true,
         candidates = emptyList(),
         errorMessage = null
@@ -91,6 +95,8 @@ internal fun reduceExperimentSuggestionSuccess(
 ): ExperimentUiState {
     return state.copy(
         isLoading = false,
+        isThinking = false,
+        isSentenceThinking = false,
         hasRequestedSuggestions = true,
         candidates = candidates,
         errorMessage = null
@@ -103,6 +109,8 @@ internal fun reduceExperimentSuggestionFailure(
 ): ExperimentUiState {
     return state.copy(
         isLoading = false,
+        isThinking = false,
+        isSentenceThinking = false,
         candidates = emptyList(),
         hasRequestedSuggestions = true,
         errorMessage = message
