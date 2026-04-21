@@ -4,17 +4,23 @@ import tw.com.johnnyhng.eztalk.asr.llm.LlmOutputFormat
 import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LlmRequest
 
+internal interface ZhuyinSuggestionProvider {
+    suspend fun suggestWords(context: ZhuyinPromptContext): Result<List<String>>
+
+    suspend fun suggestSentences(context: ZhuyinPromptContext): Result<List<String>>
+}
+
 internal class ZhuyinSuggestionModule(
     private val llmProvider: LlmProvider? = null,
     private val llmModel: String = "gemini-2.5-flash",
     private val wordPromptBuilder: ZhuyinWordPromptBuilder = ZhuyinWordPromptBuilder(),
     private val sentencePromptBuilder: ZhuyinSentencePromptBuilder = ZhuyinSentencePromptBuilder()
-) {
-    suspend fun suggestWords(context: ZhuyinPromptContext): Result<List<String>> {
+) : ZhuyinSuggestionProvider {
+    override suspend fun suggestWords(context: ZhuyinPromptContext): Result<List<String>> {
         return generateCandidates(wordPromptBuilder.build(context))
     }
 
-    suspend fun suggestSentences(context: ZhuyinPromptContext): Result<List<String>> {
+    override suspend fun suggestSentences(context: ZhuyinPromptContext): Result<List<String>> {
         return generateCandidates(sentencePromptBuilder.build(context))
     }
 

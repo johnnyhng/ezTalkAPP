@@ -414,7 +414,7 @@ fun NavigationHost(
         }
 
         composable(NavRoutes.Experiment.route) {
-            ExperimentScreen()
+            ExperimentScreen(homeViewModel = homeViewModel)
         }
 
         composable(NavRoutes.FileManager.route) {
