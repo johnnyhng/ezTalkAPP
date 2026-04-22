@@ -1,5 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -90,6 +92,36 @@ fun ExperimentScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 0. Context Rail: Scenarios & Tone
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                uiState.scenarios.forEach { scenario ->
+                    FilterChip(
+                        selected = uiState.selectedScenario.id == scenario.id,
+                        onClick = { experimentViewModel.selectScenario(scenario) },
+                        label = { Text("${scenario.emoji} ${scenario.name}") }
+                    )
+                }
+                Spacer(
+                    modifier = Modifier
+                        .height(24.dp)
+                        .width(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+                traditionalChineseEmotions.forEach { emotion ->
+                    FilterChip(
+                        selected = uiState.selectedEmotion == emotion,
+                        onClick = { experimentViewModel.selectEmotion(emotion) },
+                        label = { Text("${emotion.emoji} ${emotion.label}") }
+                    )
+                }
+            }
+
             // 1. Canvas: Text Area (Full Width)
             Surface(
                 modifier = Modifier

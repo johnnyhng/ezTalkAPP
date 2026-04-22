@@ -8,6 +8,8 @@ internal enum class ExperimentSuggestionMode {
 internal data class ExperimentUiState(
     val inputText: String = "",
     val selectedEmotion: ZhuyinEmotion = traditionalChineseEmotions.first(),
+    val scenarios: List<ExperimentScenario> = defaultScenarios,
+    val selectedScenario: ExperimentScenario = defaultScenarios.first(),
     val suggestionMode: ExperimentSuggestionMode = ExperimentSuggestionMode.WORD,
     val wordCandidates: List<String> = emptyList(),
     val sentenceCandidates: List<String> = emptyList(),
@@ -151,6 +153,8 @@ internal fun ExperimentUiState.toZhuyinPromptContext(
         text = inputText,
         candidateCount = candidateCount,
         selectedEmotionPrompt = selectedEmotion.prompt,
+        scenarioKeywords = selectedScenario.keywords,
+        scenarioInstruction = selectedScenario.customInstruction,
         conversationHistory = conversationHistory
     )
 }

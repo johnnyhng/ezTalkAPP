@@ -8,6 +8,8 @@ internal data class ZhuyinPromptContext(
     val text: String,
     val candidateCount: Int = DEFAULT_CANDIDATE_COUNT,
     val selectedEmotionPrompt: String = traditionalChineseEmotions.first().prompt,
+    val scenarioKeywords: List<String> = emptyList(),
+    val scenarioInstruction: String? = null,
     val lastInputSpeech: String? = null,
     val lastOutputSpeech: String? = null,
     val conversationHistory: List<String> = emptyList()
@@ -18,12 +20,16 @@ internal class ZhuyinWordPromptBuilder {
         val sanitizedText = context.text.trim()
         return PromptTemplate(
             systemInstruction = zhuyinSystemInstruction(
-                task = "預測目前繁體中文輸入後方最可能的 6 個後續字詞。"
+                task = "預測目前繁體中文輸入後方最可能的 6 個後續字詞。",
+                customInstruction = context.scenarioInstruction
             ),
             userPrompt = buildString {
                 appendContext(context)
                 appendLine("目前輸入：$sanitizedText")
                 appendLine("語氣：${context.selectedEmotionPrompt}")
+                if (context.scenarioKeywords.isNotEmpty()) {
+                    appendLine("優先使用關鍵字：${context.scenarioKeywords.joinToString("、")}")
+                }
                 appendLine("---")
                 appendLine("指令：")
                 appendLine("1. 請預測接在「目前輸入」之後最可能的 6 個候選字詞。")
@@ -41,12 +47,16 @@ internal class ZhuyinSentencePromptBuilder {
         val sanitizedText = context.text.trim()
         return PromptTemplate(
             systemInstruction = zhuyinSystemInstruction(
-                task = "根據目前繁體中文輸入的意圖，預測接下來最可能的 3 個完整句子的補全部分。"
+                task = "根據目前繁體中文輸入的意圖，預測接下來最可能的 3 個完整句子的補全部分。",
+                customInstruction = context.scenarioInstruction
             ),
             userPrompt = buildString {
                 appendContext(context)
                 appendLine("目前輸入：$sanitizedText")
                 appendLine("語氣：${context.selectedEmotionPrompt}")
+                if (context.scenarioKeywords.isNotEmpty()) {
+                    appendLine("相關領域詞彙：${context.scenarioKeywords.joinToString("、")}")
+                }
                 appendLine("---")
                 appendLine("指令：")
                 appendLine("1. 根據「目前輸入」的意圖，預測接下來最可能的 3 個補全內容。")
@@ -59,11 +69,12 @@ internal class ZhuyinSentencePromptBuilder {
     }
 }
 
-private fun zhuyinSystemInstruction(task: String): String {
+private fun zhuyinSystemInstruction(task: String, customInstruction: String? = null): String {
     return """
         你是一位服務台灣繁體中文使用者的溝通助手 (AAC Assistant)，服務對象為表達能力受限的人。
         你的核心目標是：透過預測後續詞句，降低使用者選擇與點擊的成本。
         $task
+        ${customInstruction?.let { "\n附加情境指令：$it" } ?: ""}
 
         規則：
         - 回覆必須完全使用繁體中文（台灣習慣）。

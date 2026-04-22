@@ -18,12 +18,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(FlowPreview::class)
 internal class ExperimentViewModel(
-    private val suggestionProvider: ZhuyinSuggestionProvider = ZhuyinSuggestionModule()
+    private val suggestionProvider: ZhuyinSuggestionProvider = ZhuyinSuggestionModule(),
+    private val contextRepository: ExperimentContextRepository = FirebaseExperimentContextRepository()
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ExperimentUiState())
     val uiState: StateFlow<ExperimentUiState> = _uiState.asStateFlow()
 
     init {
+        fetchScenarios()
         viewModelScope.launch {
             _uiState
                 .map { it.inputText }
@@ -35,6 +37,21 @@ internal class ExperimentViewModel(
                     }
                 }
         }
+    }
+
+    private fun fetchScenarios() {
+        viewModelScope.launch {
+            val scenarios = contextRepository.listScenarios()
+            _uiState.update { it.copy(
+                scenarios = scenarios,
+                selectedScenario = scenarios.firstOrNull { s -> s.id == it.selectedScenario.id } ?: scenarios.first()
+            ) }
+        }
+    }
+
+    fun selectScenario(scenario: ExperimentScenario) {
+        _uiState.update { it.copy(selectedScenario = scenario) }
+        requestAllSuggestions(_uiState.value.inputText)
     }
 
     fun inputCharacter(value: String) {

@@ -11,6 +11,20 @@ internal data class ZhuyinEmotion(
     val label: String
 )
 
+internal data class ExperimentScenario(
+    val id: String,
+    val name: String,
+    val emoji: String = "💡",
+    val keywords: List<String> = emptyList(),
+    val customInstruction: String? = null
+)
+
+internal val defaultScenarios = listOf(
+    ExperimentScenario(id = "general", name = "一般", emoji = "🏠"),
+    ExperimentScenario(id = "medical", name = "醫療", emoji = "🏥", keywords = listOf("痛", "醫生", "藥", "檢查")),
+    ExperimentScenario(id = "coding", name = "工程", emoji = "💻", keywords = listOf("Bug", "代碼", "部署", "測試"))
+)
+
 internal val zhuyinSingleRowKeyGroups: List<ZhuyinKeyGroup> = listOf(
     ZhuyinKeyGroup(label = "ㄅ", rows = listOf("ㄅㄆㄇㄈ")),
     ZhuyinKeyGroup(label = "ㄉ", rows = listOf("ㄉㄊㄋㄌ")),
