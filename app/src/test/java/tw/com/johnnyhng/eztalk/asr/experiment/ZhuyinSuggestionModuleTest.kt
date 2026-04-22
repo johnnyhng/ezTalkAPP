@@ -39,7 +39,7 @@ class ZhuyinSuggestionModuleTest {
         val result = module.suggestSentences(ZhuyinPromptContext(text = "ㄨㄛˇy"))
 
         assertEquals(listOf("我要喝水。"), result.getOrThrow())
-        assertTrue(provider.requests.single().userPrompt.contains("完整句子"))
+        assertTrue(provider.requests.single().userPrompt.contains("補全內容"))
     }
 
     @Test

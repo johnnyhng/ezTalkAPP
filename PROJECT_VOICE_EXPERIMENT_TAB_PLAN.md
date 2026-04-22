@@ -135,16 +135,30 @@ Reorganize `ExperimentScreen.kt` to use a 2:5:3 width distribution:
 - Add "Thinking" indicators (e.g., Pulsing icons or Shimmer) to candidate areas.
 - Improve candidate button styling to match Project VOICE "pill" aesthetics.
 
-### Phase 7: Contextual Depth
-- Pass `conversationHistory` to Gemini for thematic suggestions.
-- Implement "Smart Clear" (moves current text to history).
-- Add character-replacement animations.
+### Phase 7: Exclusionary Prediction & Prompt Refactor
+- Update `ZhuyinPromptBuilders.kt` to explicitly forbid repeating the `inputText` prefix in candidates.
+- Shift LLM role to "AAC Communication Assistant" for Traditional Chinese users.
+- Implement "Append-only" logic in `ExperimentViewModel.applyCandidate()` for a continuous selection flow.
+
+### Phase 8: High-Contrast & Fitts's Law Layout
+- Refactor `ExperimentScreen.kt` to use high-contrast styling (Dark backgrounds for candidates, white text).
+- Increase touch targets and inter-element spacing (Gap >= 12dp, Height >= 64dp).
+- Remove visual redundancy by ensuring candidate UI only shows the predicted completion (no prefix).
+
+### Phase 9: Firestore Context Integration
+- Define Firestore collection `experiment_contexts` to store scenario-specific vocabulary and instructions.
+- Implement dynamic context loading in `ExperimentViewModel` from Firestore based on selected profile.
+- Inject scenario-specific metadata into Gemini prompts to weight suggestions toward specific domains (e.g., medical, professional, or care-taking).
 
 ## Implementation Status
 
-- **Baseline:** Completed (Native UI, Zhuyin Engine, Manual Suggestions).
+- **Baseline:** Completed.
 - **Refinement (Project VOICE parity):** In Progress.
-  - [x] Hide Title/Tab bars for full-screen immersion.
-  - [ ] Debounced auto-suggestions.
-  - [ ] Three-column layout refactor.
-  - [ ] Visual "Thinking" feedback.
+  - [x] Hide Title/Tab bars.
+  - [x] Debounced auto-suggestions.
+  - [x] Full-width vertical layout with scrolling.
+  - [x] Separate Word/Sentence candidate pools.
+  - [x] TTS Integration & Global Loading Indicator.
+  - [ ] **Phase 7: Exclusionary Prediction Prompt.** (Next)
+  - [ ] **Phase 8: High-contrast large-target layout.**
+  - [ ] **Phase 9: Firestore Context Integration.**

@@ -18,15 +18,18 @@ internal class ZhuyinWordPromptBuilder {
         val sanitizedText = context.text.trim()
         return PromptTemplate(
             systemInstruction = zhuyinSystemInstruction(
-                task = "將注音、漢字或混合輸入補全為接續在目前文字後方的繁體中文候選字詞。"
+                task = "預測目前繁體中文輸入後方最可能的 6 個後續字詞。"
             ),
             userPrompt = buildString {
                 appendContext(context)
                 appendLine("目前輸入：$sanitizedText")
                 appendLine("語氣：${context.selectedEmotionPrompt}")
-                appendLine("請生成最多 ${context.candidateCount} 個不同候選字詞。")
-                appendLine("候選字詞應能接在目前輸入之後，並優先符合日常、醫療、休息、照護溝通情境。")
-                appendLine("若目前輸入尾端包含不完整注音，請推測合理完整注音後轉成繁體中文。")
+                appendLine("---")
+                appendLine("指令：")
+                appendLine("1. 請預測接在「目前輸入」之後最可能的 6 個候選字詞。")
+                appendLine("2. 嚴禁包含「目前輸入」中最後一個完整的詞彙。")
+                appendLine("3. 輸出必須僅包含預測的補全部分，不要重複前綴。")
+                appendLine("4. 若輸入尾端有注音符號，請先將其轉換為對應漢字後再預測接續詞。")
             }.trim(),
             expectedResponseSchema = zhuyinCandidatesSchema()
         )
@@ -38,15 +41,18 @@ internal class ZhuyinSentencePromptBuilder {
         val sanitizedText = context.text.trim()
         return PromptTemplate(
             systemInstruction = zhuyinSystemInstruction(
-                task = "將注音、漢字或混合輸入補全為完整繁體中文對話句子。"
+                task = "根據目前繁體中文輸入的意圖，預測接下來最可能的 3 個完整句子的補全部分。"
             ),
             userPrompt = buildString {
                 appendContext(context)
                 appendLine("目前輸入：$sanitizedText")
                 appendLine("語氣：${context.selectedEmotionPrompt}")
-                appendLine("請生成最多 ${context.candidateCount} 個不同完整句子。")
-                appendLine("每個句子都應以目前輸入的意圖開頭或延伸，不要偏離使用者可能要表達的內容。")
-                appendLine("若目前輸入尾端包含不完整注音，請推測合理完整注音後產生繁體中文句子。")
+                appendLine("---")
+                appendLine("指令：")
+                appendLine("1. 根據「目前輸入」的意圖，預測接下來最可能的 3 個補全內容。")
+                appendLine("2. 嚴禁在輸出中包含「目前輸入」已有的任何漢字前綴。")
+                appendLine("3. 每個候選必須能與「目前輸入」自然連接形成完整、通順的台灣口語句子。")
+                appendLine("4. 優先使用台灣常用語助詞（啦、喔、呢、吧）。")
             }.trim(),
             expectedResponseSchema = zhuyinCandidatesSchema()
         )
@@ -55,14 +61,15 @@ internal class ZhuyinSentencePromptBuilder {
 
 private fun zhuyinSystemInstruction(task: String): String {
     return """
-        你是一款繁體中文注音輸入輔助工具，服務對象為語言表達能力受限或無法打字的人。
+        你是一位服務台灣繁體中文使用者的溝通助手 (AAC Assistant)，服務對象為表達能力受限的人。
+        你的核心目標是：透過預測後續詞句，降低使用者選擇與點擊的成本。
         $task
 
         規則：
-        - 回覆必須完全使用繁體中文。
-        - 可以理解注音符號、聲調、漢字、以及少量混合羅馬字。
-        - 不要輸出解釋、Markdown、編號或額外文字。
-        - 只輸出符合 schema 的 JSON。
+        - 回覆必須完全使用繁體中文（台灣習慣）。
+        - 輸出格式必須為 JSON array，包含在 "candidates" 欄位中。
+        - 嚴禁重複：候選內容絕對不能包含「目前輸入」末尾已有的漢字。
+        - 簡潔：只回傳預測的補全文字。
     """.trimIndent()
 }
 

@@ -131,11 +131,10 @@ internal fun reduceExperimentCandidateApply(
     state: ExperimentUiState,
     candidate: String
 ): ExperimentUiState {
-    val nextText = if (state.wordCandidates.contains(candidate)) {
-        appendZhuyinCandidate(state.inputText, candidate)
-    } else {
-        candidate
-    }
+    // Both words and sentences are now treated as suffixes (completions).
+    // We strip trailing Zhuyin and append the candidate.
+    val nextText = appendZhuyinCandidate(state.inputText, candidate)
+    
     return state.copy(
         inputText = nextText,
         wordCandidates = emptyList(),

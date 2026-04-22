@@ -156,22 +156,33 @@ fun ExperimentScreen(
                 // Word Candidates or Initial Phrases
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     if (uiState.inputText.isBlank()) {
                         traditionalChineseInitialPhrases.forEach { phrase ->
-                            ElevatedButton(onClick = { experimentViewModel.inputInitialPhrase(phrase) }) {
-                                Text(phrase, style = MaterialTheme.typography.titleMedium)
+                            ElevatedButton(
+                                onClick = { experimentViewModel.inputInitialPhrase(phrase) },
+                                modifier = Modifier.heightIn(min = 64.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.elevatedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.onSurface,
+                                    contentColor = MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Text(phrase, style = MaterialTheme.typography.titleLarge)
                             }
                         }
                     } else {
                         uiState.wordCandidates.forEach { candidate ->
                             ElevatedButton(
                                 onClick = { experimentViewModel.applyCandidate(candidate) },
-                                modifier = Modifier.heightIn(min = 48.dp)
+                                modifier = Modifier.heightIn(min = 64.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.elevatedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.onSurface,
+                                    contentColor = MaterialTheme.colorScheme.surface
+                                )
                             ) {
-                                Text(candidate, style = MaterialTheme.typography.titleMedium)
+                                Text(candidate, style = MaterialTheme.typography.titleLarge)
                             }
                         }
                     }
@@ -180,19 +191,21 @@ fun ExperimentScreen(
                 // Sentence Candidates
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     uiState.sentenceCandidates.forEach { candidate ->
                         Surface(
                             onClick = { experimentViewModel.applyCandidate(candidate) },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.small,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            contentColor = MaterialTheme.colorScheme.surface
                         ) {
                             Text(
                                 text = stripPrefix(uiState.inputText, candidate),
-                                modifier = Modifier.padding(12.dp),
-                                style = MaterialTheme.typography.bodyLarge
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }

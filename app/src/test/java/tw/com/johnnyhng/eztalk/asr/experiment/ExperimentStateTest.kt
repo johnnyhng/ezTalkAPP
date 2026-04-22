@@ -138,17 +138,17 @@ class ExperimentStateTest {
     }
 
     @Test
-    fun applySentenceCandidateReplacesInput() {
+    fun applySentenceCandidateAppendsToInput() {
         val state = reduceExperimentCandidateApply(
             ExperimentUiState(
-                inputText = "ㄨㄛˇy",
+                inputText = "我想要",
                 suggestionMode = ExperimentSuggestionMode.SENTENCE,
-                sentenceCandidates = listOf("我要喝水。")
+                sentenceCandidates = listOf("喝水。")
             ),
-            "我要喝水。"
+            "喝水。"
         )
 
-        assertEquals("我要喝水。", state.inputText)
+        assertEquals("我想要喝水。", state.inputText)
         assertTrue(state.sentenceCandidates.isEmpty())
     }
 
