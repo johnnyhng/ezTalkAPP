@@ -86,6 +86,45 @@ internal class ExperimentViewModel(
         requestAllSuggestions(_uiState.value.inputText)
     }
 
+    fun refineInput() {
+        val text = _uiState.value.inputText
+        if (text.isBlank()) return
+
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+        viewModelScope.launch {
+            val startTime = System.currentTimeMillis()
+            val context = _uiState.value.toZhuyinPromptContext().copy(
+                stopSequences = listOf("\n"),
+                maxOutputTokens = 256,
+                temperature = 0.3f
+            )
+
+            val result = withTimeoutOrNull(10000L) {
+                suggestionProvider.suggestRefinement(context)
+            } ?: Result.failure(Exception("Refinement request timed out after 10s"))
+
+            val duration = System.currentTimeMillis() - startTime
+
+            _uiState.update { state ->
+                // Guard against stale text
+                if (state.inputText != text) return@update state
+
+                state.copy(
+                    isLoading = false,
+                    lastRequestDurationMs = duration,
+                    inputText = result.getOrNull()?.takeIf { it.isNotBlank() } ?: state.inputText,
+                    errorMessage = result.exceptionOrNull()?.message
+                )
+            }
+            
+            // After refinement, trigger new suggestions for the refined text
+            if (result.isSuccess && result.getOrNull()?.isNotBlank() == true) {
+                requestAllSuggestions(_uiState.value.inputText)
+            }
+        }
+    }
+
     private fun requestAllSuggestions(text: String) {
         if (text.isBlank()) return
 
@@ -102,25 +141,32 @@ internal class ExperimentViewModel(
             val startTime = System.currentTimeMillis()
             val context = _uiState.value.copy(inputText = text).toZhuyinPromptContext()
             
-            val wordResult = withTimeoutOrNull(10000L) {
-                suggestionProvider.suggestWords(
-                    context.copy(
-                        stopSequences = listOf("\n"),
-                        maxOutputTokens = 1024,
-                        temperature = 0.1f
+            val wordDeferred = async {
+                withTimeoutOrNull(10000L) {
+                    suggestionProvider.suggestWords(
+                        context.copy(
+                            stopSequences = listOf("\n"),
+                            maxOutputTokens = 1024,
+                            temperature = 0.1f
+                        )
                     )
-                )
-            } ?: Result.failure(Exception("Word suggestion request timed out after 10s"))
+                } ?: Result.failure(Exception("Word suggestion request timed out after 10s"))
+            }
 
-            val sentenceResult = withTimeoutOrNull(10000L) {
-                suggestionProvider.suggestSentences(
-                    context.copy(
-                        stopSequences = listOf("\n"),
-                        maxOutputTokens = 1024,
-                        temperature = 0.2f
+            val sentenceDeferred = async {
+                withTimeoutOrNull(10000L) {
+                    suggestionProvider.suggestSentences(
+                        context.copy(
+                            stopSequences = listOf("\n"),
+                            maxOutputTokens = 2048, // 增加額度以容納大量 Thinking Tokens
+                            temperature = 0.2f
+                        )
                     )
-                )
-            } ?: Result.failure(Exception("Sentence suggestion request timed out after 10s"))
+                } ?: Result.failure(Exception("Sentence suggestion request timed out after 10s"))
+            }
+
+            val wordResult = wordDeferred.await()
+            val sentenceResult = sentenceDeferred.await()
 
             val duration = System.currentTimeMillis() - startTime
 

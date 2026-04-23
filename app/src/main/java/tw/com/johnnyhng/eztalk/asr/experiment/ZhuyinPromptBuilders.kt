@@ -29,51 +29,34 @@ internal class ZhuyinWordPromptBuilder {
                 appendContext(context)
                 appendLine("目前輸入：$sanitizedText")
                 appendLine("語氣：${context.selectedEmotionPrompt}")
-                if (context.scenarioKeywords.isNotEmpty()) {
-                    appendLine("優先語境詞彙：${context.scenarioKeywords.joinToString("、")}")
-                }
-                appendLine("---")
-                appendLine("Examples:")
-                appendLine("sentence: \"ㄋ\" -> answers: 你,您,呢,那")
-                appendLine("sentence: \"我想ㄒ\" -> answers: 想,寫,洗,休息,學")
-                appendLine("sentence: \"今天天氣ㄗ\" -> answers: 怎麼,真好,讚")
                 appendLine("---")
                 appendLine("指令：")
-                appendLine("1. 預測接在「目前輸入」之後最可能的 6 個候選字詞。")
-                appendLine("2. 嚴禁包含「目前輸入」中最後一個完整的詞彙。")
-                appendLine("3. 若注音結尾不完整（如缺少介音或韻母），請推測合理的完整注音。")
-                appendLine("4. 輸出格式：僅回傳候選詞，以逗號「,」分隔。不要換行，不要解釋。")
+                appendLine("1. 預測目前輸入後最可能的 6 個字詞。")
+                appendLine("2. 嚴禁包含輸入中已有的漢字前綴。")
+                appendLine("3. 輸出格式：僅回傳後綴，以逗號分隔。不要解釋。")
             }.trim()
         )
     }
 }
+
 
 internal class ZhuyinSentencePromptBuilder {
     fun build(context: ZhuyinPromptContext): PromptTemplate {
         val sanitizedText = context.text.trim()
         return PromptTemplate(
             systemInstruction = zhuyinSystemInstruction(
-                task = "將目前輸入的注音、漢字或混合內容補全為接續在後的完整對話句子。"
+                task = "預測目前意圖後最可能的 3 個句子的補全部分。"
             ),
             userPrompt = buildString {
                 appendContext(context)
                 appendLine("目前輸入：$sanitizedText")
                 appendLine("語氣：${context.selectedEmotionPrompt}")
-                if (context.scenarioKeywords.isNotEmpty()) {
-                    appendLine("相關領域詞彙：${context.scenarioKeywords.joinToString("、")}")
-                }
-                appendLine("---")
-                appendLine("Examples:")
-                appendLine("sentence: \"我想ㄔ\" -> answers: 吃|點|東西|。,吃|藥|。,出|門|。")
-                appendLine("sentence: \"好ㄇ\" -> answers: 好|嗎|？, 好|啊|！")
-                appendLine("sentence: \"ㄊㄥˊㄊㄥˊ\" -> answers: 疼|疼|的|地方|在|這裡|。,這|裡|疼|，|請|輕|一點|。")
                 appendLine("---")
                 appendLine("指令：")
-                appendLine("1. 根據「目前輸入」的意圖，預測接下來最可能的 3 個補全內容（Suffix）。")
-                appendLine("2. 嚴禁包含「目前輸入」已有的任何漢字前綴。")
-                appendLine("3. 輸出格式：使用「|」符號進行語義分詞（例如：想|去|散步|嗎|？）。")
-                appendLine("4. 標點符號必須獨立為一個片段（例如：。|？|，|！）。")
-                appendLine("5. 以逗號「,」分隔不同的候選語句。不要換行，不要解釋。")
+                appendLine("1. 預測輸入後最可能的 3 個補全內容。")
+                appendLine("2. 嚴禁重複輸入中已有的內容。")
+                appendLine("3. 格式：使用「|」分詞，標點符號（，。！？）需獨立。")
+                appendLine("4. 輸出：僅回傳後綴，以逗號分隔。不要解釋。")
             }.trim()
         )
     }

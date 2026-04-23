@@ -145,10 +145,15 @@ Reorganize `ExperimentScreen.kt` to use a 2:5:3 width distribution:
 - Increase touch targets and inter-element spacing (Gap >= 12dp, Height >= 64dp).
 - Remove visual redundancy by ensuring candidate UI only shows the predicted completion (no prefix).
 
-### Phase 9: Firestore Context Integration
-- Define Firestore collection `experiment_contexts` to store scenario-specific vocabulary and instructions.
-- Implement dynamic context loading in `ExperimentViewModel` from Firestore based on selected profile.
-- Inject scenario-specific metadata into Gemini prompts to weight suggestions toward specific domains (e.g., medical, professional, or care-taking).
+### Phase 10: AI Refine ("Magic" Feature)
+- Implement `ZhuyinRefinePromptBuilder` to turn fragmented input into polite, complete sentences.
+- Add a "Magic/Star" button to the input control row in `ExperimentScreen.kt`.
+- Use the refined text to replace or supplement current `inputText`.
+
+### Phase 11: Standardized Pill Aesthetics
+- Transition all candidate UI elements to a highly rounded "Pill" (Capsule) shape.
+- Standardize on high-contrast styling (Dark background, Bold white text).
+- Align spacing and sizes with Fitts's Law for maximum accessibility.
 
 ## Implementation Status
 
@@ -159,6 +164,8 @@ Reorganize `ExperimentScreen.kt` to use a 2:5:3 width distribution:
   - [x] Full-width vertical layout with scrolling.
   - [x] Separate Word/Sentence candidate pools.
   - [x] TTS Integration & Global Loading Indicator.
-  - [ ] **Phase 7: Exclusionary Prediction Prompt.** (Next)
-  - [ ] **Phase 8: High-contrast large-target layout.**
-  - [ ] **Phase 9: Firestore Context Integration.**
+  - [x] Exclusionary Prediction (Suffix-only).
+  - [x] High-contrast layout.
+  - [x] Firestore Context Integration.
+  - [ ] **Phase 10: AI Refine Feature.** (Next)
+  - [ ] **Phase 11: Pill Aesthetics.**
