@@ -204,6 +204,7 @@ Home 支援可選的中文轉英文背景翻譯：
 *   **OAuth 2.0:** 專案不儲存 API Key，而是使用使用者的 Google Access Token。
 *   **Scope:** 需要 `https://www.googleapis.com/auth/generative-language` 權限。
 *   **LLM Provider:** `TranscriptCorrectionProviderFactory` 依設定建立 provider；目前 cloud LLM 使用 Gemini OAuth。
+*   **效能優化：** 針對 Gemini API 的延遲優化、Token 管理與解析魯棒性，請參閱 [GEMINI_OPTIMIZATION_NOTES.md](GEMINI_OPTIMIZATION_NOTES.md)。
 *   **行為：** Speaker semantic parse、Home / Translate LLM correction、Home English translation 都會組裝 Prompt 並發送 request。
 *   **Logger:** LLM correction request log 會輸出 model、variant count 與 variants 內容，方便確認 remote candidates 是否已納入修正輸入。
 
