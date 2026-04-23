@@ -64,15 +64,41 @@ internal class ZhuyinSentencePromptBuilder {
                 }
                 appendLine("---")
                 appendLine("Examples:")
-                appendLine("sentence: \"我想ㄔ\" -> answers: 我想吃點東西。,我想吃藥。,我想出門。")
-                appendLine("sentence: \"ㄌㄨㄣˊy\" -> answers: 輪椅不太舒服，請幫我調整。,輪椅可以推高一點。")
-                appendLine("sentence: \"ㄊㄥˊㄊㄥˊ\" -> answers: 疼疼的地方在這裡。,這裡疼，請輕一點。")
+                appendLine("sentence: \"我想ㄔ\" -> answers: 吃|點|東西|。,吃|藥|。,出|門|。")
+                appendLine("sentence: \"好ㄇ\" -> answers: 好|嗎|？, 好|啊|！")
+                appendLine("sentence: \"ㄊㄥˊㄊㄥˊ\" -> answers: 疼|疼|的|地方|在|這裡|。,這|裡|疼|，|請|輕|一點|。")
                 appendLine("---")
                 appendLine("指令：")
                 appendLine("1. 根據「目前輸入」的意圖，預測接下來最可能的 3 個補全內容（Suffix）。")
                 appendLine("2. 嚴禁包含「目前輸入」已有的任何漢字前綴。")
-                appendLine("3. 確保補全後能形成符合日常、醫療、照護情境的台灣口語句子。")
-                appendLine("4. 輸出格式：僅回傳補全內容，以逗號「,」分隔。不要換行，不要解釋。")
+                appendLine("3. 輸出格式：使用「|」符號進行語義分詞（例如：想|去|散步|嗎|？）。")
+                appendLine("4. 標點符號必須獨立為一個片段（例如：。|？|，|！）。")
+                appendLine("5. 以逗號「,」分隔不同的候選語句。不要換行，不要解釋。")
+            }.trim()
+        )
+    }
+}
+
+internal class ZhuyinRefinePromptBuilder {
+    fun build(context: ZhuyinPromptContext): PromptTemplate {
+        return PromptTemplate(
+            systemInstruction = zhuyinSystemInstruction(
+                task = "將用戶輸入的斷碎詞彙或簡短字詞精煉 (Refine) 為一句完整、禮貌且通順的繁體中文對話句子。"
+            ),
+            userPrompt = buildString {
+                appendContext(context)
+                appendLine("原始輸入：${context.text}")
+                appendLine("期望語氣：${context.selectedEmotionPrompt}")
+                appendLine("---")
+                appendLine("Examples:")
+                appendLine("input: \"水 渴\" -> answers: 我口渴了，可以給我一杯水嗎？")
+                appendLine("input: \"醫生 痛\" -> answers: 醫生，我感覺身體有些地方很痛。")
+                appendLine("input: \"外面 走\" -> answers: 我想去外面散散步。")
+                appendLine("---")
+                appendLine("指令：")
+                appendLine("1. 請將「原始輸入」轉換為「一句」最符合語境且通順的完整句子。")
+                appendLine("2. 必須考慮「期望語氣」。")
+                appendLine("3. 輸出格式：直接回傳該精煉後的句子，不要有任何標題或編號。")
             }.trim()
         )
     }

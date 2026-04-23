@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -153,6 +155,16 @@ fun ExperimentScreen(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
+                            onClick = { experimentViewModel.refineInput() },
+                            enabled = !uiState.isLoading && uiState.inputText.isNotBlank()
+                        ) {
+                            Icon(
+                                Icons.Default.AutoFixHigh,
+                                contentDescription = "Refine",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(
                             onClick = { speechController.speak(uiState.inputText) },
                             enabled = uiState.inputText.isNotBlank()
                         ) {
@@ -204,12 +216,17 @@ fun ExperimentScreen(
                             ElevatedButton(
                                 onClick = { experimentViewModel.inputInitialPhrase(phrase) },
                                 modifier = Modifier.heightIn(min = 64.dp),
+                                shape = CircleShape,
                                 colors = androidx.compose.material3.ButtonDefaults.elevatedButtonColors(
                                     containerColor = MaterialTheme.colorScheme.onSurface,
                                     contentColor = MaterialTheme.colorScheme.surface
                                 )
                             ) {
-                                Text(phrase, style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    text = phrase,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     } else {
@@ -217,12 +234,17 @@ fun ExperimentScreen(
                             ElevatedButton(
                                 onClick = { experimentViewModel.applyCandidate(candidate) },
                                 modifier = Modifier.heightIn(min = 64.dp),
+                                shape = CircleShape,
                                 colors = androidx.compose.material3.ButtonDefaults.elevatedButtonColors(
                                     containerColor = MaterialTheme.colorScheme.onSurface,
                                     contentColor = MaterialTheme.colorScheme.surface
                                 )
                             ) {
-                                Text(candidate, style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    text = candidate,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -231,22 +253,39 @@ fun ExperimentScreen(
                 // Sentence Candidates
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     uiState.sentenceCandidates.forEach { candidate ->
-                        Surface(
-                            onClick = { experimentViewModel.applyCandidate(candidate) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            contentColor = MaterialTheme.colorScheme.surface
+                        // Split by | to get segments
+                        val segments = candidate.split("|").filter { it.isNotBlank() }
+                        
+                        FlowRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = stripPrefix(uiState.inputText, candidate),
-                                modifier = Modifier.padding(16.dp),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Medium
-                            )
+                            segments.forEachIndexed { index, segment ->
+                                Surface(
+                                    onClick = {
+                                        // Apply segments from start up to current index
+                                        val toApply = segments.take(index + 1).joinToString("")
+                                        experimentViewModel.applyCandidate(toApply)
+                                    },
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    contentColor = MaterialTheme.colorScheme.surface,
+                                    tonalElevation = 4.dp
+                                ) {
+                                    Text(
+                                        text = segment,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
                 }
