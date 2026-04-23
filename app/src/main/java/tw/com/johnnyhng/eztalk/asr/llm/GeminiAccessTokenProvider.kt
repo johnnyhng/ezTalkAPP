@@ -22,13 +22,15 @@ internal class GoogleAuthGeminiAccessTokenProvider(
             val account = GoogleSignIn.getLastSignedInAccount(appContext)?.account
                 ?: throw IllegalStateException("No signed-in Google account available")
             Log.i(TAG, "Gemini OAuth token request started for account=${account.name}")
+            val startTime = System.currentTimeMillis()
 
             GoogleAuthUtil.getToken(
                 appContext,
                 account,
                 GEMINI_OAUTH_SCOPE
             ).also {
-                Log.i(TAG, "Gemini OAuth token request succeeded tokenLength=${it.length}")
+                val duration = System.currentTimeMillis() - startTime
+                Log.i(TAG, "Gemini OAuth token request succeeded tokenLength=${it.length} duration=${duration}ms")
             }
         }.onFailure { error ->
             Log.w(TAG, "Gemini OAuth token request failed", error)
