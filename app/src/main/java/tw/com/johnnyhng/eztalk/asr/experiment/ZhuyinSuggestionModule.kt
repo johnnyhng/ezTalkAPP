@@ -17,15 +17,16 @@ internal class ZhuyinSuggestionModule(
     private val sentencePromptBuilder: ZhuyinSentencePromptBuilder = ZhuyinSentencePromptBuilder()
 ) : ZhuyinSuggestionProvider {
     override suspend fun suggestWords(context: ZhuyinPromptContext): Result<List<String>> {
-        return generateCandidates(wordPromptBuilder.build(context))
+        return generateCandidates(wordPromptBuilder.build(context), context)
     }
 
     override suspend fun suggestSentences(context: ZhuyinPromptContext): Result<List<String>> {
-        return generateCandidates(sentencePromptBuilder.build(context))
+        return generateCandidates(sentencePromptBuilder.build(context), context)
     }
 
     private suspend fun generateCandidates(
-        prompt: tw.com.johnnyhng.eztalk.asr.prompt.PromptTemplate
+        prompt: tw.com.johnnyhng.eztalk.asr.prompt.PromptTemplate,
+        context: ZhuyinPromptContext
     ): Result<List<String>> {
         val provider = llmProvider ?: return Result.success(emptyList())
         if (llmModel.isBlank() || llmModel == "none") return Result.success(emptyList())
@@ -34,8 +35,11 @@ internal class ZhuyinSuggestionModule(
             model = llmModel,
             systemInstruction = prompt.systemInstruction,
             userPrompt = prompt.userPrompt,
-            outputFormat = LlmOutputFormat.JSON,
-            schemaHint = prompt.expectedResponseSchema
+            outputFormat = LlmOutputFormat.TEXT, // 切換為純文字
+            schemaHint = prompt.expectedResponseSchema,
+            stopSequences = context.stopSequences,
+            maxOutputTokens = context.maxOutputTokens,
+            temperature = context.temperature
         )
 
         return provider.generate(request).map { response ->

@@ -109,15 +109,25 @@ internal class DefaultGeminiApiClient(
     }
 
     private fun buildGenerationConfig(request: LlmRequest): JSONObject? {
-        if (request.outputFormat != LlmOutputFormat.JSON && request.schemaHint.isNullOrBlank()) {
-            return null
+        val config = JSONObject()
+
+        if (request.outputFormat == LlmOutputFormat.JSON) {
+            config.put("responseMimeType", "application/json")
         }
 
-        return JSONObject().apply {
-            if (request.outputFormat == LlmOutputFormat.JSON) {
-                put("responseMimeType", "application/json")
-            }
+        if (request.stopSequences.isNotEmpty()) {
+            config.put("stopSequences", JSONArray(request.stopSequences))
         }
+
+        request.maxOutputTokens?.let {
+            config.put("maxOutputTokens", it)
+        }
+
+        request.temperature?.let {
+            config.put("temperature", it)
+        }
+
+        return if (config.length() > 0) config else null
     }
 
     private fun readResponseBody(connection: HttpURLConnection): String {

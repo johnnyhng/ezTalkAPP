@@ -99,15 +99,30 @@ internal class ExperimentViewModel(
         }
 
         viewModelScope.launch {
+            val startTime = System.currentTimeMillis()
             val context = _uiState.value.copy(inputText = text).toZhuyinPromptContext()
             
             val wordResult = withTimeoutOrNull(10000L) {
-                suggestionProvider.suggestWords(context)
+                suggestionProvider.suggestWords(
+                    context.copy(
+                        stopSequences = listOf("\n"),
+                        maxOutputTokens = 1024,
+                        temperature = 0.1f
+                    )
+                )
             } ?: Result.failure(Exception("Word suggestion request timed out after 10s"))
 
             val sentenceResult = withTimeoutOrNull(10000L) {
-                suggestionProvider.suggestSentences(context)
+                suggestionProvider.suggestSentences(
+                    context.copy(
+                        stopSequences = listOf("\n"),
+                        maxOutputTokens = 1024,
+                        temperature = 0.2f
+                    )
+                )
             } ?: Result.failure(Exception("Sentence suggestion request timed out after 10s"))
+
+            val duration = System.currentTimeMillis() - startTime
 
             _uiState.update { state ->
                 // Guard against stale text
@@ -118,6 +133,7 @@ internal class ExperimentViewModel(
                     isThinking = false,
                     isSentenceThinking = false,
                     hasRequestedSuggestions = true,
+                    lastRequestDurationMs = duration,
                     wordCandidates = wordResult.getOrDefault(emptyList()),
                     sentenceCandidates = sentenceResult.getOrDefault(emptyList()),
                     errorMessage = if (wordResult.isFailure) wordResult.exceptionOrNull()?.message

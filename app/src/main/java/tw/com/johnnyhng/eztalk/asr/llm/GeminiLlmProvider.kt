@@ -23,6 +23,7 @@ internal class GeminiLlmProvider(
     override suspend fun generate(
         request: LlmRequest
     ): Result<LlmResponse> {
+        val startTime = System.currentTimeMillis()
         Log.i(
             TAG,
             "Gemini generate start model=${request.model.ifBlank { config.model }} " +
@@ -45,12 +46,15 @@ internal class GeminiLlmProvider(
 
         val model = request.model.ifBlank { config.model }
         Log.i(TAG, "Gemini generate acquired OAuth token for model=$model")
-        return executeGenerateContent(
+        val result = executeGenerateContent(
             model = model,
             token = token,
             request = request,
             allowRetryAfterUnauthorized = true
         )
+        val duration = System.currentTimeMillis() - startTime
+        Log.i(TAG, "Gemini generate completed for model=$model duration=${duration}ms success=${result.isSuccess}")
+        return result
     }
 
     private suspend fun executeGenerateContent(
@@ -181,9 +185,6 @@ internal class GeminiLlmProvider(
                 ?.optJSONArray("parts")
                 ?.let(::extractPartsText)
                 .orEmpty()
-                .ifBlank {
-                    throw IllegalArgumentException("Gemini response did not contain text parts")
-                }
 
             LlmResponse(
                 rawText = rawText,
@@ -192,9 +193,13 @@ internal class GeminiLlmProvider(
             )
         }.fold(
             onSuccess = {
+                val usageInfo = it.usage?.let { u ->
+                    "usage=[in:${u.inputTokens}, out:${u.outputTokens}, total:${u.totalTokens}]"
+                } ?: "usage=unknown"
                 Log.i(
                     TAG,
-                    "Gemini response parsed successfully rawTextLength=${it.rawText.length} finishReason=${it.finishReason} rawTextPreview=${it.rawText.take(200)}"
+                    "Gemini response parsed successfully rawTextLength=${it.rawText.length} " +
+                        "finishReason=${it.finishReason} $usageInfo rawTextPreview=${it.rawText.take(200)}"
                 )
                 Result.success(it)
             },

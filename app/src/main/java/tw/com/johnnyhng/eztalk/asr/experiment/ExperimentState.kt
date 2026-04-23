@@ -18,6 +18,7 @@ internal data class ExperimentUiState(
     val isThinking: Boolean = false,
     val isSentenceThinking: Boolean = false,
     val hasRequestedSuggestions: Boolean = false,
+    val lastRequestDurationMs: Long = 0L,
     val errorMessage: String? = null
 )
 

@@ -120,6 +120,14 @@ fun ExperimentScreen(
                         label = { Text("${emotion.emoji} ${emotion.label}") }
                     )
                 }
+                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                if (uiState.lastRequestDurationMs > 0) {
+                    Text(
+                        text = "${uiState.lastRequestDurationMs}ms",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
             }
 
             // 1. Canvas: Text Area (Full Width)

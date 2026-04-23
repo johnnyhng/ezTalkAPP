@@ -12,7 +12,10 @@ internal data class ZhuyinPromptContext(
     val scenarioInstruction: String? = null,
     val lastInputSpeech: String? = null,
     val lastOutputSpeech: String? = null,
-    val conversationHistory: List<String> = emptyList()
+    val conversationHistory: List<String> = emptyList(),
+    val stopSequences: List<String> = emptyList(),
+    val maxOutputTokens: Int? = null,
+    val temperature: Float? = null
 )
 
 internal class ZhuyinWordPromptBuilder {
@@ -20,24 +23,19 @@ internal class ZhuyinWordPromptBuilder {
         val sanitizedText = context.text.trim()
         return PromptTemplate(
             systemInstruction = zhuyinSystemInstruction(
-                task = "預測目前繁體中文輸入後方最可能的 6 個後續字詞。",
-                customInstruction = context.scenarioInstruction
+                task = "預測目前繁體中文輸入後方最可能的 6 個後續字詞。"
             ),
             userPrompt = buildString {
                 appendContext(context)
                 appendLine("目前輸入：$sanitizedText")
                 appendLine("語氣：${context.selectedEmotionPrompt}")
-                if (context.scenarioKeywords.isNotEmpty()) {
-                    appendLine("優先使用關鍵字：${context.scenarioKeywords.joinToString("、")}")
-                }
                 appendLine("---")
                 appendLine("指令：")
-                appendLine("1. 請預測接在「目前輸入」之後最可能的 6 個候選字詞。")
+                appendLine("1. 請預測接在「目前輸入」之後最可能的「剛好 6 個」候選字詞。")
                 appendLine("2. 嚴禁包含「目前輸入」中最後一個完整的詞彙。")
-                appendLine("3. 輸出必須僅包含預測的補全部分，不要重複前綴。")
+                appendLine("3. 輸出格式：僅回傳候選詞，以繁體半形逗號「,」分隔。不要換行，不要解釋。")
                 appendLine("4. 若輸入尾端有注音符號，請先將其轉換為對應漢字後再預測接續詞。")
-            }.trim(),
-            expectedResponseSchema = zhuyinCandidatesSchema()
+            }.trim()
         )
     }
 }
@@ -47,8 +45,7 @@ internal class ZhuyinSentencePromptBuilder {
         val sanitizedText = context.text.trim()
         return PromptTemplate(
             systemInstruction = zhuyinSystemInstruction(
-                task = "根據目前繁體中文輸入的意圖，預測接下來最可能的 3 個完整句子的補全部分。",
-                customInstruction = context.scenarioInstruction
+                task = "根據目前繁體中文輸入的意圖，預測接下來最可能的 3 個完整句子的補全部分。"
             ),
             userPrompt = buildString {
                 appendContext(context)
@@ -59,28 +56,26 @@ internal class ZhuyinSentencePromptBuilder {
                 }
                 appendLine("---")
                 appendLine("指令：")
-                appendLine("1. 根據「目前輸入」的意圖，預測接下來最可能的 3 個補全內容。")
+                appendLine("1. 根據「目前輸入」的意圖，預測接下來最可能的「剛好 3 個」補全內容。")
                 appendLine("2. 嚴禁在輸出中包含「目前輸入」已有的任何漢字前綴。")
-                appendLine("3. 每個候選必須能與「目前輸入」自然連接形成完整、通順的台灣口語句子。")
-                appendLine("4. 優先使用台灣常用語助詞（啦、喔、呢、吧）。")
-            }.trim(),
-            expectedResponseSchema = zhuyinCandidatesSchema()
+                appendLine("3. 輸出格式：僅回傳補全內容，以繁體半形逗號「,」分隔。不要換行，不要解釋。")
+                appendLine("4. 每個候選必須能與「目前輸入」自然連接形成完整、通順的台灣口語句子。")
+            }.trim()
         )
     }
 }
 
 private fun zhuyinSystemInstruction(task: String, customInstruction: String? = null): String {
     return """
-        你是一位服務台灣繁體中文使用者的溝通助手 (AAC Assistant)，服務對象為表達能力受限的人。
+        你是一位服務台灣繁體中文使用者的溝通助手 (AAC Assistant)。
         你的核心目標是：透過預測後續詞句，降低使用者選擇與點擊的成本。
         $task
         ${customInstruction?.let { "\n附加情境指令：$it" } ?: ""}
 
         規則：
         - 回覆必須完全使用繁體中文（台灣習慣）。
-        - 輸出格式必須為 JSON array，包含在 "candidates" 欄位中。
         - 嚴禁重複：候選內容絕對不能包含「目前輸入」末尾已有的漢字。
-        - 簡潔：只回傳預測的補全文字。
+        - 簡潔：只回傳預測的補全文字，以逗號分隔。不要換行，不要解釋。
     """.trimIndent()
 }
 
