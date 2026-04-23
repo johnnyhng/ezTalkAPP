@@ -27,10 +27,11 @@ Once the app is installed, you can start using it for speech recognition. The ma
 
 ## References
 
-This project is based on the following open-source projects:
+This project is based on or references the following open-source projects and initiatives:
 
 *   **Sherpa-ONNX**: [https://github.com/k2fsa/sherpa-onnx](https://github.com/k2fsa/sherpa-onnx)
 *   **SenseVoice**: [https://github.com/FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice)
+*   **Google Project VOICE**: [https://github.com/google/project-voice](https://github.com/google/project-voice) (Referenced for Traditional Chinese Zhuyin auxiliary input workflow)
 
 ## Contributing
 

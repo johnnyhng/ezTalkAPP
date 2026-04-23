@@ -31,6 +31,7 @@ The main navigation destinations are:
 
 - `Home`
 - `Translate`
+- `Experiment`
 - `DataCollect`
 - `Speaker`
 - `FileManager`
@@ -64,6 +65,11 @@ Their roles are:
   - focuses on one active transcript at a time
   - fetches local and remote candidates for that transcript
   - runs optional LLM correction after initial recognition and after utterance variant refresh
+- [ExperimentScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/ExperimentScreen.kt)
+  - high-contrast, landscape-optimized AAC auxiliary input flow
+  - implements exclusionary prediction (suffix-only) for Traditional Chinese Zhuyin
+  - provides a scrollable interface for word and sentence candidates
+  - features full-screen loading overlays and TTS output
 - [DataCollectScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/DataCollectScreen.kt)
   - recording flow for a prescribed text prompt
   - supports sequence mode, retry, skip, and auto-advance
@@ -109,6 +115,13 @@ The main state/control classes live under [app/src/main/java/tw/com/johnnyhng/ez
   - owns local speaker explorer state
   - owns local folder / txt rename dialogs and progress state
   - coordinates Firebase Auth state and Firestore speaker sync state
+- [ExperimentViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/experiment/ExperimentViewModel.kt)
+  - coordinates the Project VOICE auxiliary input flow
+  - triggers synchronized parallel requests for word and sentence suggestions
+  - manages scenario selection and debounced input triggers
+- [ExperimentContextRepository.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/experiment/ExperimentContextRepository.kt)
+  - fetches scenario-specific keywords and instructions from Firestore
+  - provides local fallback scenarios (General, Medical, Coding)
 
 ### 3. Utilities
 
@@ -136,6 +149,17 @@ The key utility files live under [app/src/main/java/tw/com/johnnyhng/eztalk/asr/
 - [GoogleSignInManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/auth/GoogleSignInManager.kt)
   - exchanges the existing Google sign-in flow into Firebase Auth
   - keeps Firebase sign-in aligned with app sign-in state
+- [ZhuyinTextEngine.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/experiment/ZhuyinTextEngine.kt)
+  - implements trailing Zhuyin stripping and candidate appending
+  - provides prefix-stripping logic for UI display consistency
+- [ZhuyinPromptBuilders.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/experiment/ZhuyinPromptBuilders.kt)
+  - constructs exclusionary prediction prompts for word and sentence suggestions
+  - injects scenario-specific keywords and instructions
+- [ZhuyinSuggestionModule.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/experiment/ZhuyinSuggestionModule.kt)
+  - orchestrates LLM requests for Zhuyin auxiliary input
+  - handles result mapping and error reporting
+- [ZhuyinCandidateParser.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/experiment/ZhuyinCandidateParser.kt)
+  - robust JSON parser handling varied LLM response formats (objects, arrays, text-wrapped objects)
 
 ### 4. Speech engine wrapper
 
@@ -307,6 +331,27 @@ Current limitations:
 - no remote folder rename
 - no remote diff preview beyond overwrite confirmation
 - no cancellation of an already-running cloud job after the dialog is dismissed
+
+## Experiment feature flow
+
+The Experiment feature (Project VOICE integration) is an AI-assisted input workflow designed for Traditional Chinese users.
+
+### Key concepts
+
+- **Exclusionary Prediction**: To minimize selection cost, Gemini is instructed to return only the predicted completion suffix, strictly excluding any prefix already present in the input box.
+- **Continuous Selection**: By selecting suggestions, the user builds sentences through incremental "Append" actions rather than full-text replacement.
+- **Scenario Context**: Suggestions are weighted by domain-specific metadata (keywords and instructions) fetched from Firestore.
+
+### Runtime flow
+
+1. **Scenario Discovery**: On startup, `ExperimentViewModel` fetches scenario profiles (e.g., Medical, Coding) from Firestore `experiment_contexts`.
+2. **Reactive Trigger**: User input or "Initial Phrase" selection updates `inputText`.
+3. **Parallel Fetching**: `ExperimentViewModel` launches two parallel `async` requests via Gemini for:
+    - **Word Candidates**: Suffix-only character/word completions.
+    - **Sentence Candidates**: Suffix-only phrase/sentence continuations.
+4. **Synchronization**: The UI is updated only after both requests complete (or time out after 10 seconds), preventing partial state flicker.
+5. **UI Rendering**: Candidates are displayed in a high-contrast, large-target layout. Sentence candidates are visually stripped of prefixes to match the word completion style.
+6. **Action**: Selection triggers `applyCandidate`, which strips trailing Zhuyin symbols and appends the suffix.
 
 ## Main recognition flow
 

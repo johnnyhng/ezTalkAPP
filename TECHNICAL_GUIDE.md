@@ -35,6 +35,13 @@ ezTalkAPP 提供多種專門的錄音情境，每種模式對應不同的 UI 邏
     *   這種「多版本並存」的策略能有效彌補單一辨識結果錯誤的問題。
 *   **邏輯：** 當倒數結束，系統會將這組「唯一辨識結果集合」連同「文件行內容」發送至 **LLM (Gemini)** 進行語義判定。
 
+### 1.4 實驗輔助輸入模式 (`EXPERIMENT`)
+*   **行為：** 整合 Google Project VOICE 技術，提供**排除式預測 (Exclusionary Prediction)** 的輔助輸入工作流。
+*   **互動模型：** 採用「連續點選」邏輯。
+    *   **排除冗餘：** LLM 的 Prompt 嚴禁包含輸入框已有的漢字前綴，僅回傳後續補全部分（Suffix）。
+    *   **追加模式 (Append-only)：** 點選建議後，系統會自動剔除尾端注音符號並追加補全文字，將「打字」轉化為一系列的「意圖選擇」。
+*   **視覺設計：** 符合 Fitts's Law，使用高對比深色背景、加大觸控面積（高度 64dp+）與加大間距（12dp+），適配橫向螢幕操作。
+
 ---
 
 ## 2. Speaker 模式下的語音控制與 Gemini 整合
@@ -81,7 +88,28 @@ User:
 
 ---
 
-## 3. Home / Translate 的 LLM Correction 與 Utterance Variants
+## 3. Experiment 模式下的排除式預測與 Firestore 整合
+
+Experiment 分頁實現了一套針對繁體中文優化的 AI 輔助輸入方案。
+
+### 3.1 排除式預測 (Exclusionary Prediction) 邏輯
+
+為了將選擇成本降至最低，系統在 Prompt 層級實施了嚴格的排除規則：
+*   **指令：** `嚴禁在輸出中包含「目前輸入」已有的任何漢字前綴。`
+*   **字詞建議：** 側重於「注音轉漢字」與「下一個詞」的預測。
+*   **語句建議：** 根據意圖生成後續補全，並優先使用台灣口語助詞（啦、喔、呢、吧）。
+*   **優點：** UI 不顯示重複文字，點選即追加，實現流暢的「意圖流」輸入。
+
+### 3.2 Firestore 情境動態注入 (Scenario Injection)
+
+系統支援從雲端動態調整預測權重：
+*   **資料來源：** Firestore `experiment_contexts` 集合。
+*   **欄位：** `keywords` (關鍵字清單), `customInstruction` (情境專屬指令)。
+*   **運作：** 當使用者選取「醫療」或「工程」情境時，對應的術語會被注入 Prompt，使 Gemini 生成更具領域專業性的建議。
+
+---
+
+## 4. Home / Translate 的 LLM Correction 與 Utterance Variants
 
 Home 與 Translate 的 LLM correction 不是直接信任單一 ASR 結果，而是以同一段語音中累積出的 `utteranceVariants` 作為主要輸入。這個設計讓模型能在多個可能辨識結果之間推理，降低單一 ASR 誤字造成的錯誤。
 
@@ -159,7 +187,7 @@ Home 支援可選的中文轉英文背景翻譯：
 | **enableTranslateLlmCorrection** | `UserSettings` | `false` | 啟用 Translate LLM correction。候選更新後若 variants 改變且文字未被手動改動，會再次修正。 |
 | **includeRemoteCandidatesInUtteranceVariants** | `UserSettings` | `true` | 控制 backend remote candidates 是否合併進 `utteranceVariants`，影響 LLM correction 的候選輸入。 |
 | **enableHomeEnglishTranslation** | `UserSettings` | `false` | 在 Home 每行下方顯示英文翻譯，並支援英文 TTS。 |
-| **geminiModel** | `UserSettings` | 依設定 | LLM correction / English translation / Speaker semantic parse 使用的 Gemini model。 |
+| **geminiModel** | `UserSettings` | 依設定 | LLM correction / English translation / Speaker semantic parse / **Experiment suggestions** 使用的 Gemini model。 |
 
 ---
 
