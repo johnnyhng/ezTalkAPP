@@ -39,6 +39,12 @@ import tw.com.johnnyhng.eztalk.asr.widgets.*
 import java.io.File
 import java.util.*
 
+private data class HomeAutoplayQueueItem(
+    val wavPath: String,
+    val text: String,
+    val confidence: Float
+)
+
 private fun logHomeJsonlUpdate(reason: String, transcript: Transcript) {
     Log.d(
         TAG,
@@ -80,6 +86,8 @@ fun HomeScreen(
     val correctionJobs = remember { mutableMapOf<String, Job>() }
     val correctionRunning = remember { mutableStateMapOf<String, Boolean>() }
     val translationJobs = remember { mutableMapOf<String, Job>() }
+    val autoplayQueue = remember { mutableStateListOf<HomeAutoplayQueueItem>() }
+    var activeAutoplayWavPath by remember { mutableStateOf<String?>(null) }
 
     // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
@@ -200,26 +208,83 @@ fun HomeScreen(
         }
     }
 
-    fun autoplayHomeTranscript(index: Int, text: String) {
-        val item = resultList.getOrNull(index) ?: return
-        MediaController.stop()
-        englishSpeechController.stop()
-        speechController.speak(text)
-        val updatedTranscript = reduceTranscriptAfterConfirmation(
-            transcript = item,
-            newText = text,
-            lockTranscript = false
-        )
-        updateTranscriptAndRefreshEnglish(
-            index = index,
-            updatedTranscript = updatedTranscript,
-            previousModifiedText = item.modifiedText
-        )
-        coroutineScope.launch(Dispatchers.IO) {
-            val latestTranscript = resultList.getOrNull(index) ?: return@launch
-            logHomeJsonlUpdate("home_autoplay", latestTranscript)
-            persistTranscriptJsonl(context, userSettings.userId, latestTranscript)
+    fun processAutoplayQueue() {
+        if (!shouldAutoplayHome()) return
+        if (activeAutoplayWavPath != null || currentlyPlaying != null || isAnyTtsSpeaking) return
+
+        while (autoplayQueue.isNotEmpty()) {
+            val next = autoplayQueue.removeAt(0)
+            val index = resultList.indexOfFirst { it.wavFilePath == next.wavPath }
+            if (index == -1) continue
+
+            val current = resultList[index]
+            if (current.checked || !current.mutable || next.text.isBlank()) continue
+
+            MediaController.stop()
+            englishSpeechController.stop()
+            activeAutoplayWavPath = next.wavPath
+            val started = speechController.speak(
+                text = next.text,
+                onDone = {
+                    coroutineScope.launch {
+                        val latestIndex = resultList.indexOfFirst { it.wavFilePath == next.wavPath }
+                        if (latestIndex != -1) {
+                            val latest = resultList[latestIndex]
+                            if (!latest.checked && latest.mutable) {
+                                val updatedTranscript = reduceTranscriptAfterConfirmation(
+                                    transcript = latest,
+                                    newText = next.text,
+                                    lockTranscript = false
+                                )
+                                updateTranscriptAndRefreshEnglish(
+                                    index = latestIndex,
+                                    updatedTranscript = updatedTranscript,
+                                    previousModifiedText = latest.modifiedText
+                                )
+                                withContext(Dispatchers.IO) {
+                                    val persisted = resultList.getOrNull(latestIndex) ?: return@withContext
+                                    logHomeJsonlUpdate(
+                                        "home_autoplay_queue_confidence_${"%.2f".format(Locale.US, next.confidence)}",
+                                        persisted
+                                    )
+                                    persistTranscriptJsonl(context, userSettings.userId, persisted)
+                                }
+                            }
+                        }
+                        activeAutoplayWavPath = null
+                        processAutoplayQueue()
+                    }
+                },
+                onError = {
+                    activeAutoplayWavPath = null
+                    processAutoplayQueue()
+                }
+            )
+            if (!started) {
+                activeAutoplayWavPath = null
+                continue
+            }
+            return
         }
+    }
+
+    fun enqueueAutoplayTranscript(wavPath: String, text: String, confidence: Float) {
+        if (!shouldAutoplayHome()) return
+        if (confidence < 0.9f || text.isBlank()) return
+        if (activeAutoplayWavPath == wavPath) return
+
+        val existingIndex = autoplayQueue.indexOfFirst { it.wavPath == wavPath }
+        val queueItem = HomeAutoplayQueueItem(
+            wavPath = wavPath,
+            text = text,
+            confidence = confidence
+        )
+        if (existingIndex == -1) {
+            autoplayQueue.add(queueItem)
+        } else {
+            autoplayQueue[existingIndex] = queueItem
+        }
+        processAutoplayQueue()
     }
 
     fun launchBackgroundCorrection(transcript: Transcript) {
@@ -249,37 +314,45 @@ fun HomeScreen(
                         }
                 }
 
-                val autoplayIndexAndText = withContext(Dispatchers.Main) {
+                val autoplayPayload = withContext(Dispatchers.Main) {
                     val index = resultList.indexOfFirst { it.wavFilePath == wavPath }
                     if (index == -1) {
-                        null to null
+                        null
                     } else {
                         val current = resultList[index]
                         if (!current.mutable || current.modifiedText != expectedModifiedText) {
-                            null to null
+                            null
                         } else if (correction == null || correction.correctedText == current.modifiedText) {
-                            val autoplayPayload = if (
+                            if (
                                 shouldAutoplayHome() &&
                                 !current.checked &&
-                                current.modifiedText.isNotBlank()
+                                correction != null
                             ) {
-                                index to current.modifiedText
+                                HomeAutoplayQueueItem(
+                                    wavPath = current.wavFilePath,
+                                    text = current.modifiedText,
+                                    confidence = correction.confidence
+                                )
                             } else {
                                 null
                             }
-                            current to autoplayPayload
                         } else {
                             current.copy(
                                 modifiedText = correction.correctedText,
                                 englishTranslation = ""
                             ).also {
                                 resultList[index] = it
-                            } to if (
+                            }
+                            if (
                                 shouldAutoplayHome() &&
                                 !current.checked &&
                                 correction.correctedText.isNotBlank()
                             ) {
-                                index to correction.correctedText
+                                HomeAutoplayQueueItem(
+                                    wavPath = current.wavFilePath,
+                                    text = correction.correctedText,
+                                    confidence = correction.confidence
+                                )
                             } else {
                                 null
                             }
@@ -287,8 +360,9 @@ fun HomeScreen(
                     }
                 }
 
-                val updatedTranscript = autoplayIndexAndText.first
-                val autoplayPayload = autoplayIndexAndText.second
+                val updatedTranscript = withContext(Dispatchers.Main) {
+                    resultList.find { it.wavFilePath == wavPath }
+                }
 
                 if (updatedTranscript != null && updatedTranscript.modifiedText != expectedModifiedText) {
                     launchBackgroundEnglishTranslation(updatedTranscript)
@@ -297,7 +371,13 @@ fun HomeScreen(
                         persistTranscriptJsonl(context, userSettings.userId, updatedTranscript)
                     }
                 }
-                autoplayPayload?.let { (index, text) -> autoplayHomeTranscript(index, text) }
+                autoplayPayload?.let {
+                    enqueueAutoplayTranscript(
+                        wavPath = it.wavPath,
+                        text = it.text,
+                        confidence = it.confidence
+                    )
+                }
             } finally {
                 correctionJobs.remove(wavPath)
                 correctionRunning.remove(wavPath)
@@ -558,6 +638,8 @@ fun HomeScreen(
             speechController.stop()
             englishSpeechController.stop()
             recognitionQueue.close()
+            autoplayQueue.clear()
+            activeAutoplayWavPath = null
             correctionJobs.values.forEach { it.cancel() }
             correctionJobs.clear()
             correctionRunning.clear()
@@ -578,6 +660,21 @@ fun HomeScreen(
                         it.englishTranslation.isBlank()
                 }
                 .forEach(::launchBackgroundEnglishTranslation)
+        }
+    }
+
+    LaunchedEffect(
+        userSettings.autoplay,
+        userSettings.enableHomeLlmCorrection,
+        userSettings.enableTtsFeedback,
+        currentlyPlaying,
+        isAnyTtsSpeaking
+    ) {
+        if (!shouldAutoplayHome()) {
+            autoplayQueue.clear()
+            activeAutoplayWavPath = null
+        } else {
+            processAutoplayQueue()
         }
     }
 
