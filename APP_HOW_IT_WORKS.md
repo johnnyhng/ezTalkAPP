@@ -82,7 +82,7 @@ Their roles are:
   - supports rename/delete/edit/playback for txt files
   - supports Firebase-backed cloud upload/import/delete for speaker folders
 - [SettingsScreen.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/screens/SettingsScreen.kt)
-  - edits persisted user settings such as backend URL, model selection, timing, and TTS feedback mode
+  - edits persisted user settings such as backend URL, model selection, timing, TTS feedback mode, and Home autoplay
 
 ### 2. View models and managers
 
@@ -201,6 +201,7 @@ Important settings include:
 - `inlineEdit`
 - `backendUrl`
 - `enableTtsFeedback`
+- `autoplay`
 - `selectedModelName`
 - `enableHomeLlmCorrection`
 - `enableTranslateLlmCorrection`
@@ -440,6 +441,16 @@ Home LLM correction is intentionally asynchronous:
 - if correction changes `modifiedText`, `englishTranslation` is cleared and translation is re-run when Home English translation is enabled
 - every persisted update logs `utteranceVariants` count and content so logs can verify which variants were used
 
+Home autoplay is a second asynchronous layer on top of correction:
+
+- it is controlled by `autoplay`
+- it only runs when `enableHomeLlmCorrection` is on and `enableTtsFeedback` is off
+- only correction results with `confidence >= 0.9` enter the autoplay queue
+- the queue is keyed by `wavFilePath`, so a later higher-confidence correction for the same item replaces the earlier queued payload
+- autoplay waits until Home is not in countdown / recognizing state, no WAV is playing, no TTS is speaking, and ASR model loading is idle
+- if Home was recording before autoplay starts, recording is stopped before TTS and then restarted after TTS finishes
+- autoplay confirms the row after TTS completes, but does not lock the transcript because backend feedback is disabled in this mode
+
 Home English translation is also asynchronous:
 
 - it is controlled by `enableHomeEnglishTranslation`
@@ -487,6 +498,11 @@ Home has a dedicated TTS confirmation flow:
 - if the item is already `removable = true`:
   - TTS is still allowed
   - backend feedback is skipped
+- if `autoplay` is on:
+  - Home may also enqueue a background TTS-confirm action after LLM correction
+  - this autoplay path never calls backend feedback
+  - only corrections with `confidence >= 0.9` are eligible
+  - playback waits for a safe gap instead of interrupting countdown / recognizing state
 
 The edit dialog used by Home also routes its TTS-confirm behavior back into Home so that the same locking/feedback rules apply there.
 
@@ -711,6 +727,11 @@ There are two different audio output paths:
 - spoken text output through Android `TextToSpeech`
 
 The UI generally tries to avoid recording while playback or TTS is active. This prevents mixing states such as recording while a clip is being replayed or while synthesized speech is still speaking.
+
+Home autoplay slightly extends this rule:
+
+- autoplay TTS is deferred while Home is recognizing speech / showing countdown
+- if autoplay begins while Home had already been recording, it temporarily stops recording and restores that recording state after TTS completes
 
 ## Important design choices
 

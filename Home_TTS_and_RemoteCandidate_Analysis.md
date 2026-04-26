@@ -226,3 +226,68 @@
 - `saveJsonl()` 是覆寫，不是 append，因此任何欄位遺漏都可能在覆寫時消失。
 - `getRemoteCandidates()` 有刻意先 reread jsonl，這是在避免和使用者編輯 / TTS 確認流程互相覆蓋。
 - TTS feedback 成功後會把該筆 `mutable` 設成 `false`，這會直接改變 Home 列表上該筆資料後續是否還能再按 TTS 或編輯。
+
+## 11. 新增的 Home autoplay queue 行為
+
+這是獨立於「使用者手動按 TTS」之外的另一條確認路徑。
+
+### 11.1 什麼情況會進 autoplay queue
+
+- 需要 `userSettings.autoplay == true`
+- 同時需要：
+  - `userSettings.enableHomeLlmCorrection == true`
+  - `userSettings.enableTtsFeedback == false`
+- 只有 LLM correction 的結果才可能進 queue。
+- 即使 correction 已經被自動套用，仍然只有 `confidence >= 0.9` 的句子會進 queue。
+
+### 11.2 queue 的去重與更新方式
+
+- queue 以 `wavFilePath` 當 key。
+- 同一筆 transcript 若先後收到多次高信心 correction：
+  - 不會排出多筆
+  - 而是用最新的 `text + confidence` 覆蓋舊的 queue item
+
+### 11.3 queue 何時真的開始播放
+
+Autoplay 不會因為 correction 一回來就立刻播放，而是要等以下條件都成立：
+
+- `!isRecognizingSpeech`
+- `countdownProgress <= 0f`
+- `currentlyPlaying == null`
+- `!isAnyTtsSpeaking`
+- `!isAsrModelLoading`
+
+這表示：
+
+- 只要 Home 還在倒數 / 語音辨識視窗中，就不會 autoplay。
+- autoplay 不要求當下 `isStarted == true`。
+
+### 11.4 autoplay 與錄音狀態的互動
+
+- 若 autoplay 開始前 Home 原本正在錄音：
+  - 先停止錄音
+  - 播放 TTS
+  - 播放完成後再恢復錄音
+- 若 autoplay 開始前原本沒有在錄音：
+  - 就只播 TTS
+  - 不會額外啟動錄音
+
+這是「restore the previous recording state」的邏輯，而不是單純要求 autoplay 只能在錄音中發生。
+
+### 11.5 autoplay 完成後怎麼寫回 transcript / jsonl
+
+- autoplay 播完後才會做確認，不是在開播前就先改狀態。
+- 確認後會把該筆 transcript 更新成：
+  - `checked = true`
+- 但因為這條路徑明確要求 `enableTtsFeedback == false`，所以：
+  - 不會呼叫 backend feedback
+  - 不會把 `mutable` 改成 `false`
+  - 不會把 `removable` 改成 `true`
+- 最後仍然會把最新 transcript 狀態覆寫回同一份 jsonl。
+
+### 11.6 與手動 TTS 的差異
+
+- 手動 TTS 是使用者直接觸發。
+- autoplay queue 是 LLM correction 背景流程觸發。
+- 手動 TTS 可以在 `enableTtsFeedback` 開啟時走 feedback / lock transcript。
+- autoplay queue 明確只在 `enableTtsFeedback == false` 時運作，因此它永遠不會走 feedback 分支。
