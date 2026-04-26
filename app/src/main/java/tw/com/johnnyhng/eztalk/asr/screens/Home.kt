@@ -88,6 +88,7 @@ fun HomeScreen(
     val translationJobs = remember { mutableMapOf<String, Job>() }
     val autoplayQueue = remember { mutableStateListOf<HomeAutoplayQueueItem>() }
     var activeAutoplayWavPath by remember { mutableStateOf<String?>(null) }
+    var restoreRecordingAfterAutoplay by remember { mutableStateOf(false) }
 
     // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
@@ -135,6 +136,14 @@ fun HomeScreen(
         return userSettings.autoplay &&
             userSettings.enableHomeLlmCorrection &&
             !userSettings.enableTtsFeedback
+    }
+
+    fun canStartAutoplayNow(): Boolean {
+        return !isRecognizingSpeech &&
+            countdownProgress <= 0f &&
+            currentlyPlaying == null &&
+            !isAnyTtsSpeaking &&
+            !isAsrModelLoading
     }
 
     fun launchBackgroundEnglishTranslation(transcript: Transcript) {
@@ -210,7 +219,7 @@ fun HomeScreen(
 
     fun processAutoplayQueue() {
         if (!shouldAutoplayHome()) return
-        if (activeAutoplayWavPath != null || currentlyPlaying != null || isAnyTtsSpeaking) return
+        if (activeAutoplayWavPath != null || !canStartAutoplayNow()) return
 
         while (autoplayQueue.isNotEmpty()) {
             val next = autoplayQueue.removeAt(0)
@@ -220,6 +229,10 @@ fun HomeScreen(
             val current = resultList[index]
             if (current.checked || !current.mutable || next.text.isBlank()) continue
 
+            restoreRecordingAfterAutoplay = isStarted
+            if (restoreRecordingAfterAutoplay) {
+                homeViewModel.toggleRecording()
+            }
             MediaController.stop()
             englishSpeechController.stop()
             activeAutoplayWavPath = next.wavPath
@@ -251,16 +264,30 @@ fun HomeScreen(
                                 }
                             }
                         }
+                        val shouldRestoreRecording = restoreRecordingAfterAutoplay
+                        restoreRecordingAfterAutoplay = false
                         activeAutoplayWavPath = null
+                        if (shouldRestoreRecording) {
+                            homeViewModel.startTranslateRecording()
+                        }
                         processAutoplayQueue()
                     }
                 },
                 onError = {
+                    val shouldRestoreRecording = restoreRecordingAfterAutoplay
+                    restoreRecordingAfterAutoplay = false
                     activeAutoplayWavPath = null
+                    if (shouldRestoreRecording) {
+                        homeViewModel.startTranslateRecording()
+                    }
                     processAutoplayQueue()
                 }
             )
             if (!started) {
+                if (restoreRecordingAfterAutoplay) {
+                    homeViewModel.startTranslateRecording()
+                }
+                restoreRecordingAfterAutoplay = false
                 activeAutoplayWavPath = null
                 continue
             }
@@ -640,6 +667,7 @@ fun HomeScreen(
             recognitionQueue.close()
             autoplayQueue.clear()
             activeAutoplayWavPath = null
+            restoreRecordingAfterAutoplay = false
             correctionJobs.values.forEach { it.cancel() }
             correctionJobs.clear()
             correctionRunning.clear()
@@ -667,12 +695,16 @@ fun HomeScreen(
         userSettings.autoplay,
         userSettings.enableHomeLlmCorrection,
         userSettings.enableTtsFeedback,
+        isRecognizingSpeech,
+        countdownProgress,
         currentlyPlaying,
-        isAnyTtsSpeaking
+        isAnyTtsSpeaking,
+        isAsrModelLoading
     ) {
         if (!shouldAutoplayHome()) {
             autoplayQueue.clear()
             activeAutoplayWavPath = null
+            restoreRecordingAfterAutoplay = false
         } else {
             processAutoplayQueue()
         }
