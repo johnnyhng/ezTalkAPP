@@ -679,6 +679,27 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
+                        text = stringResource(R.string.autoplay_label),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.autoplay_summary),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = userSettings.autoplay,
+                            onCheckedChange = homeViewModel::updateAutoplay,
+                            enabled = !isDownloading
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
                         text = stringResource(R.string.home_llm_correction_label),
                         style = MaterialTheme.typography.titleMedium
                     )

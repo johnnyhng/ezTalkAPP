@@ -17,6 +17,7 @@ data class UserSettings(
     val entryScreenRoute: String = "home",
     val geminiModel: String = "gemini-2.5-flash",
     val speakerLlmExecutionMode: String = "cloud",
+    val autoplay: Boolean = false,
     val enableHomeLlmCorrection: Boolean = false,
     val enableHomeEnglishTranslation: Boolean = false,
     val enableTranslateLlmCorrection: Boolean = false,

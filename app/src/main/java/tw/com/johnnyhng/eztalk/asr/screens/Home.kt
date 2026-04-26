@@ -123,6 +123,12 @@ fun HomeScreen(
         translationJobs.remove(wavPath)?.cancel()
     }
 
+    fun shouldAutoplayHome(): Boolean {
+        return userSettings.autoplay &&
+            userSettings.enableHomeLlmCorrection &&
+            !userSettings.enableTtsFeedback
+    }
+
     fun launchBackgroundEnglishTranslation(transcript: Transcript) {
         val wavPath = transcript.wavFilePath
         val expectedSourceText = transcript.modifiedText.trim()
@@ -194,6 +200,28 @@ fun HomeScreen(
         }
     }
 
+    fun autoplayHomeTranscript(index: Int, text: String) {
+        val item = resultList.getOrNull(index) ?: return
+        MediaController.stop()
+        englishSpeechController.stop()
+        speechController.speak(text)
+        val updatedTranscript = reduceTranscriptAfterConfirmation(
+            transcript = item,
+            newText = text,
+            lockTranscript = false
+        )
+        updateTranscriptAndRefreshEnglish(
+            index = index,
+            updatedTranscript = updatedTranscript,
+            previousModifiedText = item.modifiedText
+        )
+        coroutineScope.launch(Dispatchers.IO) {
+            val latestTranscript = resultList.getOrNull(index) ?: return@launch
+            logHomeJsonlUpdate("home_autoplay", latestTranscript)
+            persistTranscriptJsonl(context, userSettings.userId, latestTranscript)
+        }
+    }
+
     fun launchBackgroundCorrection(transcript: Transcript) {
         val wavPath = transcript.wavFilePath
         if (!userSettings.enableHomeLlmCorrection || wavPath.isBlank()) return
@@ -221,26 +249,46 @@ fun HomeScreen(
                         }
                 }
 
-                val updatedTranscript = withContext(Dispatchers.Main) {
+                val autoplayIndexAndText = withContext(Dispatchers.Main) {
                     val index = resultList.indexOfFirst { it.wavFilePath == wavPath }
                     if (index == -1) {
-                        null
+                        null to null
                     } else {
                         val current = resultList[index]
                         if (!current.mutable || current.modifiedText != expectedModifiedText) {
-                            null
+                            null to null
                         } else if (correction == null || correction.correctedText == current.modifiedText) {
-                            current
+                            val autoplayPayload = if (
+                                shouldAutoplayHome() &&
+                                !current.checked &&
+                                current.modifiedText.isNotBlank()
+                            ) {
+                                index to current.modifiedText
+                            } else {
+                                null
+                            }
+                            current to autoplayPayload
                         } else {
                             current.copy(
                                 modifiedText = correction.correctedText,
                                 englishTranslation = ""
                             ).also {
                                 resultList[index] = it
+                            } to if (
+                                shouldAutoplayHome() &&
+                                !current.checked &&
+                                correction.correctedText.isNotBlank()
+                            ) {
+                                index to correction.correctedText
+                            } else {
+                                null
                             }
                         }
                     }
                 }
+
+                val updatedTranscript = autoplayIndexAndText.first
+                val autoplayPayload = autoplayIndexAndText.second
 
                 if (updatedTranscript != null && updatedTranscript.modifiedText != expectedModifiedText) {
                     launchBackgroundEnglishTranslation(updatedTranscript)
@@ -249,6 +297,7 @@ fun HomeScreen(
                         persistTranscriptJsonl(context, userSettings.userId, updatedTranscript)
                     }
                 }
+                autoplayPayload?.let { (index, text) -> autoplayHomeTranscript(index, text) }
             } finally {
                 correctionJobs.remove(wavPath)
                 correctionRunning.remove(wavPath)

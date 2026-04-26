@@ -43,6 +43,8 @@
     <string name="speaker_llm_execution_mode_auto_local">Local（Auto）</string>
     <string name="speaker_llm_execution_mode_cloud">Cloud LLM</string>
     <string name="speaker_llm_execution_mode_summary">目前預設使用 Cloud LLM，因為 local Gemini Nano 對中文表現較差。只有在你要測試裝置端 fallback 時，才建議切到 Local（Auto）。</string>
+    <string name="autoplay_label">Autoplay</string>
+    <string name="autoplay_summary">只有在 Home LLM 校正開啟且 TTS 回饋關閉時，才會在 Home 自動朗讀並確認文字。</string>
     <string name="home_llm_correction_label">Home LLM 校正</string>
     <string name="home_llm_correction_summary">使用 Gemini 根據 utterance variants 修正 Home 的初始轉錄，並把結果作為顯示用 modified text。</string>
     <string name="home_english_translation_label">Home 英文翻譯</string>

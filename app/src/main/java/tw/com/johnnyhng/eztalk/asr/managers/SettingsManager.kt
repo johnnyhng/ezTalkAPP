@@ -24,6 +24,7 @@ private val mobileModelSha256Key = stringPreferencesKey("mobile_model_sha256")
 private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
 private val geminiModelKey = stringPreferencesKey("gemini_model")
 private val speakerLlmExecutionModeKey = stringPreferencesKey("speaker_llm_execution_mode")
+private val autoplayKey = booleanPreferencesKey("autoplay")
 private val enableHomeLlmCorrectionKey = booleanPreferencesKey("enable_home_llm_correction")
 private val enableHomeEnglishTranslationKey = booleanPreferencesKey("enable_home_english_translation")
 private val enableTranslateLlmCorrectionKey = booleanPreferencesKey("enable_translate_llm_correction")
@@ -54,6 +55,7 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         geminiModel = preferences[geminiModelKey] ?: defaultUserSettings.geminiModel,
         speakerLlmExecutionMode = preferences[speakerLlmExecutionModeKey]
             ?: defaultUserSettings.speakerLlmExecutionMode,
+        autoplay = preferences[autoplayKey] ?: defaultUserSettings.autoplay,
         enableHomeLlmCorrection = preferences[enableHomeLlmCorrectionKey]
             ?: defaultUserSettings.enableHomeLlmCorrection,
         enableHomeEnglishTranslation = preferences[enableHomeEnglishTranslationKey]
@@ -85,6 +87,7 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[entryScreenRouteKey] = sanitizeEntryScreenRoute(settings.entryScreenRoute)
     preferences[geminiModelKey] = settings.geminiModel
     preferences[speakerLlmExecutionModeKey] = settings.speakerLlmExecutionMode
+    preferences[autoplayKey] = settings.autoplay
     preferences[enableHomeLlmCorrectionKey] = settings.enableHomeLlmCorrection
     preferences[enableHomeEnglishTranslationKey] = settings.enableHomeEnglishTranslation
     preferences[enableTranslateLlmCorrectionKey] = settings.enableTranslateLlmCorrection
