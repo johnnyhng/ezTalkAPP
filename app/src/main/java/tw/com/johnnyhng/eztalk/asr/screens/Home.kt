@@ -39,6 +39,7 @@ import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
 import tw.com.johnnyhng.eztalk.asr.widgets.*
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.util.*
 
@@ -55,22 +56,33 @@ private fun logHomeJsonlUpdate(reason: String, transcript: Transcript) {
     )
 }
 
-private fun copyAssetToCache(context: android.content.Context, assetName: String): String {
-    val targetFile = File(context.cacheDir, assetName)
-    if (!targetFile.exists()) {
-        targetFile.parentFile?.mkdirs()
-        try {
-            context.assets.open(assetName).use { input ->
-                targetFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-        } catch (e: IOException) {
-            Log.e(TAG, "Failed to copy asset to cache: $assetName", e)
-            throw e
-        }
+private fun copyTseAssetsForUser(
+    context: android.content.Context,
+    userId: String
+): Pair<String, String> {
+    val targetDir = File(context.filesDir, "$userId/speaker_id")
+    if (!targetDir.exists()) {
+        targetDir.mkdirs()
     }
-    return targetFile.absolutePath
+
+    fun copyAsset(assetName: String): String {
+        val targetFile = File(targetDir, assetName)
+        if (!targetFile.exists()) {
+            try {
+                context.assets.open(assetName).use { input ->
+                    FileOutputStream(targetFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            } catch (e: IOException) {
+                Log.e(TAG, "Failed to copy TSE asset for user=$userId: $assetName", e)
+                throw e
+            }
+        }
+        return targetFile.absolutePath
+    }
+
+    return copyAsset("voice_filter_int8.onnx") to copyAsset("dvector.bin")
 }
 
 @Composable
@@ -145,15 +157,17 @@ fun HomeScreen(
         )
     }
 
-    LaunchedEffect(appContext, nativeTse) {
+    LaunchedEffect(appContext, nativeTse, userSettings.userId) {
         withContext(Dispatchers.IO) {
             try {
-                val modelPath = copyAssetToCache(appContext, "voice_filter_int8.onnx")
-                val dvectorPath = copyAssetToCache(appContext, "dvector.bin")
+                val (modelPath, dvectorPath) = copyTseAssetsForUser(
+                    context = appContext,
+                    userId = userSettings.userId
+                )
                 val initialized = nativeTse.init(modelPath, dvectorPath)
                 Log.i(
                     TAG,
-                    "NativeTSE init completed: success=$initialized, modelPath=$modelPath, dvectorPath=$dvectorPath"
+                    "NativeTSE init completed: success=$initialized, userId=${userSettings.userId}, modelPath=$modelPath, dvectorPath=$dvectorPath"
                 )
             } catch (t: Throwable) {
                 Log.e(
