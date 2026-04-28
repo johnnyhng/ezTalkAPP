@@ -590,6 +590,32 @@ fun SettingsScreen(
             )
         }
 
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = stringResource(R.string.speech_detection_mode_label))
+                Text(
+                    text = if (userSettings.useTseDetection) {
+                        stringResource(R.string.speech_detection_mode_tse)
+                    } else {
+                        stringResource(R.string.speech_detection_mode_vad)
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(
+                checked = userSettings.useTseDetection,
+                onCheckedChange = homeViewModel::updateUseTseDetection,
+                enabled = !isDownloading
+            )
+        }
+
         // TTS Feedback Switch (New)
         Row(
             modifier = Modifier

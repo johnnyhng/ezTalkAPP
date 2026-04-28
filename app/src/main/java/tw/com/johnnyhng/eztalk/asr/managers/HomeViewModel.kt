@@ -326,6 +326,9 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateSpeakerLlmExecutionMode(v: String) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(speakerLlmExecutionMode = v))
     }
+    fun updateUseTseDetection(v: Boolean) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(useTseDetection = v))
+    }
     fun updateAutoplay(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(autoplay = v))
     }
