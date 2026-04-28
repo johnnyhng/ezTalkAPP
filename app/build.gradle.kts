@@ -53,6 +53,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        prefab = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
@@ -159,6 +160,7 @@ dependencies {
     testImplementation("org.json:json:20240303")
     testImplementation(libs.androidx.test.core)
     testImplementation("org.robolectric:robolectric:4.11.1")
+    implementation("com.google.oboe:oboe:1.8.0")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

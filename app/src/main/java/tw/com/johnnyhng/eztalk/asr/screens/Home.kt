@@ -3,6 +3,7 @@ package tw.com.johnnyhng.eztalk.asr.screens
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
@@ -32,11 +33,13 @@ import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptEnglishTranslationModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
+import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
 import tw.com.johnnyhng.eztalk.asr.utils.*
 import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
 import tw.com.johnnyhng.eztalk.asr.widgets.*
 import java.io.File
+import java.io.IOException
 import java.util.*
 
 private data class HomeAutoplayQueueItem(
@@ -52,6 +55,24 @@ private fun logHomeJsonlUpdate(reason: String, transcript: Transcript) {
     )
 }
 
+private fun copyAssetToCache(context: android.content.Context, assetName: String): String {
+    val targetFile = File(context.cacheDir, assetName)
+    if (!targetFile.exists()) {
+        targetFile.parentFile?.mkdirs()
+        try {
+            context.assets.open(assetName).use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Failed to copy asset to cache: $assetName", e)
+            throw e
+        }
+    }
+    return targetFile.absolutePath
+}
+
 @Composable
 fun HomeScreen(
     homeViewModel: HomeViewModel = viewModel(),
@@ -61,6 +82,7 @@ fun HomeScreen(
     val activity = context as Activity
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
+    val nativeTse = remember { NativeTSE() }
 
     // UI state tied to ViewModel
     val isStarted by homeViewModel.isRecording.collectAsState()
@@ -121,6 +143,26 @@ fun HomeScreen(
             llmProvider = correctionProvider,
             llmModel = userSettings.geminiModel
         )
+    }
+
+    LaunchedEffect(appContext, nativeTse) {
+        withContext(Dispatchers.IO) {
+            try {
+                val modelPath = copyAssetToCache(appContext, "voice_filter_int8.onnx")
+                val dvectorPath = copyAssetToCache(appContext, "dvector.bin")
+                val initialized = nativeTse.init(modelPath, dvectorPath)
+                Log.i(
+                    TAG,
+                    "NativeTSE init completed: success=$initialized, modelPath=$modelPath, dvectorPath=$dvectorPath"
+                )
+            } catch (t: Throwable) {
+                Log.e(
+                    TAG,
+                    "NativeTSE init failed. supportedAbis=${Build.SUPPORTED_ABIS.joinToString()}",
+                    t
+                )
+            }
+        }
     }
 
     fun clearCorrectionState(wavPath: String) {
@@ -662,6 +704,7 @@ fun HomeScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            nativeTse.release()
             speechController.stop()
             englishSpeechController.stop()
             recognitionQueue.close()
