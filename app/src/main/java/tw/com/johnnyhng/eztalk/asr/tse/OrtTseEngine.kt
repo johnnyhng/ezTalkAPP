@@ -73,6 +73,14 @@ internal class OrtTseEngine(
         )
     }
 
+    fun createFeatureTensor(features: FloatArray, shape: LongArray): OnnxTensor {
+        return OnnxTensor.createTensor(
+            environment,
+            FloatBuffer.wrap(features),
+            shape
+        )
+    }
+
     fun runMaskInference(
         xTensor: OnnxTensor,
         embedTensor: OnnxTensor,
@@ -88,10 +96,10 @@ internal class OrtTseEngine(
             ),
             setOf(outputName)
         ).use { results ->
-            val outputValue = results.firstOrNull()
+            val outputEntry = results.firstOrNull()
                 ?: throw OrtException("Missing ORT output '$outputName'")
-            val outputTensor = outputValue as? OnnxTensor
-                ?: throw OrtException("Unexpected ORT output type: ${outputValue.javaClass.name}")
+            val outputTensor = outputEntry.value as? OnnxTensor
+                ?: throw OrtException("Unexpected ORT output type: ${outputEntry.value.javaClass.name}")
             val buffer = outputTensor.floatBuffer
             return FloatArray(buffer.remaining()).also(buffer::get)
         }
