@@ -16,8 +16,8 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
-import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
-import tw.com.johnnyhng.eztalk.asr.tse.initializeNativeTseForUser
+import tw.com.johnnyhng.eztalk.asr.tse.UtteranceTseProcessor
+import tw.com.johnnyhng.eztalk.asr.tse.initializeOrtTseForUser
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.buildTranscriptFileTargets
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
@@ -203,15 +203,17 @@ class RecognitionManager(private val context: Context) {
         val partialIntervalMs = userSettings.partialIntervalMs
         val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
         val userId = userSettings.userId
-        val nativeTse = if (userSettings.useTseDetection) {
-            initializeNativeTseForUser(context, userId)
+        val ortTse = if (userSettings.useTseDetection) {
+            initializeOrtTseForUser(context, userId)
         } else {
             null
         }
-        val tsePreprocessor = nativeTse?.let(::TseAudioPreprocessor)
+        val ortTseEngine = ortTse?.first
+        val ortTseAssetPaths = ortTse?.second
+        val utteranceTseProcessor = ortTseEngine?.let(::UtteranceTseProcessor)
         Log.i(
             TAG,
-            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=${userSettings.useTseDetection}, nativeTseReady=${nativeTse != null}, saveVadSegmentsOnly=$saveVadSegmentsOnly"
+            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=${userSettings.useTseDetection}, ortTseReady=${ortTseEngine != null}, saveVadSegmentsOnly=$saveVadSegmentsOnly"
         )
 
         var buffer = arrayListOf<Float>()
@@ -254,7 +256,7 @@ class RecognitionManager(private val context: Context) {
                         startTime = System.currentTimeMillis()
                         Log.i(
                             TAG,
-                            "RecognitionManager speech start detected: offset=$offset, bufferSize=${buffer.size}, tseEnabled=${tsePreprocessor != null}"
+                            "RecognitionManager speech start detected: offset=$offset, bufferSize=${buffer.size}, tseEnabled=${utteranceTseProcessor != null}"
                         )
                         if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
                     }
@@ -297,7 +299,7 @@ class RecognitionManager(private val context: Context) {
                     if (since >= lingerMs || done || !_isStarted.value) {
                         Log.i(
                             TAG,
-                            "RecognitionManager final utterance trigger: since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, tseEnabled=${tsePreprocessor != null}"
+                            "RecognitionManager final utterance trigger: since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, tseEnabled=${utteranceTseProcessor != null}"
                         )
                         val rawAudioToSave = if (saveVadSegmentsOnly) {
                             utteranceSegments.flatMap { it.toList() }.toFloatArray()
@@ -305,11 +307,15 @@ class RecognitionManager(private val context: Context) {
                             lastSpeechDetectedOffset = min(buffer.size - 1, lastSpeechDetectedOffset + keep)
                             buffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
                         }
-                        val processedAudioToSave = if (tsePreprocessor != null) {
-                            tsePreprocessor.processAll(rawAudioToSave)
+                        val tseResult = if (utteranceTseProcessor != null && ortTseAssetPaths != null) {
+                            utteranceTseProcessor.process(
+                                rawAudio = rawAudioToSave,
+                                dvectorPath = ortTseAssetPaths.dvectorPath
+                            )
                         } else {
-                            rawAudioToSave
+                            null
                         }
+                        val processedAudioToSave = tseResult?.processedAudio ?: rawAudioToSave
                         val finalAsrInput = processedAudioToSave
 
                         val stream = SimulateStreamingAsr.recognizer.createStream()
@@ -328,7 +334,7 @@ class RecognitionManager(private val context: Context) {
 
                             val wavPath = saveAsWav(context, processedAudioToSave, sampleRateInHz, 1, userId, filename)
                             if (wavPath != null) {
-                                val rawWavPath = if (tsePreprocessor != null) {
+                                val rawWavPath = if (utteranceTseProcessor != null) {
                                     saveSiblingRawWav(
                                         userId = userId,
                                         baseFilename = timestamp,
@@ -339,7 +345,7 @@ class RecognitionManager(private val context: Context) {
                                 }
                                 Log.i(
                                     TAG,
-                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseEnabled=${tsePreprocessor != null}"
+                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseEnabled=${utteranceTseProcessor != null}, tseFallback=${tseResult?.usedFallback == true}, tseReason=${tseResult?.reason}"
                                 )
                                 if (rawWavPath != null) {
                                     Log.i(
@@ -349,7 +355,7 @@ class RecognitionManager(private val context: Context) {
                                 } else {
                                     Log.i(
                                         TAG,
-                                        "RecognitionManager raw sibling wav skipped: tseEnabled=${tsePreprocessor != null}"
+                                        "RecognitionManager raw sibling wav skipped: tseEnabled=${utteranceTseProcessor != null}"
                                     )
                                 }
                                 Log.d(
@@ -380,7 +386,7 @@ class RecognitionManager(private val context: Context) {
                             } else {
                                 Log.e(
                                     TAG,
-                                    "RecognitionManager failed to save processed wav: filename=$filename, samples=${processedAudioToSave.size}, tseEnabled=${tsePreprocessor != null}"
+                                    "RecognitionManager failed to save processed wav: filename=$filename, samples=${processedAudioToSave.size}, tseEnabled=${utteranceTseProcessor != null}"
                                 )
                             }
                         } finally {
@@ -405,7 +411,7 @@ class RecognitionManager(private val context: Context) {
                 }
             }
         } finally {
-            nativeTse?.release()
+            ortTseEngine?.close()
         }
     }
 

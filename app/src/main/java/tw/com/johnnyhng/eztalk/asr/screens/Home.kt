@@ -3,7 +3,6 @@ package tw.com.johnnyhng.eztalk.asr.screens
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
@@ -33,8 +32,6 @@ import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptEnglishTranslationModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
-import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
-import tw.com.johnnyhng.eztalk.asr.tse.ensureTseAssetsForUser
 import tw.com.johnnyhng.eztalk.asr.utils.*
 import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
@@ -64,7 +61,6 @@ fun HomeScreen(
     val activity = context as Activity
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
-    val nativeTse = remember { NativeTSE() }
 
     // UI state tied to ViewModel
     val isStarted by homeViewModel.isRecording.collectAsState()
@@ -125,28 +121,6 @@ fun HomeScreen(
             llmProvider = correctionProvider,
             llmModel = userSettings.geminiModel
         )
-    }
-
-    LaunchedEffect(appContext, nativeTse, userSettings.userId) {
-        withContext(Dispatchers.IO) {
-            try {
-                val (modelPath, dvectorPath) = ensureTseAssetsForUser(
-                    context = appContext,
-                    userId = userSettings.userId
-                )
-                val initialized = nativeTse.init(modelPath, dvectorPath)
-                Log.i(
-                    TAG,
-                    "NativeTSE init completed: success=$initialized, userId=${userSettings.userId}, modelPath=$modelPath, dvectorPath=$dvectorPath"
-                )
-            } catch (t: Throwable) {
-                Log.e(
-                    TAG,
-                    "NativeTSE init failed. supportedAbis=${Build.SUPPORTED_ABIS.joinToString()}",
-                    t
-                )
-            }
-        }
     }
 
     fun clearCorrectionState(wavPath: String) {
@@ -688,7 +662,6 @@ fun HomeScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            nativeTse.release()
             speechController.stop()
             englishSpeechController.stop()
             recognitionQueue.close()

@@ -7,10 +7,15 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
+internal data class TseAssetPaths(
+    val modelPath: String,
+    val dvectorPath: String
+)
+
 internal fun ensureTseAssetsForUser(
     context: Context,
     userId: String
-): Pair<String, String> {
+): TseAssetPaths {
     val targetDir = File(context.filesDir, "$userId/speaker_id")
     if (!targetDir.exists()) {
         targetDir.mkdirs()
@@ -33,7 +38,10 @@ internal fun ensureTseAssetsForUser(
         return targetFile.absolutePath
     }
 
-    return copyAsset("voice_filter_int8.onnx") to copyAsset("dvector.bin")
+    return TseAssetPaths(
+        modelPath = copyAsset("voice_filter_int8.onnx"),
+        dvectorPath = copyAsset("dvector.bin")
+    )
 }
 
 internal fun initializeNativeTseForUser(
@@ -58,6 +66,26 @@ internal fun initializeNativeTseForUser(
     } catch (t: Throwable) {
         Log.e(TAG, "NativeTSE initialization failed for user=$userId", t)
         runCatching { nativeTse.release() }
+        null
+    }
+}
+
+internal fun initializeOrtTseForUser(
+    context: Context,
+    userId: String,
+    ortTseEngine: OrtTseEngine = OrtTseEngine()
+): Pair<OrtTseEngine, TseAssetPaths>? {
+    return try {
+        val assetPaths = ensureTseAssetsForUser(context, userId)
+        ortTseEngine.open(assetPaths.modelPath)
+        Log.i(
+            TAG,
+            "OrtTSE initialized for user=$userId, modelPath=${assetPaths.modelPath}, dvectorPath=${assetPaths.dvectorPath}"
+        )
+        ortTseEngine to assetPaths
+    } catch (t: Throwable) {
+        Log.e(TAG, "OrtTSE initialization failed for user=$userId", t)
+        runCatching { ortTseEngine.close() }
         null
     }
 }
