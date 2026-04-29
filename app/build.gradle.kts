@@ -162,6 +162,7 @@ dependencies {
     testImplementation("org.json:json:20240303")
     testImplementation(libs.androidx.test.core)
     testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.22.0")
     implementation("com.google.oboe:oboe:1.9.3")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
