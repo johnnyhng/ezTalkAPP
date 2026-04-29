@@ -237,6 +237,7 @@ class RecognitionManager(private val context: Context) {
         var lastVadPacketAt = 0L
         var rawSegmentSearchCursor = 0
         var tsePassthroughForSession = false
+        var processedChunkCount = 0
 
         var done = false
         try {
@@ -270,6 +271,13 @@ class RecognitionManager(private val context: Context) {
                         }
                     } else {
                         s
+                    }
+                    processedChunkCount += 1
+                    if (realtimeTseProcessor != null && (processedChunkCount <= 5 || processedChunkCount % 25 == 0)) {
+                        Log.i(
+                            TAG,
+                            "RecognitionManager TSE chunk stats: sessionId=$sessionId, chunk=$processedChunkCount, rawRms=${rms(s).format3()}, processedRms=${rms(processedChunk).format3()}, diffRms=${rmsDiff(s, processedChunk).format3()}, tsePassthrough=$tsePassthroughForSession"
+                        )
                     }
                     buffer.addAll(processedChunk.toList())
                 }
@@ -513,6 +521,28 @@ class RecognitionManager(private val context: Context) {
             null
         }
     }
+
+    private fun rms(samples: FloatArray): Float {
+        if (samples.isEmpty()) return 0f
+        var sumSquares = 0.0
+        for (sample in samples) {
+            sumSquares += sample * sample
+        }
+        return kotlin.math.sqrt(sumSquares / samples.size).toFloat()
+    }
+
+    private fun rmsDiff(left: FloatArray, right: FloatArray): Float {
+        if (left.isEmpty() || right.isEmpty()) return 0f
+        val count = min(left.size, right.size)
+        var sumSquares = 0.0
+        for (index in 0 until count) {
+            val diff = left[index] - right[index]
+            sumSquares += diff * diff
+        }
+        return kotlin.math.sqrt(sumSquares / count).toFloat()
+    }
+
+    private fun Float.format3(): String = String.format(Locale.US, "%.3f", this)
 
     fun updateDataCollectText(text: String) {
         _currentDataCollectText.value = text

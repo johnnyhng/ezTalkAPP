@@ -1,11 +1,13 @@
 package tw.com.johnnyhng.eztalk.asr.tse
 
 import ai.onnxruntime.OnnxTensor
+import android.util.Log
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 import org.jtransforms.fft.FloatFFT_1D
+import tw.com.johnnyhng.eztalk.asr.TAG
 
 internal data class RealtimeTseChunkResult(
     val processedAudio: FloatArray,
@@ -29,6 +31,7 @@ internal class RealtimeOrtTseProcessor(
     private val magHistory = FloatArray(contextFrames * freqBins)
     private val dvector = engine.loadDvector(dvectorPath)
     private val embedTensor: OnnxTensor = engine.createEmbeddingTensor(dvector)
+    private var processedHopCount = 0
 
     fun process(rawAudio: FloatArray): RealtimeTseChunkResult {
         if (rawAudio.isEmpty()) {
@@ -53,7 +56,7 @@ internal class RealtimeOrtTseProcessor(
                     destination = output,
                     destinationOffset = outputOffset,
                     startIndex = 0,
-                    endIndex = outputOffset + actualSize
+                    endIndex = actualSize
                 )
                 inputOffset += actualSize
                 outputOffset += actualSize
@@ -154,6 +157,18 @@ internal class RealtimeOrtTseProcessor(
             endIndex = winLength
         )
         outputBuffer.fill(0f, winLength - hopLength, winLength)
+        processedHopCount += 1
+        if (processedHopCount <= 5 || processedHopCount % 50 == 0) {
+            val maskStats = summarize(mask, lastFrameOffset)
+            val inputStats = summarize(audioChunk)
+            val outputStats = summarize(outChunk)
+            val inputMagStats = summarize(magnitude)
+            val estimatedMagStats = summarize(estimatedMagnitude)
+            Log.i(
+                TAG,
+                "RealtimeOrtTseProcessor hop=$processedHopCount inputRms=${inputStats.rms.format3()} outputRms=${outputStats.rms.format3()} diffRms=${rmsDiff(audioChunk, outChunk).format3()} mask[min=${maskStats.min.format3()}, avg=${maskStats.avg.format3()}, max=${maskStats.max.format3()}] magInAvg=${inputMagStats.avg.format3()} magOutAvg=${estimatedMagStats.avg.format3()}"
+            )
+        }
         return outChunk
     }
 
@@ -167,4 +182,44 @@ internal class RealtimeOrtTseProcessor(
             (0.5 - 0.5 * cos((2.0 * Math.PI * index) / (size - 1))).toFloat()
         }
     }
+
+    private data class Stats(val min: Float, val avg: Float, val max: Float, val rms: Float = avg)
+
+    private fun summarize(values: FloatArray): Stats {
+        if (values.isEmpty()) return Stats(0f, 0f, 0f, 0f)
+        var minValue = Float.POSITIVE_INFINITY
+        var maxValue = Float.NEGATIVE_INFINITY
+        var sum = 0.0
+        var sumSquares = 0.0
+        for (value in values) {
+            if (value < minValue) minValue = value
+            if (value > maxValue) maxValue = value
+            sum += value
+            sumSquares += value * value
+        }
+        return Stats(
+            min = minValue,
+            avg = (sum / values.size).toFloat(),
+            max = maxValue,
+            rms = kotlin.math.sqrt(sumSquares / values.size).toFloat()
+        )
+    }
+
+    private fun summarize(mask: FloatArray, timeIndex: Int): Stats {
+        val currentMask = FloatArray(freqBins) { bin -> mask[(bin * contextFrames) + timeIndex] }
+        return summarize(currentMask)
+    }
+
+    private fun rmsDiff(left: FloatArray, right: FloatArray): Float {
+        if (left.isEmpty() || right.isEmpty()) return 0f
+        val count = min(left.size, right.size)
+        var sumSquares = 0.0
+        for (index in 0 until count) {
+            val diff = left[index] - right[index]
+            sumSquares += diff * diff
+        }
+        return kotlin.math.sqrt(sumSquares / count).toFloat()
+    }
+
+    private fun Float.format3(): String = String.format(java.util.Locale.US, "%.3f", this)
 }
