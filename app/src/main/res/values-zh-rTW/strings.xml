@@ -46,6 +46,8 @@
     <string name="speech_detection_mode_label">語音偵測模式</string>
     <string name="speech_detection_mode_vad">VAD（預設）</string>
     <string name="speech_detection_mode_tse">TSE（使用者語音偵測）</string>
+    <string name="play_tse_short">TSE</string>
+    <string name="play_raw_short">Raw</string>
     <string name="autoplay_label">Autoplay</string>
     <string name="autoplay_summary">只有在 Home LLM 校正開啟且 TTS 回饋關閉時，才會在 Home 自動朗讀並確認文字。</string>
     <string name="home_llm_correction_label">Home LLM 校正</string>

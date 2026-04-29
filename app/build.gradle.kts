@@ -155,6 +155,8 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.androidx.appcompat)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    implementation("com.github.wendykierp:JTransforms:3.2")
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")

@@ -46,6 +46,8 @@
     <string name="speech_detection_mode_label">Speech detection mode</string>
     <string name="speech_detection_mode_vad">VAD (default)</string>
     <string name="speech_detection_mode_tse">TSE (user voice detection)</string>
+    <string name="play_tse_short">TSE</string>
+    <string name="play_raw_short">Raw</string>
     <string name="autoplay_label">Autoplay</string>
     <string name="autoplay_summary">Automatically speak and confirm Home text after LLM correction only when Home LLM correction is on and TTS feedback is off.</string>
     <string name="home_llm_correction_label">Home LLM correction</string>

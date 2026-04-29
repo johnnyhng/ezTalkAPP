@@ -17,7 +17,6 @@ import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
-import tw.com.johnnyhng.eztalk.asr.tse.TseChunkOutput
 import tw.com.johnnyhng.eztalk.asr.tse.initializeNativeTseForUser
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.buildTranscriptFileTargets
@@ -216,7 +215,6 @@ class RecognitionManager(private val context: Context) {
         )
 
         var buffer = arrayListOf<Float>()
-        var rawAlignedBuffer = arrayListOf<Float>()
         val keep = (sampleRateInHz / 1000) * 500
         var offset = 0
         val windowSize = 512
@@ -225,9 +223,7 @@ class RecognitionManager(private val context: Context) {
         var isSpeechStarted = false
         var startTime = System.currentTimeMillis()
         val utteranceSegments = mutableListOf<FloatArray>()
-        val rawUtteranceSegments = mutableListOf<FloatArray>()
         var lastVadPacketAt = 0L
-        var rawSegmentSearchCursor = 0
 
         var done = false
         try {
@@ -237,23 +233,13 @@ class RecognitionManager(private val context: Context) {
 
                 if (s == null) {
                     if (flushRequest != null || samplesChannel.isClosedForReceive) {
-                        tsePreprocessor?.flush()?.let { output ->
-                            buffer.addAll(output.processed.toList())
-                            rawAlignedBuffer.addAll(output.rawAligned.toList())
-                        }
                         Log.i(TAG, "RecognitionManager flush received: sessionId=$sessionId, closing processing loop")
                         done = true
                     } else {
                         delay(10)
                     }
                 } else {
-                    val emitted = tsePreprocessor?.processChunk(s)
-                    if (emitted != null) {
-                        buffer.addAll(emitted.processed.toList())
-                        rawAlignedBuffer.addAll(emitted.rawAligned.toList())
-                    } else {
-                        buffer.addAll(s.toList())
-                    }
+                    buffer.addAll(s.toList())
                 }
 
                 // VAD Processing
@@ -268,13 +254,8 @@ class RecognitionManager(private val context: Context) {
                         startTime = System.currentTimeMillis()
                         Log.i(
                             TAG,
-                            "RecognitionManager speech start detected: offset=$offset, bufferSize=${buffer.size}, rawAlignedBufferSize=${rawAlignedBuffer.size}, tseEnabled=${tsePreprocessor != null}"
+                            "RecognitionManager speech start detected: offset=$offset, bufferSize=${buffer.size}, tseEnabled=${tsePreprocessor != null}"
                         )
-                        rawSegmentSearchCursor = if (saveVadSegmentsOnly) {
-                            offset - windowSize
-                        } else {
-                            0
-                        }
                         if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
                     }
                 }
@@ -303,23 +284,6 @@ class RecognitionManager(private val context: Context) {
                     val seg = SimulateStreamingAsr.popVadSegmentSafely() ?: break
                     if (!saveVadSegmentsOnly) {
                         lastSpeechDetectedOffset = offset
-                    } else if (tsePreprocessor != null) {
-                        val rawSegmentRange = findSegmentRange(
-                            source = buffer,
-                            target = seg,
-                            startIndex = rawSegmentSearchCursor
-                        )
-                        val rawSegment = if (rawSegmentRange != null) {
-                            rawSegmentSearchCursor = rawSegmentRange.last + 1
-                            rawAlignedBuffer.subList(
-                                rawSegmentRange.first,
-                                rawSegmentRange.last + 1
-                            ).toFloatArray()
-                        } else {
-                            Log.w(TAG, "Failed to align raw segment with TSE-processed segment; using processed segment length as fallback")
-                            seg.copyOf()
-                        }
-                        rawUtteranceSegments.add(rawSegment)
                     }
                     utteranceSegments.add(seg)
                     lastVadPacketAt = System.currentTimeMillis()
@@ -335,22 +299,22 @@ class RecognitionManager(private val context: Context) {
                             TAG,
                             "RecognitionManager final utterance trigger: since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, tseEnabled=${tsePreprocessor != null}"
                         )
-                        val concatenated = utteranceSegments.flatMap { it.toList() }.toFloatArray()
-                        val audioToSave = if (saveVadSegmentsOnly) {
-                            concatenated
+                        val rawAudioToSave = if (saveVadSegmentsOnly) {
+                            utteranceSegments.flatMap { it.toList() }.toFloatArray()
                         } else {
                             lastSpeechDetectedOffset = min(buffer.size - 1, lastSpeechDetectedOffset + keep)
                             buffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
                         }
-                        val rawAudioToSave = when {
-                            tsePreprocessor == null -> null
-                            saveVadSegmentsOnly -> rawUtteranceSegments.flatMap { it.toList() }.toFloatArray()
-                            else -> rawAlignedBuffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
+                        val processedAudioToSave = if (tsePreprocessor != null) {
+                            tsePreprocessor.processAll(rawAudioToSave)
+                        } else {
+                            rawAudioToSave
                         }
+                        val finalAsrInput = processedAudioToSave
 
                         val stream = SimulateStreamingAsr.recognizer.createStream()
                         try {
-                            stream.acceptWaveform(concatenated, sampleRateInHz)
+                            stream.acceptWaveform(finalAsrInput, sampleRateInHz)
                             SimulateStreamingAsr.recognizer.decode(stream)
                             val result = SimulateStreamingAsr.recognizer.getResult(stream)
                             utteranceVariantBuffer.add(result.text)
@@ -362,26 +326,30 @@ class RecognitionManager(private val context: Context) {
                             val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                             val filename = "${timestamp}.app"
 
-                            val wavPath = saveAsWav(context, audioToSave, sampleRateInHz, 1, userId, filename)
+                            val wavPath = saveAsWav(context, processedAudioToSave, sampleRateInHz, 1, userId, filename)
                             if (wavPath != null) {
-                                Log.i(
-                                    TAG,
-                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${audioToSave.size}, tseEnabled=${tsePreprocessor != null}"
-                                )
-                                if (rawAudioToSave != null) {
-                                    val rawWavPath = saveSiblingRawWav(
+                                val rawWavPath = if (tsePreprocessor != null) {
+                                    saveSiblingRawWav(
                                         userId = userId,
                                         baseFilename = timestamp,
                                         samples = rawAudioToSave
                                     )
+                                } else {
+                                    null
+                                }
+                                Log.i(
+                                    TAG,
+                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseEnabled=${tsePreprocessor != null}"
+                                )
+                                if (rawWavPath != null) {
                                     Log.i(
                                         TAG,
-                                        "RecognitionManager raw sibling wav save: path=${rawWavPath ?: "null"}, samples=${rawAudioToSave.size}"
+                                        "RecognitionManager raw sibling wav save: path=$rawWavPath, samples=${rawAudioToSave.size}"
                                     )
                                 } else {
                                     Log.i(
                                         TAG,
-                                        "RecognitionManager raw sibling wav skipped: tseEnabled=${tsePreprocessor != null}, rawAudioAvailable=false"
+                                        "RecognitionManager raw sibling wav skipped: tseEnabled=${tsePreprocessor != null}"
                                     )
                                 }
                                 Log.d(
@@ -402,6 +370,7 @@ class RecognitionManager(private val context: Context) {
                                 onFinalResult(Transcript(
                                     recognizedText = originalText,
                                     wavFilePath = wavPath,
+                                    rawWavFilePath = rawWavPath.orEmpty(),
                                     modifiedText = modifiedText,
                                     checked = isDataCollectMode,
                                     mutable = !isDataCollectMode,
@@ -411,7 +380,7 @@ class RecognitionManager(private val context: Context) {
                             } else {
                                 Log.e(
                                     TAG,
-                                    "RecognitionManager failed to save processed wav: filename=$filename, samples=${audioToSave.size}, tseEnabled=${tsePreprocessor != null}"
+                                    "RecognitionManager failed to save processed wav: filename=$filename, samples=${processedAudioToSave.size}, tseEnabled=${tsePreprocessor != null}"
                                 )
                             }
                         } finally {
@@ -420,16 +389,13 @@ class RecognitionManager(private val context: Context) {
 
                         // Reset for next utterance
                         utteranceSegments.clear()
-                        rawUtteranceSegments.clear()
                         isSpeechStarted = false
                         buffer = arrayListOf()
-                        rawAlignedBuffer = arrayListOf()
                         offset = 0
                         startOffset = 0
                         lastSpeechDetectedOffset = 0
                         lastVadPacketAt = 0L
                         startTime = System.currentTimeMillis()
-                        rawSegmentSearchCursor = 0
                         utteranceVariantBuffer.reset()
                         SimulateStreamingAsr.resetVadSafely()
                         Log.i(TAG, "RecognitionManager utterance reset complete: VAD state cleared for next utterance")
@@ -461,29 +427,6 @@ class RecognitionManager(private val context: Context) {
             Log.e(TAG, "Error saving raw sibling WAV file: ${file.absolutePath}", e)
             null
         }
-    }
-
-    private fun findSegmentRange(
-        source: List<Float>,
-        target: FloatArray,
-        startIndex: Int
-    ): IntRange? {
-        if (target.isEmpty()) return IntRange.EMPTY
-        if (source.size < target.size || startIndex >= source.size) return null
-        val lastStart = source.size - target.size
-        for (index in max(0, startIndex)..lastStart) {
-            var matched = true
-            for (offset in target.indices) {
-                if (source[index + offset] != target[offset]) {
-                    matched = false
-                    break
-                }
-            }
-            if (matched) {
-                return index until (index + target.size)
-            }
-        }
-        return null
     }
 
     fun updateDataCollectText(text: String) {

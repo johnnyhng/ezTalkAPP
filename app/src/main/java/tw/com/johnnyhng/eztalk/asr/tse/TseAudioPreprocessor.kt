@@ -54,6 +54,21 @@ internal class TseAudioPreprocessor(
         )
     }
 
+    fun processAll(rawAudio: FloatArray): FloatArray {
+        if (rawAudio.isEmpty()) return FloatArray(0)
+        reset()
+        val emitted = processChunk(rawAudio)
+        val tail = flush()
+        return FloatArray(emitted.processed.size + tail.processed.size).also { merged ->
+            emitted.processed.copyInto(merged, endIndex = emitted.processed.size)
+            tail.processed.copyInto(merged, destinationOffset = emitted.processed.size)
+        }
+    }
+
+    fun reset() {
+        pending.clear()
+    }
+
     private fun processFrameOrFallback(rawFrame: FloatArray): FloatArray {
         return try {
             val processed = nativeTse.processFrame(rawFrame)
