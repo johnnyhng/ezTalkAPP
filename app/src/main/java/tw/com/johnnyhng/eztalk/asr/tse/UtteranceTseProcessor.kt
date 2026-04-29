@@ -22,7 +22,7 @@ internal class UtteranceTseProcessor(
             Log.i(TAG, "UtteranceTseProcessor ready: audioSamples=${rawAudio.size}, dvectorSize=${dvector.size}")
             // Phase 1 only: metadata and input loading are validated here.
             // Full utterance-level DSP + ORT inference will be implemented in Phase 2.
-            signalProcessor.stftFrames(rawAudio)
+            signalProcessor.stft(rawAudio)
             UtteranceTseResult(
                 processedAudio = rawAudio,
                 usedFallback = true,
