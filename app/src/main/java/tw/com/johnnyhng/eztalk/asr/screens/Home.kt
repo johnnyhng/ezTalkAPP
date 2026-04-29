@@ -34,13 +34,12 @@ import tw.com.johnnyhng.eztalk.asr.llm.TranscriptEnglishTranslationModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
+import tw.com.johnnyhng.eztalk.asr.tse.ensureTseAssetsForUser
 import tw.com.johnnyhng.eztalk.asr.utils.*
 import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
 import tw.com.johnnyhng.eztalk.asr.workflow.shouldAttemptFeedback
 import tw.com.johnnyhng.eztalk.asr.widgets.*
 import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 import java.util.*
 
 private data class HomeAutoplayQueueItem(
@@ -54,35 +53,6 @@ private fun logHomeJsonlUpdate(reason: String, transcript: Transcript) {
         TAG,
         "Home jsonl update: reason=$reason, file=${File(transcript.wavFilePath).name}, modified=${transcript.modifiedText}, checked=${transcript.checked}, mutable=${transcript.mutable}, localCandidates=${transcript.localCandidates.size}, remoteCandidates=${transcript.remoteCandidates.size}, utteranceVariants=${transcript.utteranceVariants.size}:${transcript.utteranceVariants}"
     )
-}
-
-private fun copyTseAssetsForUser(
-    context: android.content.Context,
-    userId: String
-): Pair<String, String> {
-    val targetDir = File(context.filesDir, "$userId/speaker_id")
-    if (!targetDir.exists()) {
-        targetDir.mkdirs()
-    }
-
-    fun copyAsset(assetName: String): String {
-        val targetFile = File(targetDir, assetName)
-        if (!targetFile.exists()) {
-            try {
-                context.assets.open(assetName).use { input ->
-                    FileOutputStream(targetFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } catch (e: IOException) {
-                Log.e(TAG, "Failed to copy TSE asset for user=$userId: $assetName", e)
-                throw e
-            }
-        }
-        return targetFile.absolutePath
-    }
-
-    return copyAsset("voice_filter_int8.onnx") to copyAsset("dvector.bin")
 }
 
 @Composable
@@ -160,7 +130,7 @@ fun HomeScreen(
     LaunchedEffect(appContext, nativeTse, userSettings.userId) {
         withContext(Dispatchers.IO) {
             try {
-                val (modelPath, dvectorPath) = copyTseAssetsForUser(
+                val (modelPath, dvectorPath) = ensureTseAssetsForUser(
                     context = appContext,
                     userId = userSettings.userId
                 )

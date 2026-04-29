@@ -16,10 +16,17 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
+import tw.com.johnnyhng.eztalk.asr.tse.TseChunkOutput
+import tw.com.johnnyhng.eztalk.asr.tse.initializeNativeTseForUser
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
+import tw.com.johnnyhng.eztalk.asr.utils.buildTranscriptFileTargets
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
+import tw.com.johnnyhng.eztalk.asr.utils.buildWavHeaderBytes
+import tw.com.johnnyhng.eztalk.asr.utils.floatSamplesToPcm16
 import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.max
@@ -54,6 +61,7 @@ class RecognitionManager(private val context: Context) {
     private val flushChannel = Channel<Unit>(Channel.CONFLATED)
     private var recognitionJob: Job? = null
     private val utteranceVariantBuffer = AsrUtteranceVariantBuffer()
+    private var recordingSessionId = 0L
 
     // Callbacks for UI updates
     var onPartialResult: (String) -> Unit = {}
@@ -73,9 +81,26 @@ class RecognitionManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun start(userSettings: UserSettings, mode: RecordingMode, dataCollectText: String) {
-        if (_isStarted.value || recognitionJob?.isActive == true) return
+        val activeJob = recognitionJob
+        if (_isStarted.value) {
+            Log.w(TAG, "RecognitionManager start ignored: recorder already started")
+            return
+        }
+        if (activeJob?.isActive == true) {
+            Log.w(TAG, "RecognitionManager start deferred: previous session still finishing")
+            scope.launch {
+                runCatching { activeJob.join() }
+                start(userSettings, mode, dataCollectText)
+            }
+            return
+        }
         _currentDataCollectText.value = dataCollectText
         _isStarted.value = true
+        while (flushChannel.tryReceive().isSuccess) {
+            // Drain any stale stop signal from the previous session before launching a new one.
+        }
+        val sessionId = ++recordingSessionId
+        Log.i(TAG, "RecognitionManager start: sessionId=$sessionId, mode=$mode, useTseDetection=${userSettings.useTseDetection}")
 
         recognitionJob = scope.launch {
             val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
@@ -140,17 +165,20 @@ class RecognitionManager(private val context: Context) {
 
             // Processing loop
             try {
-                processAudio(samplesChannel, userSettings, mode)
+                processAudio(samplesChannel, userSettings, mode, sessionId)
             } finally {
                 _isStarted.value = false
                 _isRecognizingSpeech.value = false
                 _countdownProgress.value = 0f
+                Log.i(TAG, "RecognitionManager session finished: sessionId=$sessionId")
                 recognitionJob = null
             }
         }
     }
 
     fun stop() {
+        val sessionId = recordingSessionId
+        Log.i(TAG, "RecognitionManager stop requested: sessionId=$sessionId")
         _isStarted.value = false
         scope.launch {
             flushChannel.send(Unit)
@@ -169,14 +197,26 @@ class RecognitionManager(private val context: Context) {
     private suspend fun processAudio(
         samplesChannel: Channel<FloatArray>,
         userSettings: UserSettings,
-        mode: RecordingMode
+        mode: RecordingMode,
+        sessionId: Long
     ) {
         val lingerMs = userSettings.lingerMs
         val partialIntervalMs = userSettings.partialIntervalMs
         val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
         val userId = userSettings.userId
+        val nativeTse = if (userSettings.useTseDetection) {
+            initializeNativeTseForUser(context, userId)
+        } else {
+            null
+        }
+        val tsePreprocessor = nativeTse?.let(::TseAudioPreprocessor)
+        Log.i(
+            TAG,
+            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=${userSettings.useTseDetection}, nativeTseReady=${nativeTse != null}, saveVadSegmentsOnly=$saveVadSegmentsOnly"
+        )
 
         var buffer = arrayListOf<Float>()
+        var rawAlignedBuffer = arrayListOf<Float>()
         val keep = (sampleRateInHz / 1000) * 500
         var offset = 0
         val windowSize = 512
@@ -185,136 +225,265 @@ class RecognitionManager(private val context: Context) {
         var isSpeechStarted = false
         var startTime = System.currentTimeMillis()
         val utteranceSegments = mutableListOf<FloatArray>()
+        val rawUtteranceSegments = mutableListOf<FloatArray>()
         var lastVadPacketAt = 0L
+        var rawSegmentSearchCursor = 0
 
         var done = false
-        while (!done) {
-            val s = samplesChannel.tryReceive().getOrNull()
-            val flushRequest = flushChannel.tryReceive().getOrNull()
+        try {
+            while (!done) {
+                val s = samplesChannel.tryReceive().getOrNull()
+                val flushRequest = flushChannel.tryReceive().getOrNull()
 
-            if (s == null) {
-                if (flushRequest != null || samplesChannel.isClosedForReceive) {
-                    done = true
-                } else {
-                    delay(10)
-                }
-            } else {
-                buffer.addAll(s.toList())
-            }
-
-            // VAD Processing
-            while (offset + windowSize < buffer.size) {
-                val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
-                SimulateStreamingAsr.acceptVadWaveformSafely(chunk)
-                offset += windowSize
-                if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
-                    isSpeechStarted = true
-                    utteranceVariantBuffer.reset()
-                    _isRecognizingSpeech.value = true
-                    startTime = System.currentTimeMillis()
-                    if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
-                }
-            }
-
-            // Partial Result Processing
-            if (isSpeechStarted) {
-                val elapsed = System.currentTimeMillis() - startTime
-                if (elapsed > partialIntervalMs) {
-                    val stream = SimulateStreamingAsr.recognizer.createStream()
-                    try {
-                        stream.acceptWaveform(buffer.subList(0, offset).toFloatArray(), sampleRateInHz)
-                        SimulateStreamingAsr.recognizer.decode(stream)
-                        val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                        utteranceVariantBuffer.add(result.text)
-                        if (result.text.isNotBlank()) {
-                            onPartialResult(result.text)
+                if (s == null) {
+                    if (flushRequest != null || samplesChannel.isClosedForReceive) {
+                        tsePreprocessor?.flush()?.let { output ->
+                            buffer.addAll(output.processed.toList())
+                            rawAlignedBuffer.addAll(output.rawAligned.toList())
                         }
-                    } finally {
-                        stream.release()
-                    }
-                    startTime = System.currentTimeMillis()
-                }
-            }
-
-            while (true) {
-                val seg = SimulateStreamingAsr.popVadSegmentSafely() ?: break
-                if (!saveVadSegmentsOnly) lastSpeechDetectedOffset = offset
-                utteranceSegments.add(seg)
-                lastVadPacketAt = System.currentTimeMillis()
-            }
-
-            // Final Utterance Processing
-            if (utteranceSegments.isNotEmpty()) {
-                val since = System.currentTimeMillis() - lastVadPacketAt
-                _countdownProgress.value = (since.toFloat() / lingerMs).coerceIn(0f, 1f)
-
-                if (since >= lingerMs || done || !_isStarted.value) {
-                    val concatenated = utteranceSegments.flatMap { it.toList() }.toFloatArray()
-                    val audioToSave = if (saveVadSegmentsOnly) {
-                        concatenated
+                        Log.i(TAG, "RecognitionManager flush received: sessionId=$sessionId, closing processing loop")
+                        done = true
                     } else {
-                        lastSpeechDetectedOffset = min(buffer.size - 1, lastSpeechDetectedOffset + keep)
-                        buffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
+                        delay(10)
                     }
-
-                    val stream = SimulateStreamingAsr.recognizer.createStream()
-                    try {
-                        stream.acceptWaveform(concatenated, sampleRateInHz)
-                        SimulateStreamingAsr.recognizer.decode(stream)
-                        val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                        utteranceVariantBuffer.add(result.text)
-                        val utteranceBundle = utteranceVariantBuffer.build(version = 0)
-                        
-                        val originalText = result.text
-                        val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
-                        val modifiedText = if (isDataCollectMode) _currentDataCollectText.value else originalText
-                        val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
-                        val filename = "${timestamp}.app"
-
-                        val wavPath = saveAsWav(context, audioToSave, sampleRateInHz, 1, userId, filename)
-                        if (wavPath != null) {
-                            Log.d(
-                                TAG,
-                                "DataCollect jsonl update: reason=final_utterance, file=${File(wavPath).name}, modified=$modifiedText, checked=$isDataCollectMode, mutable=${!isDataCollectMode}, utteranceVariants=${utteranceBundle?.variants.orEmpty().size}:${utteranceBundle?.variants.orEmpty()}"
-                            )
-                            saveJsonl(
-                                context = context,
-                                userId = userId,
-                                filename = filename,
-                                originalText = originalText,
-                                modifiedText = modifiedText,
-                                checked = isDataCollectMode,
-                                mutable = !isDataCollectMode,
-                                utteranceVariants = utteranceBundle?.variants.orEmpty()
-                            )
-                            
-                            onFinalResult(Transcript(
-                                recognizedText = originalText,
-                                wavFilePath = wavPath,
-                                modifiedText = modifiedText,
-                                checked = isDataCollectMode,
-                                mutable = !isDataCollectMode,
-                                utteranceVariants = utteranceBundle?.variants.orEmpty(),
-                                localCandidates = listOf(originalText)
-                            ))
-                        }
-                    } finally {
-                        stream.release()
+                } else {
+                    val emitted = tsePreprocessor?.processChunk(s)
+                    if (emitted != null) {
+                        buffer.addAll(emitted.processed.toList())
+                        rawAlignedBuffer.addAll(emitted.rawAligned.toList())
+                    } else {
+                        buffer.addAll(s.toList())
                     }
-
-                    // Reset for next utterance
-                    utteranceSegments.clear()
-                    isSpeechStarted = false
-                    buffer = arrayListOf()
-                    offset = 0
-                    startOffset = 0
-                    lastSpeechDetectedOffset = 0
-                    utteranceVariantBuffer.reset()
-                    _isRecognizingSpeech.value = false
-                    _countdownProgress.value = 0f
                 }
+
+                // VAD Processing
+                while (offset + windowSize < buffer.size) {
+                    val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
+                    SimulateStreamingAsr.acceptVadWaveformSafely(chunk)
+                    offset += windowSize
+                    if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
+                        isSpeechStarted = true
+                        utteranceVariantBuffer.reset()
+                        _isRecognizingSpeech.value = true
+                        startTime = System.currentTimeMillis()
+                        Log.i(
+                            TAG,
+                            "RecognitionManager speech start detected: offset=$offset, bufferSize=${buffer.size}, rawAlignedBufferSize=${rawAlignedBuffer.size}, tseEnabled=${tsePreprocessor != null}"
+                        )
+                        rawSegmentSearchCursor = if (saveVadSegmentsOnly) {
+                            offset - windowSize
+                        } else {
+                            0
+                        }
+                        if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
+                    }
+                }
+
+                // Partial Result Processing
+                if (isSpeechStarted) {
+                    val elapsed = System.currentTimeMillis() - startTime
+                    if (elapsed > partialIntervalMs) {
+                        val stream = SimulateStreamingAsr.recognizer.createStream()
+                        try {
+                            stream.acceptWaveform(buffer.subList(0, offset).toFloatArray(), sampleRateInHz)
+                            SimulateStreamingAsr.recognizer.decode(stream)
+                            val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                            utteranceVariantBuffer.add(result.text)
+                            if (result.text.isNotBlank()) {
+                                onPartialResult(result.text)
+                            }
+                        } finally {
+                            stream.release()
+                        }
+                        startTime = System.currentTimeMillis()
+                    }
+                }
+
+                while (true) {
+                    val seg = SimulateStreamingAsr.popVadSegmentSafely() ?: break
+                    if (!saveVadSegmentsOnly) {
+                        lastSpeechDetectedOffset = offset
+                    } else if (tsePreprocessor != null) {
+                        val rawSegmentRange = findSegmentRange(
+                            source = buffer,
+                            target = seg,
+                            startIndex = rawSegmentSearchCursor
+                        )
+                        val rawSegment = if (rawSegmentRange != null) {
+                            rawSegmentSearchCursor = rawSegmentRange.last + 1
+                            rawAlignedBuffer.subList(
+                                rawSegmentRange.first,
+                                rawSegmentRange.last + 1
+                            ).toFloatArray()
+                        } else {
+                            Log.w(TAG, "Failed to align raw segment with TSE-processed segment; using processed segment length as fallback")
+                            seg.copyOf()
+                        }
+                        rawUtteranceSegments.add(rawSegment)
+                    }
+                    utteranceSegments.add(seg)
+                    lastVadPacketAt = System.currentTimeMillis()
+                }
+
+                // Final Utterance Processing
+                if (utteranceSegments.isNotEmpty()) {
+                    val since = System.currentTimeMillis() - lastVadPacketAt
+                    _countdownProgress.value = (since.toFloat() / lingerMs).coerceIn(0f, 1f)
+
+                    if (since >= lingerMs || done || !_isStarted.value) {
+                        Log.i(
+                            TAG,
+                            "RecognitionManager final utterance trigger: since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, tseEnabled=${tsePreprocessor != null}"
+                        )
+                        val concatenated = utteranceSegments.flatMap { it.toList() }.toFloatArray()
+                        val audioToSave = if (saveVadSegmentsOnly) {
+                            concatenated
+                        } else {
+                            lastSpeechDetectedOffset = min(buffer.size - 1, lastSpeechDetectedOffset + keep)
+                            buffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
+                        }
+                        val rawAudioToSave = when {
+                            tsePreprocessor == null -> null
+                            saveVadSegmentsOnly -> rawUtteranceSegments.flatMap { it.toList() }.toFloatArray()
+                            else -> rawAlignedBuffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
+                        }
+
+                        val stream = SimulateStreamingAsr.recognizer.createStream()
+                        try {
+                            stream.acceptWaveform(concatenated, sampleRateInHz)
+                            SimulateStreamingAsr.recognizer.decode(stream)
+                            val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                            utteranceVariantBuffer.add(result.text)
+                            val utteranceBundle = utteranceVariantBuffer.build(version = 0)
+
+                            val originalText = result.text
+                            val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
+                            val modifiedText = if (isDataCollectMode) _currentDataCollectText.value else originalText
+                            val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
+                            val filename = "${timestamp}.app"
+
+                            val wavPath = saveAsWav(context, audioToSave, sampleRateInHz, 1, userId, filename)
+                            if (wavPath != null) {
+                                Log.i(
+                                    TAG,
+                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${audioToSave.size}, tseEnabled=${tsePreprocessor != null}"
+                                )
+                                if (rawAudioToSave != null) {
+                                    val rawWavPath = saveSiblingRawWav(
+                                        userId = userId,
+                                        baseFilename = timestamp,
+                                        samples = rawAudioToSave
+                                    )
+                                    Log.i(
+                                        TAG,
+                                        "RecognitionManager raw sibling wav save: path=${rawWavPath ?: "null"}, samples=${rawAudioToSave.size}"
+                                    )
+                                } else {
+                                    Log.i(
+                                        TAG,
+                                        "RecognitionManager raw sibling wav skipped: tseEnabled=${tsePreprocessor != null}, rawAudioAvailable=false"
+                                    )
+                                }
+                                Log.d(
+                                    TAG,
+                                    "DataCollect jsonl update: reason=final_utterance, file=${File(wavPath).name}, modified=$modifiedText, checked=$isDataCollectMode, mutable=${!isDataCollectMode}, utteranceVariants=${utteranceBundle?.variants.orEmpty().size}:${utteranceBundle?.variants.orEmpty()}"
+                                )
+                                saveJsonl(
+                                    context = context,
+                                    userId = userId,
+                                    filename = filename,
+                                    originalText = originalText,
+                                    modifiedText = modifiedText,
+                                    checked = isDataCollectMode,
+                                    mutable = !isDataCollectMode,
+                                    utteranceVariants = utteranceBundle?.variants.orEmpty()
+                                )
+
+                                onFinalResult(Transcript(
+                                    recognizedText = originalText,
+                                    wavFilePath = wavPath,
+                                    modifiedText = modifiedText,
+                                    checked = isDataCollectMode,
+                                    mutable = !isDataCollectMode,
+                                    utteranceVariants = utteranceBundle?.variants.orEmpty(),
+                                    localCandidates = listOf(originalText)
+                                ))
+                            } else {
+                                Log.e(
+                                    TAG,
+                                    "RecognitionManager failed to save processed wav: filename=$filename, samples=${audioToSave.size}, tseEnabled=${tsePreprocessor != null}"
+                                )
+                            }
+                        } finally {
+                            stream.release()
+                        }
+
+                        // Reset for next utterance
+                        utteranceSegments.clear()
+                        rawUtteranceSegments.clear()
+                        isSpeechStarted = false
+                        buffer = arrayListOf()
+                        rawAlignedBuffer = arrayListOf()
+                        offset = 0
+                        startOffset = 0
+                        lastSpeechDetectedOffset = 0
+                        lastVadPacketAt = 0L
+                        startTime = System.currentTimeMillis()
+                        rawSegmentSearchCursor = 0
+                        utteranceVariantBuffer.reset()
+                        SimulateStreamingAsr.resetVadSafely()
+                        Log.i(TAG, "RecognitionManager utterance reset complete: VAD state cleared for next utterance")
+                        _isRecognizingSpeech.value = false
+                        _countdownProgress.value = 0f
+                    }
+                }
+            }
+        } finally {
+            nativeTse?.release()
+        }
+    }
+
+    private fun saveSiblingRawWav(
+        userId: String,
+        baseFilename: String,
+        samples: FloatArray
+    ): String? {
+        val rawFilename = "$baseFilename.raw.app"
+        val file = buildTranscriptFileTargets(context.filesDir, userId, rawFilename).wavFile
+        return try {
+            FileOutputStream(file).use { out ->
+                val pcmData = floatSamplesToPcm16(samples)
+                out.write(buildWavHeaderBytes(pcmData.size, sampleRateInHz, 1), 0, 44)
+                out.write(pcmData)
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving raw sibling WAV file: ${file.absolutePath}", e)
+            null
+        }
+    }
+
+    private fun findSegmentRange(
+        source: List<Float>,
+        target: FloatArray,
+        startIndex: Int
+    ): IntRange? {
+        if (target.isEmpty()) return IntRange.EMPTY
+        if (source.size < target.size || startIndex >= source.size) return null
+        val lastStart = source.size - target.size
+        for (index in max(0, startIndex)..lastStart) {
+            var matched = true
+            for (offset in target.indices) {
+                if (source[index + offset] != target[offset]) {
+                    matched = false
+                    break
+                }
+            }
+            if (matched) {
+                return index until (index + target.size)
             }
         }
+        return null
     }
 
     fun updateDataCollectText(text: String) {
