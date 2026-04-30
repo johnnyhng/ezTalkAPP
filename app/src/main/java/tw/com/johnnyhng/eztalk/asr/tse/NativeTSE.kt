@@ -1,20 +1,47 @@
 package tw.com.johnnyhng.eztalk.asr.tse
 
+import android.util.Log
+
 /**
- * Stable app-facing wrapper around the JNI-bound NativeTSE class.
+ * Kotlin wrapper for the stateful realtime TSE NDK core.
+ *
+ * Input contract:
+ * - `processFrame()` expects exactly 160 float samples (10 ms @ 16 kHz)
+ * - native side maintains internal 64-frame context, streaming buffers, and warm-up state
+ *
+ * Lifecycle guidance:
+ * - call `reset()` before a new utterance or a new recording session
+ * - call `release()` when the engine is no longer needed
  */
 class NativeTSE {
-    private val delegate = com.example.tse.NativeTSE()
 
-    fun init(modelPath: String, dvectorPath: String): Boolean {
-        return delegate.init(modelPath, dvectorPath)
+    companion object {
+        private const val TAG = "NativeTSE"
+        private var loadError: UnsatisfiedLinkError? = null
+
+        init {
+            try {
+                System.loadLibrary("c++_shared")
+                System.loadLibrary("onnxruntime")
+                System.loadLibrary("oboe")
+                System.loadLibrary("tse_engine")
+                Log.d(TAG, "NativeTSE libraries loaded successfully")
+            } catch (e: UnsatisfiedLinkError) {
+                loadError = e
+                Log.e(TAG, "Failed to load NativeTSE libraries", e)
+            }
+        }
     }
 
-    fun processFrame(audioFrame: FloatArray): FloatArray? {
-        return delegate.processFrame(audioFrame)
+    init {
+        loadError?.let { throw it }
     }
 
-    fun release() {
-        delegate.release()
-    }
+    external fun init(modelPath: String, dvectorPath: String): Boolean
+
+    external fun processFrame(audioFrame: FloatArray): FloatArray?
+
+    external fun reset()
+
+    external fun release()
 }

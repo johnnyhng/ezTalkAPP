@@ -69,23 +69,3 @@ internal fun initializeNativeTseForUser(
         null
     }
 }
-
-internal fun initializeOrtTseForUser(
-    context: Context,
-    userId: String,
-    ortTseEngine: OrtTseEngine = OrtTseEngine()
-): Pair<OrtTseEngine, TseAssetPaths>? {
-    return try {
-        val assetPaths = ensureTseAssetsForUser(context, userId)
-        ortTseEngine.open(assetPaths.modelPath)
-        Log.i(
-            TAG,
-            "OrtTSE initialized for user=$userId, modelPath=${assetPaths.modelPath}, dvectorPath=${assetPaths.dvectorPath}"
-        )
-        ortTseEngine to assetPaths
-    } catch (t: Throwable) {
-        Log.e(TAG, "OrtTSE initialization failed for user=$userId", t)
-        runCatching { ortTseEngine.close() }
-        null
-    }
-}

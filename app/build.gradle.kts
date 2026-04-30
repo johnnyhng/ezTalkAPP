@@ -53,7 +53,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-        prefab = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
@@ -156,15 +155,10 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.androidx.appcompat)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
-    implementation("com.github.wendykierp:JTransforms:3.2")
-
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
     testImplementation(libs.androidx.test.core)
     testImplementation("org.robolectric:robolectric:4.11.1")
-    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.17.1")
-    implementation("com.google.oboe:oboe:1.9.3")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

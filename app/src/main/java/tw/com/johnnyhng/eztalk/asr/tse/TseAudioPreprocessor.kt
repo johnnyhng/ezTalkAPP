@@ -10,10 +10,12 @@ internal data class TseChunkOutput(
 
 internal class TseAudioPreprocessor(
     private val nativeTse: NativeTSE,
-    private val frameSize: Int = 400
+    private val frameSize: Int = 160
 ) {
     private val pending = ArrayList<Float>()
     private var bypassProcessing = false
+    val isBypassing: Boolean
+        get() = bypassProcessing
 
     fun processChunk(rawChunk: FloatArray): TseChunkOutput {
         if (rawChunk.isEmpty()) return TseChunkOutput(FloatArray(0), FloatArray(0))
@@ -54,19 +56,10 @@ internal class TseAudioPreprocessor(
         )
     }
 
-    fun processAll(rawAudio: FloatArray): FloatArray {
-        if (rawAudio.isEmpty()) return FloatArray(0)
-        reset()
-        val emitted = processChunk(rawAudio)
-        val tail = flush()
-        return FloatArray(emitted.processed.size + tail.processed.size).also { merged ->
-            emitted.processed.copyInto(merged, endIndex = emitted.processed.size)
-            tail.processed.copyInto(merged, destinationOffset = emitted.processed.size)
-        }
-    }
-
     fun reset() {
         pending.clear()
+        bypassProcessing = false
+        runCatching { nativeTse.reset() }
     }
 
     private fun processFrameOrFallback(rawFrame: FloatArray): FloatArray {
