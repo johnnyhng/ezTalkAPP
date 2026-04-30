@@ -21,7 +21,7 @@ import tw.com.johnnyhng.eztalk.asr.datacollect.moveToNext as reduceMoveToNext
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToPrevious as reduceMoveToPrevious
 
 data class DataCollectUiState(
-    val text: String = "",
+    val text: String = "我在做測試",
     val isSequenceMode: Boolean = false,
     val showNoQueueMessage: Boolean = false,
     val remainingCount: Int = 0,

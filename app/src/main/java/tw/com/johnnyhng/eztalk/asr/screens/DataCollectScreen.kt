@@ -251,6 +251,19 @@ fun DataCollectScreen(
                     )
                 }
             },
+            onPlayRawClick = { path ->
+                if (path.isBlank()) return@CandidateList
+                if (currentlyPlaying == path) {
+                    MediaController.stop()
+                } else {
+                    MediaController.play(
+                        context = context,
+                        filePath = path,
+                        userSettings = userSettings,
+                        onRoutingApplied = homeViewModel::reportAudioRoutingMessage
+                    )
+                }
+            },
             onDeleteClick = { idx, path ->
                 if (path.isNotEmpty() && deleteTranscriptFiles(path)) {
                     resultList.removeAt(idx)
