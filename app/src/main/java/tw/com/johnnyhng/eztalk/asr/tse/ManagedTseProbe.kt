@@ -2,7 +2,15 @@ package tw.com.johnnyhng.eztalk.asr.tse
 
 import android.content.Context
 import android.util.Log
+import com.google.android.gms.tflite.acceleration.AccelerationConfig
+import com.google.android.gms.tflite.acceleration.AccelerationService
+import com.google.android.gms.tflite.acceleration.CpuAccelerationConfig
+import com.google.android.gms.tflite.acceleration.CustomValidationConfig
+import com.google.android.gms.tflite.acceleration.GpuAccelerationConfig
+import com.google.android.gms.tflite.acceleration.Model
+import com.google.android.gms.tflite.acceleration.ValidatedAccelerationConfigResult
 import com.google.android.gms.tflite.client.TfLiteInitializationOptions
+import com.google.android.gms.tflite.gpu.support.TfLiteGpu
 import com.google.android.gms.tflite.java.TfLite
 import kotlinx.coroutines.tasks.await
 import org.tensorflow.lite.InterpreterApi
@@ -12,6 +20,7 @@ import java.io.DataInputStream
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.FloatBuffer
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
@@ -50,17 +59,29 @@ internal class ManagedTseProbe(
 
     suspend fun initialize(modelAssetName: String = "voice_filter_lite_int8.tflite"): Boolean {
         return try {
+            val modelBuffer = loadMappedAsset(modelAssetName)
+            val gpuAvailable = TfLiteGpu.isGpuDelegateAvailable(context).await()
             TfLite.initialize(
                 context,
-                TfLiteInitializationOptions.builder().build()
+                TfLiteInitializationOptions.builder()
+                    .setEnableGpuDelegateSupport(gpuAvailable)
+                    .build()
             ).await()
 
-            val modelBuffer = loadMappedAsset(modelAssetName)
+            val validatedConfig = selectValidatedAccelerationConfig(modelAssetName, modelBuffer, gpuAvailable)
             val options = InterpreterApi.Options()
                 .setRuntime(TfLiteRuntime.FROM_SYSTEM_ONLY)
+            if (validatedConfig != null) {
+                validatedConfig.apply(options)
+            }
             interpreter = InterpreterApi.create(modelBuffer, options)
 
-            Log.i(TAG, "ManagedTseProbe initialized: model=$modelAssetName")
+            val acceleratorName = validatedConfig?.accelerationConfig()?.acceleratorName ?: "CPU fallback"
+            val benchmarkPassed = validatedConfig?.benchmarkResult()?.hasPassedAccuracyCheck() ?: false
+            Log.i(
+                TAG,
+                "ManagedTseProbe initialized: model=$modelAssetName gpuAvailable=$gpuAvailable accelerator=$acceleratorName benchmarkPassed=$benchmarkPassed"
+            )
             true
         } catch (t: Throwable) {
             Log.e(TAG, "ManagedTseProbe initialization failed for model=$modelAssetName", t)
@@ -164,6 +185,80 @@ internal class ManagedTseProbe(
                 )
             }
         }
+    }
+
+    private suspend fun selectValidatedAccelerationConfig(
+        modelAssetName: String,
+        modelBuffer: MappedByteBuffer,
+        gpuAvailable: Boolean
+    ): ValidatedAccelerationConfigResult? {
+        val accelerationService = AccelerationService.create(context)
+        val model = Model.Builder()
+            .setModelNamespace("tw.com.johnnyhng.eztalk.asr.tse")
+            .setModelId(modelAssetName.removeSuffix(".tflite"))
+            .setModelLocation(Model.ModelLocation.fromByteBuffer(modelBuffer))
+            .build()
+
+        val validationConfig = CustomValidationConfig.Builder()
+            .setBatchSize(1)
+            .setGoldenInputs(
+                zeroCnnWindowInput(),
+                zeroEmbedInput(),
+                zeroStateInput(),
+                zeroStateInput(),
+                zeroStateInput(),
+                zeroStateInput()
+            )
+            .setAccuracyValidator(CustomValidationConfig.SKIP_VALIDATION)
+            .build()
+
+        val configs = buildList<AccelerationConfig> {
+            if (gpuAvailable) {
+                add(
+                    GpuAccelerationConfig.Builder()
+                        .setEnableQuantizedInference(true)
+                        .build()
+                )
+            }
+            add(
+                CpuAccelerationConfig.Builder()
+                    .setNumThreads(1)
+                    .build()
+            )
+        }
+
+        val result = accelerationService.selectBestConfig(model, configs, validationConfig).await()
+        if (result == null) {
+            Log.i(TAG, "ManagedTseProbe acceleration validation returned no valid config")
+            return null
+        }
+
+        if (!result.isValid()) {
+            Log.i(
+                TAG,
+                "ManagedTseProbe acceleration validation invalid: accelerator=${result.accelerationConfig().acceleratorName} error=${result.benchmarkError()}"
+            )
+            return null
+        }
+
+        Log.i(
+            TAG,
+            "ManagedTseProbe acceleration validation selected: accelerator=${result.accelerationConfig().acceleratorName} inferenceMicros=${result.benchmarkResult().inferenceTimeMicros()}"
+        )
+        return result
+    }
+
+    private fun zeroCnnWindowInput(): FloatBuffer = allocateFloatBuffer(CNN_FRAMES * FREQ_BINS)
+
+    private fun zeroEmbedInput(): FloatBuffer = allocateFloatBuffer(EMBED_DIM)
+
+    private fun zeroStateInput(): FloatBuffer = allocateFloatBuffer(LSTM_DIM)
+
+    private fun allocateFloatBuffer(size: Int): FloatBuffer {
+        return ByteBuffer.allocateDirect(size * Float.SIZE_BYTES)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .apply { position(0) }
     }
 
     internal fun loadDvectorForTesting(assetName: String): FloatArray {
