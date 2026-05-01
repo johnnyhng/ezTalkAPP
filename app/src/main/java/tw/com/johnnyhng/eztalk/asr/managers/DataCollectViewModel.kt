@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.utils.deleteQueueState
 import tw.com.johnnyhng.eztalk.asr.utils.restoreQueueState
@@ -40,6 +42,11 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
 
     private val settingsManager = SettingsManager(application)
     private val appContext = application.applicationContext
+    private val managedMicPipeline = ManagedTseMaskPipeline(appContext)
+    private val managedMicMutex = Mutex()
+    private val managedMicPending = ArrayList<Float>()
+    private var managedMicPipelineReady = false
+    private var managedMicHopCount = 0
 
     private val queue = ArrayDeque<String>()
     private val history = ArrayDeque<String>()
@@ -78,6 +85,40 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
                 "ManagedTseMaskPipeline startup result: initialized=$pipelineInitialized processedHops=$processedHops lastMaskStats=$lastMaskStats"
             )
             pipeline.close()
+
+            managedMicPipelineReady = managedMicPipeline.initialize()
+            Log.i(TAG, "ManagedTseMaskPipeline live probe ready: initialized=$managedMicPipelineReady")
+        }
+    }
+
+    fun onLiveMicSamples(samples: FloatArray) {
+        if (samples.isEmpty() || !managedMicPipelineReady) return
+        viewModelScope.launch(Dispatchers.IO) {
+            managedMicMutex.withLock {
+                managedMicPending.addAll(samples.toList())
+                while (managedMicPending.size >= 160) {
+                    val hop = FloatArray(160) { idx -> managedMicPending[idx] }
+                    managedMicPending.subList(0, 160).clear()
+                    val result = managedMicPipeline.processHop(hop) ?: continue
+                    managedMicHopCount++
+                    if (managedMicHopCount <= 5 || managedMicHopCount % 25 == 0) {
+                        Log.i(
+                            TAG,
+                            "ManagedTseMaskPipeline live mic stats: hop=$managedMicHopCount hopRms=${formatRms(hop)} magRms=${formatRms(result.magnitude)} magStats=${summarizeArray(result.magnitude)} mask=${summarizeArray(result.mask)}"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun resetLiveMicProbe() {
+        viewModelScope.launch(Dispatchers.IO) {
+            managedMicMutex.withLock {
+                managedMicPending.clear()
+                managedMicHopCount = 0
+                managedMicPipeline.reset()
+            }
         }
     }
 
@@ -254,16 +295,37 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun summarizeMask(mask: FloatArray): String {
-        if (mask.isEmpty()) return "empty"
+        return summarizeArray(mask)
+    }
+
+    private fun summarizeArray(values: FloatArray): String {
+        if (values.isEmpty()) return "empty"
         var min = Float.POSITIVE_INFINITY
         var max = Float.NEGATIVE_INFINITY
         var sum = 0f
-        for (value in mask) {
+        for (value in values) {
             if (value < min) min = value
             if (value > max) max = value
             sum += value
         }
-        val avg = sum / mask.size
-        return "min=${"%.3f".format(min)} avg=${"%.3f".format(avg)} max=${"%.3f".format(max)}"
+        val avg = sum / values.size
+        return "min=${formatRms(min)} avg=${formatRms(avg)} max=${formatRms(max)}"
+    }
+
+    private fun formatRms(values: FloatArray): String {
+        if (values.isEmpty()) return "0.000000"
+        var sum = 0.0
+        for (value in values) {
+            sum += value * value
+        }
+        return formatRms(kotlin.math.sqrt(sum / values.size))
+    }
+
+    private fun formatRms(value: Double): String {
+        return "%.6f".format(value)
+    }
+
+    private fun formatRms(value: Float): String {
+        return "%.6f".format(value.toDouble())
     }
 }

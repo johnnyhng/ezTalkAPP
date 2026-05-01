@@ -123,6 +123,18 @@ fun DataCollectScreen(
         homeViewModel.updateDataCollectText(uiState.text)
     }
 
+    LaunchedEffect(latestAudioSamples) {
+        if (isStarted && latestAudioSamples.isNotEmpty()) {
+            dataCollectViewModel.onLiveMicSamples(latestAudioSamples)
+        }
+    }
+
+    LaunchedEffect(isStarted) {
+        if (!isStarted) {
+            dataCollectViewModel.resetLiveMicProbe()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
