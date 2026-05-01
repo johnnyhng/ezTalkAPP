@@ -24,6 +24,7 @@ import tw.com.johnnyhng.eztalk.asr.datacollect.moveToNext as reduceMoveToNext
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToPrevious as reduceMoveToPrevious
 import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseMaskPipeline
 import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseProbe
+import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseWaveformPipeline
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -43,9 +44,11 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     private val settingsManager = SettingsManager(application)
     private val appContext = application.applicationContext
     private val managedMicPipeline = ManagedTseMaskPipeline(appContext)
+    private val managedMicWaveformPipeline = ManagedTseWaveformPipeline(appContext)
     private val managedMicMutex = Mutex()
     private val managedMicPending = ArrayList<Float>()
     private var managedMicPipelineReady = false
+    private var managedMicWaveformPipelineReady = false
     private var managedMicHopCount = 0
 
     private val queue = ArrayDeque<String>()
@@ -88,23 +91,26 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
 
             managedMicPipelineReady = managedMicPipeline.initialize()
             Log.i(TAG, "ManagedTseMaskPipeline live probe ready: initialized=$managedMicPipelineReady")
+
+            managedMicWaveformPipelineReady = managedMicWaveformPipeline.initialize()
+            Log.i(TAG, "ManagedTseWaveformPipeline live probe ready: initialized=$managedMicWaveformPipelineReady")
         }
     }
 
     fun onLiveMicSamples(samples: FloatArray) {
-        if (samples.isEmpty() || !managedMicPipelineReady) return
+        if (samples.isEmpty() || !managedMicWaveformPipelineReady) return
         viewModelScope.launch(Dispatchers.IO) {
             managedMicMutex.withLock {
                 managedMicPending.addAll(samples.toList())
                 while (managedMicPending.size >= 160) {
                     val hop = FloatArray(160) { idx -> managedMicPending[idx] }
                     managedMicPending.subList(0, 160).clear()
-                    val result = managedMicPipeline.processHop(hop) ?: continue
+                    val result = managedMicWaveformPipeline.processHop(hop) ?: continue
                     managedMicHopCount++
                     if (managedMicHopCount <= 5 || managedMicHopCount % 25 == 0) {
                         Log.i(
                             TAG,
-                            "ManagedTseMaskPipeline live mic stats: hop=$managedMicHopCount hopRms=${formatRms(hop)} magRms=${formatRms(result.magnitude)} magStats=${summarizeArray(result.magnitude)} mask=${summarizeArray(result.mask)}"
+                            "ManagedTseWaveformPipeline live mic stats: hop=$managedMicHopCount hopRms=${formatRms(hop)} magRms=${formatRms(result.magnitude)} magStats=${summarizeArray(result.magnitude)} mask=${summarizeArray(result.mask)} waveformRms=${formatRms(result.waveformHop)} waveformStats=${summarizeArray(result.waveformHop)}"
                         )
                     }
                 }
@@ -118,6 +124,7 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
                 managedMicPending.clear()
                 managedMicHopCount = 0
                 managedMicPipeline.reset()
+                managedMicWaveformPipeline.reset()
             }
         }
     }
