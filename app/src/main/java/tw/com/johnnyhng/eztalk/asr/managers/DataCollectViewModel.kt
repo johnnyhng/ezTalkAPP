@@ -20,7 +20,10 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
 import tw.com.johnnyhng.eztalk.asr.datacollect.applyImportedLines as reduceApplyImportedLines
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToNext as reduceMoveToNext
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToPrevious as reduceMoveToPrevious
+import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseMaskPipeline
 import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseProbe
+import kotlin.math.PI
+import kotlin.math.sin
 
 data class DataCollectUiState(
     val text: String = "我在做測試",
@@ -54,6 +57,27 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
                 "ManagedTseProbe startup result: initialized=$initialized dummyInferenceOk=$dummyInferenceOk"
             )
             probe.close()
+
+            val pipeline = ManagedTseMaskPipeline(appContext)
+            val pipelineInitialized = pipeline.initialize()
+            var processedHops = 0
+            var lastMaskStats = "n/a"
+            if (pipelineInitialized) {
+                repeat(4) { hopIndex ->
+                    val hop = FloatArray(160) { sampleIndex ->
+                        val t = (hopIndex * 160 + sampleIndex) / 16000.0
+                        (0.1 * sin(2.0 * PI * 440.0 * t)).toFloat()
+                    }
+                    val result = pipeline.processHop(hop) ?: return@repeat
+                    processedHops++
+                    lastMaskStats = summarizeMask(result.mask)
+                }
+            }
+            Log.i(
+                TAG,
+                "ManagedTseMaskPipeline startup result: initialized=$pipelineInitialized processedHops=$processedHops lastMaskStats=$lastMaskStats"
+            )
+            pipeline.close()
         }
     }
 
@@ -227,5 +251,19 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
         }
         cells.add(builder.toString().trim())
         return cells.firstOrNull { it.isNotBlank() } ?: ""
+    }
+
+    private fun summarizeMask(mask: FloatArray): String {
+        if (mask.isEmpty()) return "empty"
+        var min = Float.POSITIVE_INFINITY
+        var max = Float.NEGATIVE_INFINITY
+        var sum = 0f
+        for (value in mask) {
+            if (value < min) min = value
+            if (value > max) max = value
+            sum += value
+        }
+        val avg = sum / mask.size
+        return "min=${"%.3f".format(min)} avg=${"%.3f".format(avg)} max=${"%.3f".format(max)}"
     }
 }
