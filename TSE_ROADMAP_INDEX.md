@@ -8,15 +8,20 @@ Use it as the entry point before diving into model, runtime, or accelerator-spec
 
 ## Recommended Reading Order
 
-1. [ANDROID_TSE_ACCELERATION_STRATEGY.md](./ANDROID_TSE_ACCELERATION_STRATEGY.md)
-2. [TENSOR_G2_VALIDATION_CHECKLIST.md](./TENSOR_G2_VALIDATION_CHECKLIST.md)
-3. [SNAPDRAGON_QNN_FEASIBILITY_CHECKLIST.md](./SNAPDRAGON_QNN_FEASIBILITY_CHECKLIST.md)
-4. [ANDROID_REALTIME_TSE_MODEL_REQUIREMENTS.md](./ANDROID_REALTIME_TSE_MODEL_REQUIREMENTS.md)
-5. [JNI_REALTIME_TSE_DESIGN.md](./JNI_REALTIME_TSE_DESIGN.md)
+1. [MANAGED_RUNTIME_TSE_PLAN.md](./MANAGED_RUNTIME_TSE_PLAN.md)
+2. [ANDROID_TSE_ACCELERATION_STRATEGY.md](./ANDROID_TSE_ACCELERATION_STRATEGY.md)
+3. [TENSOR_G2_VALIDATION_CHECKLIST.md](./TENSOR_G2_VALIDATION_CHECKLIST.md)
+4. [SNAPDRAGON_QNN_FEASIBILITY_CHECKLIST.md](./SNAPDRAGON_QNN_FEASIBILITY_CHECKLIST.md)
+5. [ANDROID_REALTIME_TSE_MODEL_REQUIREMENTS.md](./ANDROID_REALTIME_TSE_MODEL_REQUIREMENTS.md)
+6. [JNI_REALTIME_TSE_DESIGN.md](./JNI_REALTIME_TSE_DESIGN.md)
 
 ## What Each Document Covers
 
 ### Strategy
+
+- [MANAGED_RUNTIME_TSE_PLAN.md](./MANAGED_RUNTIME_TSE_PLAN.md)
+  - Declares managed runtime as the primary future direction
+  - Downgrades self-compiled JNI inference to paused/fallback status
 
 - [ANDROID_TSE_ACCELERATION_STRATEGY.md](./ANDROID_TSE_ACCELERATION_STRATEGY.md)
   - Defines the top-level acceleration split:
@@ -51,9 +56,10 @@ Use it as the entry point before diving into model, runtime, or accelerator-spec
 At the moment, the intended roadmap is:
 
 1. Use `Tensor G2` as the primary validation baseline.
-2. Continue validating `VoiceFilter-Lite` style models or similarly lightweight streaming architectures.
-3. Treat `NNAPI` as an experiment, not the long-term product assumption.
-4. Keep the graph simple enough that future Snapdragon/QNN support remains possible.
+2. Treat managed `TFLite / LiteRT` style deployment as the primary direction.
+3. Continue validating `VoiceFilter-Lite` style models or similarly lightweight streaming architectures.
+4. Treat `NNAPI` as an experiment, not the long-term product assumption.
+5. Keep the graph simple enough that future Snapdragon/QNN support remains possible.
 
 ## Non-Goals
 

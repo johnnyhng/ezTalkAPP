@@ -39,7 +39,7 @@
 - `QNN` 不是 `Tensor G2` 的答案
 - `QNN` 只適用於 Qualcomm/Snapdragon 路線
 - `NNAPI` 目前只能視為過渡性驗證手段
-- 長期應保留轉向 Tensor-friendly managed runtime 的可能性
+- `managed runtime` 現在應視為主線，不再只是保留選項
 
 ## 3. 加速方案總覽
 
@@ -57,10 +57,11 @@
 
 現階段原則：
 
-- 繼續用現有 native `ONNX Runtime` 路徑做驗證
+- 以 `TFLite / LiteRT` 類 managed runtime 為優先方向
+- 現有 native `ONNX Runtime` 路徑只保留作對照與過渡驗證
 - 不把 `NNAPI attached` 當成功條件
 - 實際觀察是否落到 `nnapi-reference`
-- 若 ORT/NNAPI 持續不穩或太慢，保留轉向 Tensor-native runtime 的空間
+- 除非有明確收益，否則不再擴張自編 JNI inference 成本
 
 ### 3.2 路線 B：Snapdragon / QNN 次線
 
@@ -105,18 +106,20 @@
 
 ### 5.1 近程原則
 
-短期內以現有 JNI/native pipeline 為主：
+短期內以 managed runtime 驗證為主：
 
-- native DSP
-- native ORT session
-- `160`-sample hop
-- `400`-sample window
-- `mask`-based STFT pipeline
+- `voice_filter_lite_int8.tflite`
+- managed model runtime
+- `DataCollectScreen` 驗證與 A/B 比較
+- 結構化測試記錄
+
+必要時可保留少量橋接層，但不再把自編 inference `.so` 視為主線。
 
 目的：
 
 - 快速量測真實裝置表現
-- 保持與現有 app 管線相容
+- 降低整體維護成本
+- 先判斷模型是否值得更深整合
 
 ### 5.2 長期原則
 
@@ -157,7 +160,7 @@
 ## 7. 目前建議執行順序
 
 1. 以 `Tensor G2` 作為主要 baseline
-2. 持續驗證 `VoiceFilter-Lite` 類模型
+2. 以 `managed runtime` 驗證 `VoiceFilter-Lite` 類模型
 3. 固定測試模板，累積 device/model/runtime baseline
 4. 只有在 Tensor 主線方向穩定後，再開 Snapdragon/QNN 評估
 
@@ -175,6 +178,7 @@
 本計畫與下列文件配合使用：
 
 - [TSE_ROADMAP_INDEX.md](./TSE_ROADMAP_INDEX.md)
+- [MANAGED_RUNTIME_TSE_PLAN.md](./MANAGED_RUNTIME_TSE_PLAN.md)
 - [ANDROID_TSE_ACCELERATION_STRATEGY.md](./ANDROID_TSE_ACCELERATION_STRATEGY.md)
 - [TENSOR_G2_VALIDATION_CHECKLIST.md](./TENSOR_G2_VALIDATION_CHECKLIST.md)
 - [SNAPDRAGON_QNN_FEASIBILITY_CHECKLIST.md](./SNAPDRAGON_QNN_FEASIBILITY_CHECKLIST.md)
