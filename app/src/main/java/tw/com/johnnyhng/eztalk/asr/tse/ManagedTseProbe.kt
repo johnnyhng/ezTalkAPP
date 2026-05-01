@@ -55,7 +55,16 @@ internal class ManagedTseProbe(
         val nextState: LstmState
     )
 
+    internal data class HardwareAccelerationStatus(
+        val initialized: Boolean,
+        val gpuAvailable: Boolean,
+        val selectedAccelerator: String,
+        val benchmarkPassed: Boolean,
+        val hardwareAccelerated: Boolean
+    )
+
     private var interpreter: InterpreterApi? = null
+    private var lastHardwareAccelerationStatus: HardwareAccelerationStatus? = null
 
     suspend fun initialize(modelAssetName: String = "voice_filter_lite_int8.tflite"): Boolean {
         return try {
@@ -78,6 +87,13 @@ internal class ManagedTseProbe(
 
             val acceleratorName = validatedConfig?.accelerationConfig()?.acceleratorName ?: "CPU fallback"
             val benchmarkPassed = validatedConfig?.benchmarkResult()?.hasPassedAccuracyCheck() ?: false
+            lastHardwareAccelerationStatus = HardwareAccelerationStatus(
+                initialized = true,
+                gpuAvailable = gpuAvailable,
+                selectedAccelerator = acceleratorName,
+                benchmarkPassed = benchmarkPassed,
+                hardwareAccelerated = acceleratorName != "CPU fallback"
+            )
             Log.i(
                 TAG,
                 "ManagedTseProbe initialized: model=$modelAssetName gpuAvailable=$gpuAvailable accelerator=$acceleratorName benchmarkPassed=$benchmarkPassed"
@@ -85,12 +101,29 @@ internal class ManagedTseProbe(
             true
         } catch (t: Throwable) {
             Log.e(TAG, "ManagedTseProbe initialization failed for model=$modelAssetName", t)
+            lastHardwareAccelerationStatus = HardwareAccelerationStatus(
+                initialized = false,
+                gpuAvailable = false,
+                selectedAccelerator = "none",
+                benchmarkPassed = false,
+                hardwareAccelerated = false
+            )
             close()
             false
         }
     }
 
     fun isInitialized(): Boolean = interpreter != null
+
+    fun hardwareAccelerationStatus(): HardwareAccelerationStatus {
+        return lastHardwareAccelerationStatus ?: HardwareAccelerationStatus(
+            initialized = false,
+            gpuAvailable = false,
+            selectedAccelerator = "unknown",
+            benchmarkPassed = false,
+            hardwareAccelerated = false
+        )
+    }
 
     fun runDummyInference(
         modelAssetName: String = "voice_filter_lite_int8.tflite",
@@ -173,6 +206,7 @@ internal class ManagedTseProbe(
     fun close() {
         runCatching { interpreter?.close() }
         interpreter = null
+        lastHardwareAccelerationStatus = null
     }
 
     private fun loadMappedAsset(assetName: String): MappedByteBuffer {

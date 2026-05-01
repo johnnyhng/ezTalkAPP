@@ -67,9 +67,10 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
             val probe = ManagedTseProbe(appContext)
             val initialized = probe.initialize()
             val dummyInferenceOk = if (initialized) probe.runDummyInference() else false
+            val hardwareStatus = probe.hardwareAccelerationStatus()
             Log.i(
                 TAG,
-                "ManagedTseProbe startup result: initialized=$initialized dummyInferenceOk=$dummyInferenceOk"
+                "ManagedTseProbe startup result: initialized=$initialized dummyInferenceOk=$dummyInferenceOk hardwareAccelerated=${hardwareStatus.hardwareAccelerated} gpuAvailable=${hardwareStatus.gpuAvailable} selectedAccelerator=${hardwareStatus.selectedAccelerator} benchmarkPassed=${hardwareStatus.benchmarkPassed}"
             )
             probe.close()
 
