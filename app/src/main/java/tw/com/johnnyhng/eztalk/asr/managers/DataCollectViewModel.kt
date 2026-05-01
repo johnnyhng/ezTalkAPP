@@ -2,6 +2,7 @@ package tw.com.johnnyhng.eztalk.asr.managers
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
 import tw.com.johnnyhng.eztalk.asr.datacollect.applyImportedLines as reduceApplyImportedLines
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToNext as reduceMoveToNext
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToPrevious as reduceMoveToPrevious
+import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseProbe
 
 data class DataCollectUiState(
     val text: String = "我在做測試",
@@ -29,6 +31,10 @@ data class DataCollectUiState(
 )
 
 class DataCollectViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        private const val TAG = "DataCollectViewModel"
+    }
+
     private val settingsManager = SettingsManager(application)
     private val appContext = application.applicationContext
 
@@ -37,6 +43,15 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _uiState = MutableStateFlow(DataCollectUiState())
     val uiState: StateFlow<DataCollectUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val probe = ManagedTseProbe(appContext)
+            val ok = probe.initialize()
+            Log.i(TAG, "ManagedTseProbe startup result: initialized=$ok")
+            probe.close()
+        }
+    }
 
     fun onTextChange(text: String) {
         _uiState.update { it.copy(text = text) }
