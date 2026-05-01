@@ -37,6 +37,11 @@ class RecognitionManager(private val context: Context) {
         DATA_COLLECT,
     }
 
+    private data class AudioChunkPacket(
+        val samples: FloatArray,
+        val capturedAtMs: Long
+    )
+
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val audioIOManager = AudioIOManager(context)
     private var audioRecord: AudioRecord? = null
@@ -102,7 +107,7 @@ class RecognitionManager(private val context: Context) {
         Log.i(TAG, "RecognitionManager start: sessionId=$sessionId, mode=$mode, useTseDetection=${userSettings.useTseDetection}")
 
         recognitionJob = scope.launch {
-            val samplesChannel = Channel<FloatArray>(capacity = Channel.UNLIMITED)
+            val samplesChannel = Channel<AudioChunkPacket>(capacity = Channel.BUFFERED)
             
             // Audio setup
             val managedRecord = audioIOManager.createMicAudioRecord(
@@ -132,8 +137,7 @@ class RecognitionManager(private val context: Context) {
 
             // Recording loop
             launch(Dispatchers.IO) {
-                val interval = 0.1
-                val readBufferSize = (interval * sampleRateInHz).toInt()
+                val readBufferSize = 160
                 val buffer = ShortArray(readBufferSize)
 
                 audioRecord?.startRecording()
@@ -155,7 +159,7 @@ class RecognitionManager(private val context: Context) {
                     readLogger.onRead(ret, buffer, activeInputLabel)
                     if (ret > 0) {
                         val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
-                        samplesChannel.send(samples)
+                        samplesChannel.send(AudioChunkPacket(samples = samples, capturedAtMs = System.currentTimeMillis()))
                         _latestSamples.value = samples
                     }
                 }
@@ -194,7 +198,7 @@ class RecognitionManager(private val context: Context) {
     }
 
     private suspend fun processAudio(
-        samplesChannel: Channel<FloatArray>,
+        samplesChannel: Channel<AudioChunkPacket>,
         userSettings: UserSettings,
         mode: RecordingMode,
         sessionId: Long
@@ -233,23 +237,19 @@ class RecognitionManager(private val context: Context) {
         var done = false
         try {
             while (!done) {
-                val s = samplesChannel.tryReceive().getOrNull()
-                val flushRequest = flushChannel.tryReceive().getOrNull()
+                val packet = samplesChannel.receiveCatching().getOrNull()
 
-                if (s == null) {
-                    if (flushRequest != null || samplesChannel.isClosedForReceive) {
-                        tsePreprocessor?.flush()?.let { tail ->
-                            if (tail.processed.isNotEmpty()) {
-                                rawAlignedBuffer.addAll(tail.rawAligned.toList())
-                                buffer.addAll(tail.processed.toList())
-                            }
+                if (packet == null) {
+                    tsePreprocessor?.flush()?.let { tail ->
+                        if (tail.processed.isNotEmpty()) {
+                            rawAlignedBuffer.addAll(tail.rawAligned.toList())
+                            buffer.addAll(tail.processed.toList())
                         }
-                        Log.i(TAG, "RecognitionManager flush received: sessionId=$sessionId, closing processing loop")
-                        done = true
-                    } else {
-                        delay(10)
                     }
+                    Log.i(TAG, "RecognitionManager input channel closed: sessionId=$sessionId, closing processing loop")
+                    done = true
                 } else {
+                    val s = packet.samples
                     val chunkOutput = if (!tsePassthroughForSession && tsePreprocessor != null) {
                         tsePreprocessor.processChunk(s)
                     } else {
@@ -269,7 +269,7 @@ class RecognitionManager(private val context: Context) {
                     if (tsePreprocessor != null && (processedChunkCount <= 5 || processedChunkCount % 25 == 0)) {
                         Log.i(
                             TAG,
-                            "RecognitionManager TSE chunk stats: sessionId=$sessionId, chunk=$processedChunkCount, rawRms=${rms(rawChunk).format3()}, processedRms=${rms(processedChunk).format3()}, diffRms=${rmsDiff(rawChunk, processedChunk).format3()}, tsePassthrough=$tsePassthroughForSession"
+                            "RecognitionManager TSE chunk stats: sessionId=$sessionId, chunk=$processedChunkCount, queueLatencyMs=${System.currentTimeMillis() - packet.capturedAtMs}, rawRms=${rms(rawChunk).format3()}, processedRms=${rms(processedChunk).format3()}, diffRms=${rmsDiff(rawChunk, processedChunk).format3()}, tsePassthrough=$tsePassthroughForSession"
                         )
                     }
                     buffer.addAll(processedChunk.toList())
