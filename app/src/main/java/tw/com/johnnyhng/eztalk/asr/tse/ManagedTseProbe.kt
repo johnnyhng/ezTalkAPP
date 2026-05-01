@@ -78,7 +78,7 @@ internal class ManagedTseProbe(
         return try {
             runSingleFrame(
                 cnnWindow = FloatArray(CNN_FRAMES * FREQ_BINS),
-                embed = loadDvector(dvectorAssetName),
+                embed = loadDvectorForTesting(dvectorAssetName),
                 state = LstmState()
             )
             Log.i(
@@ -166,7 +166,7 @@ internal class ManagedTseProbe(
         }
     }
 
-    private fun loadDvector(assetName: String): FloatArray {
+    internal fun loadDvectorForTesting(assetName: String): FloatArray {
         context.assets.open(assetName).use { input ->
             DataInputStream(input).use { data ->
                 val bytes = ByteArray(EMBED_DIM * Float.SIZE_BYTES)
