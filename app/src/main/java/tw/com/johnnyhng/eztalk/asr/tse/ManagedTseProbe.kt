@@ -34,6 +34,18 @@ internal class ManagedTseProbe(
         private const val LSTM_DIM = 512
     }
 
+    internal data class LstmState(
+        val h1: FloatArray = FloatArray(LSTM_DIM),
+        val c1: FloatArray = FloatArray(LSTM_DIM),
+        val h2: FloatArray = FloatArray(LSTM_DIM),
+        val c2: FloatArray = FloatArray(LSTM_DIM)
+    )
+
+    internal data class SingleFrameResult(
+        val mask: FloatArray,
+        val nextState: LstmState
+    )
+
     private var interpreter: InterpreterApi? = null
 
     suspend fun initialize(modelAssetName: String = "voice_filter_lite_int8.tflite"): Boolean {
@@ -63,16 +75,49 @@ internal class ManagedTseProbe(
         modelAssetName: String = "voice_filter_lite_int8.tflite",
         dvectorAssetName: String = "dvector.bin"
     ): Boolean {
-        val localInterpreter = interpreter ?: return false
         return try {
-            val x = Array(1) { Array(CNN_FRAMES) { Array(FREQ_BINS) { FloatArray(1) } } }
-            val embed = arrayOf(loadDvector(dvectorAssetName))
-            val h1In = arrayOf(FloatArray(LSTM_DIM))
-            val c1In = arrayOf(FloatArray(LSTM_DIM))
-            val h2In = arrayOf(FloatArray(LSTM_DIM))
-            val c2In = arrayOf(FloatArray(LSTM_DIM))
+            runSingleFrame(
+                cnnWindow = FloatArray(CNN_FRAMES * FREQ_BINS),
+                embed = loadDvector(dvectorAssetName),
+                state = LstmState()
+            )
+            Log.i(
+                TAG,
+                "ManagedTseProbe dummy inference succeeded: model=$modelAssetName maskShape=[1,$FREQ_BINS,1] stateDim=$LSTM_DIM"
+            )
+            true
+        } catch (t: Throwable) {
+            Log.e(TAG, "ManagedTseProbe dummy inference failed for model=$modelAssetName", t)
+            false
+        }
+    }
 
-            val inputs = arrayOf(x, embed, h1In, c1In, h2In, c2In)
+    fun runSingleFrame(
+        cnnWindow: FloatArray,
+        embed: FloatArray,
+        state: LstmState
+    ): SingleFrameResult? {
+        val localInterpreter = interpreter ?: return null
+        require(cnnWindow.size == CNN_FRAMES * FREQ_BINS) {
+            "cnnWindow must have ${CNN_FRAMES * FREQ_BINS} floats, got ${cnnWindow.size}"
+        }
+        require(embed.size == EMBED_DIM) {
+            "embed must have $EMBED_DIM floats, got ${embed.size}"
+        }
+        require(state.h1.size == LSTM_DIM && state.c1.size == LSTM_DIM &&
+            state.h2.size == LSTM_DIM && state.c2.size == LSTM_DIM) {
+            "All LSTM state tensors must have $LSTM_DIM floats"
+        }
+
+        return try {
+            val x = packNhwcWindow(cnnWindow)
+            val embedIn = arrayOf(embed)
+            val h1In = arrayOf(state.h1)
+            val c1In = arrayOf(state.c1)
+            val h2In = arrayOf(state.h2)
+            val c2In = arrayOf(state.c2)
+
+            val inputs = arrayOf(x, embedIn, h1In, c1In, h2In, c2In)
             val maskOut = Array(1) { Array(FREQ_BINS) { FloatArray(1) } }
             val h1Out = Array(1) { FloatArray(LSTM_DIM) }
             val c1Out = Array(1) { FloatArray(LSTM_DIM) }
@@ -87,14 +132,20 @@ internal class ManagedTseProbe(
             )
 
             localInterpreter.runForMultipleInputsOutputs(inputs, outputs)
-            Log.i(
-                TAG,
-                "ManagedTseProbe dummy inference succeeded: model=$modelAssetName maskShape=[1,$FREQ_BINS,1] stateDim=$LSTM_DIM"
+
+            val mask = FloatArray(FREQ_BINS) { idx -> maskOut[0][idx][0] }
+            SingleFrameResult(
+                mask = mask,
+                nextState = LstmState(
+                    h1 = h1Out[0].copyOf(),
+                    c1 = c1Out[0].copyOf(),
+                    h2 = h2Out[0].copyOf(),
+                    c2 = c2Out[0].copyOf()
+                )
             )
-            true
         } catch (t: Throwable) {
-            Log.e(TAG, "ManagedTseProbe dummy inference failed for model=$modelAssetName", t)
-            false
+            Log.e(TAG, "ManagedTseProbe runSingleFrame failed", t)
+            null
         }
     }
 
@@ -122,6 +173,18 @@ internal class ManagedTseProbe(
                 data.readFully(bytes)
                 val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
                 return FloatArray(EMBED_DIM) { buffer.float }
+            }
+        }
+    }
+
+    private fun packNhwcWindow(cnnWindow: FloatArray): Array<Array<Array<FloatArray>>> {
+        return Array(1) { batch ->
+            Array(CNN_FRAMES) { frame ->
+                Array(FREQ_BINS) { bin ->
+                    FloatArray(1) {
+                        cnnWindow[batch * CNN_FRAMES * FREQ_BINS + frame * FREQ_BINS + bin]
+                    }
+                }
             }
         }
     }
