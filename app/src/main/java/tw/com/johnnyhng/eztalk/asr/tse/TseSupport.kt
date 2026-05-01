@@ -23,23 +23,21 @@ internal fun ensureTseAssetsForUser(
 
     fun copyAsset(assetName: String): String {
         val targetFile = File(targetDir, assetName)
-        if (!targetFile.exists()) {
-            try {
-                context.assets.open(assetName).use { input ->
-                    FileOutputStream(targetFile).use { output ->
-                        input.copyTo(output)
-                    }
+        try {
+            context.assets.open(assetName).use { input ->
+                FileOutputStream(targetFile, false).use { output ->
+                    input.copyTo(output)
                 }
-            } catch (e: IOException) {
-                Log.e(TAG, "Failed to copy TSE asset for user=$userId: $assetName", e)
-                throw e
             }
+        } catch (e: IOException) {
+            Log.e(TAG, "Failed to copy TSE asset for user=$userId: $assetName", e)
+            throw e
         }
         return targetFile.absolutePath
     }
 
     return TseAssetPaths(
-        modelPath = copyAsset("voice_filter_int8.onnx"),
+        modelPath = copyAsset("voice_filter_lite_int8.onnx"),
         dvectorPath = copyAsset("dvector.bin")
     )
 }
@@ -53,9 +51,10 @@ internal fun initializeNativeTseForUser(
         val (modelPath, dvectorPath) = ensureTseAssetsForUser(context, userId)
         val initialized = nativeTse.init(modelPath, dvectorPath)
         if (initialized) {
+            val modelFileName = File(modelPath).name
             Log.i(
                 TAG,
-                "NativeTSE initialized for user=$userId, modelPath=$modelPath, dvectorPath=$dvectorPath"
+                "NativeTSE initialized for user=$userId, model=$modelFileName, modelPath=$modelPath, dvectorPath=$dvectorPath"
             )
             nativeTse
         } else {
