@@ -16,6 +16,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.utils.deleteQueueState
+import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.restoreQueueState
 import tw.com.johnnyhng.eztalk.asr.utils.saveQueueState
 import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
@@ -34,6 +35,8 @@ data class DataCollectUiState(
     val showNoQueueMessage: Boolean = false,
     val remainingCount: Int = 0,
     val previousCount: Int = 0,
+    val managedPreviewRawWavPath: String = "",
+    val managedPreviewTseWavPath: String = "",
 )
 
 class DataCollectViewModel(application: Application) : AndroidViewModel(application) {
@@ -47,6 +50,8 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     private val managedMicWaveformPipeline = ManagedTseWaveformPipeline(appContext)
     private val managedMicMutex = Mutex()
     private val managedMicPending = ArrayList<Float>()
+    private val managedMicRawPlaybackPending = ArrayList<Float>()
+    private val managedMicTsePlaybackPending = ArrayList<Float>()
     private var managedMicPipelineReady = false
     private var managedMicWaveformPipelineReady = false
     private var managedMicHopCount = 0
@@ -107,6 +112,8 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
                     managedMicPending.subList(0, 160).clear()
                     val result = managedMicWaveformPipeline.processHop(hop) ?: continue
                     managedMicHopCount++
+                    managedMicRawPlaybackPending.addAll(hop.toList())
+                    managedMicTsePlaybackPending.addAll(result.waveformHop.toList())
                     if (managedMicHopCount <= 5 || managedMicHopCount % 25 == 0) {
                         Log.i(
                             TAG,
@@ -121,7 +128,10 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     fun resetLiveMicProbe() {
         viewModelScope.launch(Dispatchers.IO) {
             managedMicMutex.withLock {
+                persistManagedMicPreviewLocked()
                 managedMicPending.clear()
+                managedMicRawPlaybackPending.clear()
+                managedMicTsePlaybackPending.clear()
                 managedMicHopCount = 0
                 managedMicPipeline.reset()
                 managedMicWaveformPipeline.reset()
@@ -253,6 +263,36 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
 
     private suspend fun currentUserId(): String {
         return settingsManager.userSettings.first().userId
+    }
+
+    private suspend fun persistManagedMicPreviewLocked() {
+        val userId = currentUserId()
+        val rawPath = saveAsWav(
+            context = appContext,
+            samples = managedMicRawPlaybackPending.toFloatArray(),
+            sampleRate = 16000,
+            numChannels = 1,
+            userId = userId,
+            filename = "managed_tse_preview_raw"
+        )
+        val tsePath = saveAsWav(
+            context = appContext,
+            samples = managedMicTsePlaybackPending.toFloatArray(),
+            sampleRate = 16000,
+            numChannels = 1,
+            userId = userId,
+            filename = "managed_tse_preview_tse"
+        )
+        _uiState.update {
+            it.copy(
+                managedPreviewRawWavPath = rawPath.orEmpty(),
+                managedPreviewTseWavPath = tsePath.orEmpty()
+            )
+        }
+        Log.i(
+            TAG,
+            "ManagedTseWaveformPipeline preview saved: raw=${rawPath.orEmpty().ifBlank { "n/a" }} tse=${tsePath.orEmpty().ifBlank { "n/a" }}"
+        )
     }
 
     private fun parseLines(uri: Uri): List<String> {

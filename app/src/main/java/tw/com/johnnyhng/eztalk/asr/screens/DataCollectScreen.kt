@@ -17,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -149,6 +150,64 @@ fun DataCollectScreen(
                     .fillMaxWidth()
                     .height(100.dp)
             )
+        }
+
+        if (uiState.managedPreviewRawWavPath.isNotBlank() || uiState.managedPreviewTseWavPath.isNotBlank()) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Managed preview",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (uiState.managedPreviewTseWavPath.isNotBlank()) {
+                        TextButton(
+                            onClick = {
+                                val path = uiState.managedPreviewTseWavPath
+                                if (currentlyPlaying == path) {
+                                    MediaController.stop()
+                                } else {
+                                    MediaController.play(
+                                        context = context,
+                                        filePath = path,
+                                        userSettings = userSettings,
+                                        onRoutingApplied = homeViewModel::reportAudioRoutingMessage
+                                    )
+                                }
+                            },
+                            enabled = !isStarted && !isAsrModelLoading
+                        ) {
+                            Text(text = "TSE")
+                        }
+                    }
+                    if (uiState.managedPreviewRawWavPath.isNotBlank()) {
+                        TextButton(
+                            onClick = {
+                                val path = uiState.managedPreviewRawWavPath
+                                if (currentlyPlaying == path) {
+                                    MediaController.stop()
+                                } else {
+                                    MediaController.play(
+                                        context = context,
+                                        filePath = path,
+                                        userSettings = userSettings,
+                                        onRoutingApplied = homeViewModel::reportAudioRoutingMessage
+                                    )
+                                }
+                            },
+                            enabled = !isStarted && !isAsrModelLoading
+                        ) {
+                            Text(text = "Raw")
+                        }
+                    }
+                }
+            }
         }
 
         Card(modifier = Modifier.fillMaxWidth()) {
