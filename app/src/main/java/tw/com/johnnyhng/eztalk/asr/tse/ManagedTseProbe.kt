@@ -8,7 +8,10 @@ import kotlinx.coroutines.tasks.await
 import org.tensorflow.lite.InterpreterApi
 import org.tensorflow.lite.InterpreterApi.Options.TfLiteRuntime
 import tw.com.johnnyhng.eztalk.asr.TAG
+import java.io.DataInputStream
 import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
@@ -24,6 +27,13 @@ import java.nio.channels.FileChannel
 internal class ManagedTseProbe(
     private val context: Context
 ) {
+    companion object {
+        private const val CNN_FRAMES = 32
+        private const val FREQ_BINS = 257
+        private const val EMBED_DIM = 192
+        private const val LSTM_DIM = 512
+    }
+
     private var interpreter: InterpreterApi? = null
 
     suspend fun initialize(modelAssetName: String = "voice_filter_lite_int8.tflite"): Boolean {
@@ -49,6 +59,45 @@ internal class ManagedTseProbe(
 
     fun isInitialized(): Boolean = interpreter != null
 
+    fun runDummyInference(
+        modelAssetName: String = "voice_filter_lite_int8.tflite",
+        dvectorAssetName: String = "dvector.bin"
+    ): Boolean {
+        val localInterpreter = interpreter ?: return false
+        return try {
+            val x = Array(1) { Array(CNN_FRAMES) { Array(FREQ_BINS) { FloatArray(1) } } }
+            val embed = arrayOf(loadDvector(dvectorAssetName))
+            val h1In = arrayOf(FloatArray(LSTM_DIM))
+            val c1In = arrayOf(FloatArray(LSTM_DIM))
+            val h2In = arrayOf(FloatArray(LSTM_DIM))
+            val c2In = arrayOf(FloatArray(LSTM_DIM))
+
+            val inputs = arrayOf(x, embed, h1In, c1In, h2In, c2In)
+            val maskOut = Array(1) { Array(FREQ_BINS) { FloatArray(1) } }
+            val h1Out = Array(1) { FloatArray(LSTM_DIM) }
+            val c1Out = Array(1) { FloatArray(LSTM_DIM) }
+            val h2Out = Array(1) { FloatArray(LSTM_DIM) }
+            val c2Out = Array(1) { FloatArray(LSTM_DIM) }
+            val outputs = mutableMapOf<Int, Any>(
+                0 to maskOut,
+                1 to h1Out,
+                2 to c1Out,
+                3 to h2Out,
+                4 to c2Out
+            )
+
+            localInterpreter.runForMultipleInputsOutputs(inputs, outputs)
+            Log.i(
+                TAG,
+                "ManagedTseProbe dummy inference succeeded: model=$modelAssetName maskShape=[1,$FREQ_BINS,1] stateDim=$LSTM_DIM"
+            )
+            true
+        } catch (t: Throwable) {
+            Log.e(TAG, "ManagedTseProbe dummy inference failed for model=$modelAssetName", t)
+            false
+        }
+    }
+
     fun close() {
         runCatching { interpreter?.close() }
         interpreter = null
@@ -62,6 +111,17 @@ internal class ManagedTseProbe(
                     afd.startOffset,
                     afd.declaredLength
                 )
+            }
+        }
+    }
+
+    private fun loadDvector(assetName: String): FloatArray {
+        context.assets.open(assetName).use { input ->
+            DataInputStream(input).use { data ->
+                val bytes = ByteArray(EMBED_DIM * Float.SIZE_BYTES)
+                data.readFully(bytes)
+                val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                return FloatArray(EMBED_DIM) { buffer.float }
             }
         }
     }

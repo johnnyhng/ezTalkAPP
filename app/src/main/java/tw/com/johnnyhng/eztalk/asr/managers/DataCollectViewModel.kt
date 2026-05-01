@@ -47,8 +47,12 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     init {
         viewModelScope.launch(Dispatchers.IO) {
             val probe = ManagedTseProbe(appContext)
-            val ok = probe.initialize()
-            Log.i(TAG, "ManagedTseProbe startup result: initialized=$ok")
+            val initialized = probe.initialize()
+            val dummyInferenceOk = if (initialized) probe.runDummyInference() else false
+            Log.i(
+                TAG,
+                "ManagedTseProbe startup result: initialized=$initialized dummyInferenceOk=$dummyInferenceOk"
+            )
             probe.close()
         }
     }
