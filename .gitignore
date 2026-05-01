@@ -9,4 +9,5 @@ app/google-services.json
 app/src/main/res/values/secrets.xml
 app/src/main/jniLibs/**/*.so
 app/src/main/assets/voice_filter*.onnx
+app/src/main/assets/voice_filter*.tflite
 app/src/main/assets/dvector.bin

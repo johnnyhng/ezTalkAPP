@@ -7,7 +7,7 @@ import android.util.Log
  *
  * Input contract:
  * - `processFrame()` expects exactly 160 float samples (10 ms @ 16 kHz)
- * - native side maintains internal 64-frame context, streaming buffers, and warm-up state
+ * - native side maintains the streaming feature/state buffers required by the current TSE backend
  *
  * Lifecycle guidance:
  * - call `reset()` before a new utterance or a new recording session

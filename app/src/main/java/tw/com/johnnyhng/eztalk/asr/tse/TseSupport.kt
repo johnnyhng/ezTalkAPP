@@ -37,7 +37,7 @@ internal fun ensureTseAssetsForUser(
     }
 
     return TseAssetPaths(
-        modelPath = copyAsset("voice_filter_lite_int8.onnx"),
+        modelPath = copyAsset("voice_filter_lite_int8.tflite"),
         dvectorPath = copyAsset("dvector.bin")
     )
 }
