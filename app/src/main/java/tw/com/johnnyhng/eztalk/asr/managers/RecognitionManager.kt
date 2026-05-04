@@ -17,7 +17,6 @@ import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
-import tw.com.johnnyhng.eztalk.asr.tse.initializeNativeTseForUser
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.buildTranscriptFileTargets
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
@@ -203,15 +202,15 @@ class RecognitionManager(private val context: Context) {
         val partialIntervalMs = userSettings.partialIntervalMs
         val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
         val userId = userSettings.userId
-        val nativeTse = if (userSettings.useTseDetection) {
-            initializeNativeTseForUser(context, userId)
+        val dummyTseRequested = userSettings.useTseDetection
+        val tsePreprocessor = if (dummyTseRequested) {
+            TseAudioPreprocessor().also { it.reset() }
         } else {
             null
         }
-        val tsePreprocessor = nativeTse?.let(::TseAudioPreprocessor)?.also { it.reset() }
         Log.i(
             TAG,
-            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=${userSettings.useTseDetection}, nativeTseReady=${tsePreprocessor != null}, saveVadSegmentsOnly=$saveVadSegmentsOnly"
+            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=$dummyTseRequested, tseRuntime=dummy_raw_passthrough, saveVadSegmentsOnly=$saveVadSegmentsOnly"
         )
 
         var buffer = arrayListOf<Float>()
@@ -224,15 +223,11 @@ class RecognitionManager(private val context: Context) {
         var isSpeechStarted = false
         var startTime = System.currentTimeMillis()
         val utteranceSegments = mutableListOf<FloatArray>()
-        val rawUtteranceSegments = mutableListOf<FloatArray>()
         var lastVadPacketAt = 0L
-        var rawSegmentSearchCursor = 0
-        var tsePassthroughForSession = false
         var processedChunkCount = 0
 
         var done = false
-        try {
-            while (!done) {
+        while (!done) {
                 val s = samplesChannel.tryReceive().getOrNull()
                 val flushRequest = flushChannel.tryReceive().getOrNull()
 
@@ -250,29 +245,21 @@ class RecognitionManager(private val context: Context) {
                         delay(10)
                     }
                 } else {
-                    val chunkOutput = if (!tsePassthroughForSession && tsePreprocessor != null) {
-                        tsePreprocessor.processChunk(s)
-                    } else {
-                        tw.com.johnnyhng.eztalk.asr.tse.TseChunkOutput(s, s)
-                    }
-                    if (tsePreprocessor != null && tsePreprocessor.isBypassing && !tsePassthroughForSession) {
-                        tsePassthroughForSession = true
-                        Log.w(TAG, "RecognitionManager TSE chunk fallback engaged: sessionId=$sessionId, reason=preprocessor_bypass")
-                    }
+                    if (s.isEmpty()) continue
+                    val chunkOutput = tsePreprocessor?.processChunk(s)
+                        ?: tw.com.johnnyhng.eztalk.asr.tse.TseChunkOutput(s, s)
                     if (chunkOutput.processed.isEmpty() && chunkOutput.rawAligned.isEmpty()) {
                         continue
                     }
-                    val rawChunk = if (tsePassthroughForSession) s else chunkOutput.rawAligned
-                    val processedChunk = if (tsePassthroughForSession) s else chunkOutput.processed
-                    rawAlignedBuffer.addAll(rawChunk.toList())
+                    rawAlignedBuffer.addAll(chunkOutput.rawAligned.toList())
+                    buffer.addAll(chunkOutput.processed.toList())
                     processedChunkCount += 1
-                    if (tsePreprocessor != null && (processedChunkCount <= 5 || processedChunkCount % 25 == 0)) {
+                    if (dummyTseRequested && (processedChunkCount <= 5 || processedChunkCount % 25 == 0)) {
                         Log.i(
                             TAG,
-                            "RecognitionManager TSE chunk stats: sessionId=$sessionId, chunk=$processedChunkCount, rawRms=${rms(rawChunk).format3()}, processedRms=${rms(processedChunk).format3()}, diffRms=${rmsDiff(rawChunk, processedChunk).format3()}, tsePassthrough=$tsePassthroughForSession"
+                            "RecognitionManager dummy TSE raw passthrough stats: sessionId=$sessionId, chunk=$processedChunkCount, rawRms=${rms(chunkOutput.rawAligned).format3()}, processedRms=${rms(chunkOutput.processed).format3()}"
                         )
                     }
-                    buffer.addAll(processedChunk.toList())
                 }
 
                 // VAD Processing
@@ -287,13 +274,8 @@ class RecognitionManager(private val context: Context) {
                         startTime = System.currentTimeMillis()
                         Log.i(
                             TAG,
-                            "RecognitionManager speech start detected: offset=$offset, bufferSize=${buffer.size}, rawAlignedBufferSize=${rawAlignedBuffer.size}, tseEnabled=${tsePreprocessor != null && !tsePassthroughForSession}"
+                            "RecognitionManager speech start detected: offset=$offset, bufferSize=${buffer.size}, rawAlignedBufferSize=${rawAlignedBuffer.size}, tseRequested=$dummyTseRequested"
                         )
-                        rawSegmentSearchCursor = if (saveVadSegmentsOnly) {
-                            offset - windowSize
-                        } else {
-                            0
-                        }
                         if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
                     }
                 }
@@ -322,23 +304,6 @@ class RecognitionManager(private val context: Context) {
                     val seg = SimulateStreamingAsr.popVadSegmentSafely() ?: break
                     if (!saveVadSegmentsOnly) {
                         lastSpeechDetectedOffset = offset
-                    } else if (!tsePassthroughForSession && tsePreprocessor != null) {
-                        val rawSegmentRange = findSegmentRange(
-                            source = buffer,
-                            target = seg,
-                            startIndex = rawSegmentSearchCursor
-                        )
-                        val rawSegment = if (rawSegmentRange != null) {
-                            rawSegmentSearchCursor = rawSegmentRange.last + 1
-                            rawAlignedBuffer.subList(
-                                rawSegmentRange.first,
-                                rawSegmentRange.last + 1
-                            ).toFloatArray()
-                        } else {
-                            Log.w(TAG, "Failed to align raw segment with ORT TSE-processed segment; using processed segment length as fallback")
-                            seg.copyOf()
-                        }
-                        rawUtteranceSegments.add(rawSegment)
                     }
                     utteranceSegments.add(seg)
                     lastVadPacketAt = System.currentTimeMillis()
@@ -352,14 +317,10 @@ class RecognitionManager(private val context: Context) {
                     if (since >= lingerMs || done || !_isStarted.value) {
                         Log.i(
                             TAG,
-                            "RecognitionManager final utterance trigger: since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, tseEnabled=${tsePreprocessor != null}"
+                            "RecognitionManager final utterance trigger: since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, tseRequested=$dummyTseRequested"
                         )
                         val rawAudioToSave = if (saveVadSegmentsOnly) {
-                            if (!tsePassthroughForSession && tsePreprocessor != null) {
-                                rawUtteranceSegments.flatMap { it.toList() }.toFloatArray()
-                            } else {
-                                utteranceSegments.flatMap { it.toList() }.toFloatArray()
-                            }
+                            utteranceSegments.flatMap { it.toList() }.toFloatArray()
                         } else {
                             lastSpeechDetectedOffset = min(buffer.size - 1, lastSpeechDetectedOffset + keep)
                             rawAlignedBuffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
@@ -387,7 +348,7 @@ class RecognitionManager(private val context: Context) {
 
                             val wavPath = saveAsWav(context, processedAudioToSave, sampleRateInHz, 1, userId, filename)
                             if (wavPath != null) {
-                                val rawWavPath = if (tsePreprocessor != null) {
+                                val rawWavPath = if (dummyTseRequested) {
                                     saveSiblingRawWav(
                                         userId = userId,
                                         baseFilename = timestamp,
@@ -398,7 +359,7 @@ class RecognitionManager(private val context: Context) {
                                 }
                                 Log.i(
                                     TAG,
-                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseEnabled=${tsePreprocessor != null && !tsePassthroughForSession}, tsePassthrough=$tsePassthroughForSession"
+                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseRequested=$dummyTseRequested, tseRuntime=dummy_raw_passthrough"
                                 )
                                 if (rawWavPath != null) {
                                     Log.i(
@@ -408,7 +369,7 @@ class RecognitionManager(private val context: Context) {
                                 } else {
                                     Log.i(
                                         TAG,
-                                        "RecognitionManager raw sibling wav skipped: tseEnabled=${tsePreprocessor != null}"
+                                        "RecognitionManager raw sibling wav skipped: tseRequested=$dummyTseRequested"
                                     )
                                 }
                                 Log.d(
@@ -439,7 +400,7 @@ class RecognitionManager(private val context: Context) {
                             } else {
                                 Log.e(
                                     TAG,
-                                    "RecognitionManager failed to save processed wav: filename=$filename, samples=${processedAudioToSave.size}, tseEnabled=${tsePreprocessor != null}"
+                                    "RecognitionManager failed to save processed wav: filename=$filename, samples=${processedAudioToSave.size}, tseRequested=$dummyTseRequested"
                                 )
                             }
                         } finally {
@@ -448,7 +409,6 @@ class RecognitionManager(private val context: Context) {
 
                         // Reset for next utterance
                         utteranceSegments.clear()
-                        rawUtteranceSegments.clear()
                         isSpeechStarted = false
                         buffer = arrayListOf()
                         rawAlignedBuffer = arrayListOf()
@@ -457,7 +417,6 @@ class RecognitionManager(private val context: Context) {
                         lastSpeechDetectedOffset = 0
                         lastVadPacketAt = 0L
                         startTime = System.currentTimeMillis()
-                        rawSegmentSearchCursor = 0
                         utteranceVariantBuffer.reset()
                         SimulateStreamingAsr.resetVadSafely()
                         Log.i(TAG, "RecognitionManager utterance reset complete: VAD state cleared for next utterance")
@@ -465,33 +424,7 @@ class RecognitionManager(private val context: Context) {
                         _countdownProgress.value = 0f
                     }
                 }
-            }
-        } finally {
-            runCatching { nativeTse?.release() }
         }
-    }
-
-    private fun findSegmentRange(
-        source: List<Float>,
-        target: FloatArray,
-        startIndex: Int
-    ): IntRange? {
-        if (target.isEmpty()) return IntRange.EMPTY
-        if (source.size < target.size || startIndex >= source.size) return null
-        val lastStart = source.size - target.size
-        for (index in max(0, startIndex)..lastStart) {
-            var matched = true
-            for (offset in target.indices) {
-                if (source[index + offset] != target[offset]) {
-                    matched = false
-                    break
-                }
-            }
-            if (matched) {
-                return index until (index + target.size)
-            }
-        }
-        return null
     }
 
     private fun saveSiblingRawWav(
@@ -521,17 +454,6 @@ class RecognitionManager(private val context: Context) {
             sumSquares += sample * sample
         }
         return kotlin.math.sqrt(sumSquares / samples.size).toFloat()
-    }
-
-    private fun rmsDiff(left: FloatArray, right: FloatArray): Float {
-        if (left.isEmpty() || right.isEmpty()) return 0f
-        val count = min(left.size, right.size)
-        var sumSquares = 0.0
-        for (index in 0 until count) {
-            val diff = left[index] - right[index]
-            sumSquares += diff * diff
-        }
-        return kotlin.math.sqrt(sumSquares / count).toFloat()
     }
 
     private fun Float.format3(): String = String.format(Locale.US, "%.3f", this)
