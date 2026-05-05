@@ -168,3 +168,113 @@ Use:
 - quality verdict: `not yet acceptable`
 - live-path verdict: `not ready`
 - recommended next step: `treat as Tensor G2 baseline and continue model/runtime tuning`
+
+---
+
+### Test ID
+
+- date: `2026-05-06`
+- device: `Pixel 7`
+- Android version: `not captured`
+- app build/commit: `a20887a7 Process DataCollect audio with managed TSE`
+- native lib build note: `NativeTSE removed; managed LiteRT path only`
+
+### Model
+
+- model name: `voice_filter_lite.tflite`
+- model family: `VoiceFilter-Lite LiteRT export`
+- quantized: `no, float32 tensors observed`
+- ONNX IR version: `n/a`
+- opset: `n/a`
+- input contract:
+  - `x [1,1,32,257]`
+  - `embed [1,192]`
+  - `h [2,1,512]`
+  - `c [2,1,512]`
+- output contract:
+  - `mask [1,257,1]`
+  - `h_next [2,1,512]`
+  - `c_next [2,1,512]`
+
+### Runtime
+
+- requested provider: `Google Play services LiteRT managed runtime with GPU validation first`
+- observed provider signals:
+  - `gpuAvailable=true`
+  - GPU delegate mini-benchmark attempted
+  - `ValidatedAccelerationConfig did not pass validation check`
+  - `benchmarkErrorCode=1008`
+  - `ManagedTseProbe acceleration validation returned no valid config`
+  - fallback interpreter created with `TfLiteXNNPackDelegate`
+- `nnapi-reference` seen: `no`
+- session init success: `yes`
+- repeated session init stable: `appears yes`
+
+### Latency
+
+- hop size: `160 samples / 10 ms`
+- avg inference ms: `not measured in app log`
+- typical range ms: `not measured`
+- worst observed ms: `not measured`
+- realtime verdict: `unknown`
+
+### Audio Behavior
+
+- mask min range:
+  - after Java array tensor binding fix: roughly `0.01-0.89` depending on frame energy
+  - before fix: `0.000000` for min/avg/max, caused silent output
+- mask avg range:
+  - silence/low input: roughly `0.17-0.66`
+  - speech/high input: roughly `0.83-0.99`
+- mask max range: often near `0.99`
+- processed vs raw RMS trend:
+  - speech frames produce non-zero waveform output after array binding fix
+  - low-energy frames are strongly attenuated
+- over-suppression observed: `needs listening confirmation`
+- start-of-utterance stability: `speech start detected`
+- subjective listening notes: `not captured`
+
+### Downstream Behavior
+
+- `speech start detected` stable: `yes`
+- final utterance trigger stable: `yes`
+- raw vs TSE VAD behavior: `VAD currently runs on raw passthrough during capture; managed TSE is DataCollect offline post-processing`
+- raw vs TSE ASR result: `ASR runs on managed TSE processed output for DataCollect final save path`
+- expected phrase: `我在做測試`
+- recognized variants:
+  - `我在`
+  - `我在說`
+  - `我在坐車`
+  - `我在做測試`
+
+### Issues Recorded
+
+- GPU acceleration is not active on Tensor G2 yet.
+  - validation falls back to CPU/XNNPACK
+  - observed error: `benchmarkErrorCode=1008` during GPU validation initialization
+- `.tflite` and `dvector.bin` assets are ignored by `app/src/main/assets/.gitignore`.
+  - source changes reference `voice_filter_lite.tflite`
+  - the actual model asset must be provisioned locally or by release packaging
+- Initial Android direct `ByteBuffer` tensor binding produced all-zero masks.
+  - Python with the same model and d-vector produced non-zero masks
+  - Android array-shaped input/output binding fixed mask output
+- Managed TSE is still not wired as true live-path processing.
+  - capture path still uses `TseAudioPreprocessor` as raw passthrough
+  - DataCollect saves raw sibling first, then runs managed TSE offline and saves processed audio back to `*.app.wav`
+- Current waveform reconstruction differs from the Python reference in details.
+  - Python reference uses `librosa.stft(... center=False)` and `librosa.istft(... center=False)`, then trims `160` samples and peak-normalizes
+  - app path uses custom STFT/IFFT/overlap-add and peak-normalizes offline output
+  - listening and waveform parity still need validation
+
+### Overall Verdict
+
+- loadability: `pass`
+- acceleration verdict: `fail, CPU/XNNPACK fallback`
+- latency verdict: `unknown`
+- quality verdict: `partially validated, non-zero processed waveform now produced`
+- live-path verdict: `not ready`
+- recommended next step:
+  - capture app-side per-hop inference latency
+  - compare saved `*.raw.app.wav` and `*.app.wav` by listening and waveform stats
+  - investigate GPU validation `benchmarkErrorCode=1008`
+  - decide whether to align Android STFT/ISTFT more closely to the Python `librosa` reference
