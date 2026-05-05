@@ -43,6 +43,11 @@ internal class ManagedTseProbe(
         private const val LSTM_DIM = 512
     }
 
+    private enum class InputLayout {
+        NHWC,
+        NCHW
+    }
+
     internal data class LstmState(
         val h1: FloatArray = FloatArray(LSTM_DIM),
         val c1: FloatArray = FloatArray(LSTM_DIM),
@@ -65,8 +70,9 @@ internal class ManagedTseProbe(
 
     private var interpreter: InterpreterApi? = null
     private var lastHardwareAccelerationStatus: HardwareAccelerationStatus? = null
+    private var inputLayout: InputLayout = InputLayout.NHWC
 
-    suspend fun initialize(modelAssetName: String = "voice_filter_lite_int8.tflite"): Boolean {
+    suspend fun initialize(modelAssetName: String = "voice_filter_lite.tflite"): Boolean {
         return try {
             val modelBuffer = loadMappedAsset(modelAssetName)
             val gpuAvailable = TfLiteGpu.isGpuDelegateAvailable(context).await()
@@ -77,13 +83,18 @@ internal class ManagedTseProbe(
                     .build()
             ).await()
 
-            val validatedConfig = selectValidatedAccelerationConfig(modelAssetName, modelBuffer, gpuAvailable)
+            val validatedConfig = selectValidatedAccelerationConfig(
+                modelAssetName = modelAssetName,
+                modelBuffer = modelBuffer,
+                gpuAvailable = gpuAvailable
+            )
             val options = InterpreterApi.Options()
                 .setRuntime(TfLiteRuntime.FROM_SYSTEM_ONLY)
             if (validatedConfig != null) {
                 validatedConfig.apply(options)
             }
             interpreter = InterpreterApi.create(modelBuffer, options)
+            configureStaticTensorShapes(interpreter!!)
 
             val acceleratorName = validatedConfig?.accelerationConfig()?.acceleratorName ?: "CPU fallback"
             val benchmarkPassed = validatedConfig?.benchmarkResult()?.hasPassedAccuracyCheck() ?: false
@@ -126,7 +137,7 @@ internal class ManagedTseProbe(
     }
 
     fun runDummyInference(
-        modelAssetName: String = "voice_filter_lite_int8.tflite",
+        modelAssetName: String = "voice_filter_lite.tflite",
         dvectorAssetName: String = "dvector.bin"
     ): Boolean {
         return try {
@@ -164,38 +175,25 @@ internal class ManagedTseProbe(
         }
 
         return try {
-            val x = packNhwcWindow(cnnWindow)
+            val x = packWindowArray(cnnWindow)
             val embedIn = arrayOf(embed)
-            val h1In = arrayOf(state.h1)
-            val c1In = arrayOf(state.c1)
-            val h2In = arrayOf(state.h2)
-            val c2In = arrayOf(state.c2)
-
-            val inputs = arrayOf(x, embedIn, h1In, c1In, h2In, c2In)
+            val hIn = packStackedStateArray(state.h1, state.h2)
+            val cIn = packStackedStateArray(state.c1, state.c2)
+            val inputs = arrayOf(x, embedIn, hIn, cIn)
             val maskOut = Array(1) { Array(FREQ_BINS) { FloatArray(1) } }
-            val h1Out = Array(1) { FloatArray(LSTM_DIM) }
-            val c1Out = Array(1) { FloatArray(LSTM_DIM) }
-            val h2Out = Array(1) { FloatArray(LSTM_DIM) }
-            val c2Out = Array(1) { FloatArray(LSTM_DIM) }
+            val stackedHOut = Array(2) { Array(1) { FloatArray(LSTM_DIM) } }
+            val stackedCOut = Array(2) { Array(1) { FloatArray(LSTM_DIM) } }
             val outputs = mutableMapOf<Int, Any>(
                 0 to maskOut,
-                1 to h1Out,
-                2 to c1Out,
-                3 to h2Out,
-                4 to c2Out
+                1 to stackedHOut,
+                2 to stackedCOut
             )
 
             localInterpreter.runForMultipleInputsOutputs(inputs, outputs)
 
-            val mask = FloatArray(FREQ_BINS) { idx -> maskOut[0][idx][0] }
             SingleFrameResult(
-                mask = mask,
-                nextState = LstmState(
-                    h1 = h1Out[0].copyOf(),
-                    c1 = c1Out[0].copyOf(),
-                    h2 = h2Out[0].copyOf(),
-                    c2 = c2Out[0].copyOf()
-                )
+                mask = FloatArray(FREQ_BINS) { index -> maskOut[0][index][0] },
+                nextState = readStackedState(stackedHOut, stackedCOut)
             )
         } catch (t: Throwable) {
             Log.e(TAG, "ManagedTseProbe runSingleFrame failed", t)
@@ -207,6 +205,7 @@ internal class ManagedTseProbe(
         runCatching { interpreter?.close() }
         interpreter = null
         lastHardwareAccelerationStatus = null
+        inputLayout = InputLayout.NHWC
     }
 
     private fun loadMappedAsset(assetName: String): MappedByteBuffer {
@@ -238,10 +237,8 @@ internal class ManagedTseProbe(
             .setGoldenInputs(
                 zeroCnnWindowInput(),
                 zeroEmbedInput(),
-                zeroStateInput(),
-                zeroStateInput(),
-                zeroStateInput(),
-                zeroStateInput()
+                zeroStackedStateInput(),
+                zeroStackedStateInput()
             )
             .setAccuracyValidator(CustomValidationConfig.SKIP_VALIDATION)
             .build()
@@ -282,17 +279,95 @@ internal class ManagedTseProbe(
         return result
     }
 
+    private fun configureStaticTensorShapes(interpreter: InterpreterApi) {
+        require(interpreter.getInputTensorCount() == 4) {
+            "ManagedTseProbe expects stacked-state model with 4 inputs, got ${interpreter.getInputTensorCount()}"
+        }
+        require(interpreter.getOutputTensorCount() == 3) {
+            "ManagedTseProbe expects stacked-state model with 3 outputs, got ${interpreter.getOutputTensorCount()}"
+        }
+
+        maybeResizeInput(interpreter, 0, intArrayOf(1, CNN_FRAMES, FREQ_BINS, 1))
+        maybeResizeInput(interpreter, 1, intArrayOf(1, EMBED_DIM))
+        maybeResizeInput(interpreter, 2, intArrayOf(2, 1, LSTM_DIM))
+        maybeResizeInput(interpreter, 3, intArrayOf(2, 1, LSTM_DIM))
+        interpreter.allocateTensors()
+
+        val input0Shape = interpreter.getInputTensor(0).shape()
+        inputLayout = when {
+            input0Shape.contentEquals(intArrayOf(1, CNN_FRAMES, FREQ_BINS, 1)) -> InputLayout.NHWC
+            input0Shape.contentEquals(intArrayOf(1, 1, CNN_FRAMES, FREQ_BINS)) -> InputLayout.NCHW
+            else -> error("Unsupported input tensor 0 shape: ${input0Shape.contentToString()}")
+        }
+        val maskOutputElements = interpreter.getOutputTensor(0).numElements()
+        require(maskOutputElements == FREQ_BINS) {
+            "ManagedTseProbe expects mask output with $FREQ_BINS elements, got $maskOutputElements"
+        }
+
+        val inputSummary = buildString {
+            append("inputs=")
+            append(
+                (0 until interpreter.getInputTensorCount()).joinToString(separator = "; ") { index ->
+                    val tensor = interpreter.getInputTensor(index)
+                    "[$index name=${tensor.name()} shape=${tensor.shape().contentToString()} sig=${tensor.shapeSignature().contentToString()}]"
+                }
+            )
+        }
+        val outputSummary = buildString {
+            append("outputs=")
+            append(
+                (0 until interpreter.getOutputTensorCount()).joinToString(separator = "; ") { index ->
+                    val tensor = interpreter.getOutputTensor(index)
+                    "[$index name=${tensor.name()} shape=${tensor.shape().contentToString()} sig=${tensor.shapeSignature().contentToString()}]"
+                }
+            )
+        }
+        Log.i(TAG, "ManagedTseProbe tensor allocation complete: inputLayout=$inputLayout stateLayout=STACKED_LAYERS $inputSummary $outputSummary")
+    }
+
+    private fun maybeResizeInput(interpreter: InterpreterApi, index: Int, preferredShape: IntArray) {
+        val tensor = interpreter.getInputTensor(index)
+        val signature = tensor.shapeSignature()
+        val current = tensor.shape()
+        if (signature.contentEquals(current)) {
+            return
+        }
+        val target = current.copyOf()
+        var changed = false
+        for (dim in target.indices) {
+            if (signature[dim] == -1) {
+                target[dim] = preferredShape[dim]
+                changed = true
+            }
+        }
+        if (changed) {
+            interpreter.resizeInput(index, target, true)
+        }
+    }
+
     private fun zeroCnnWindowInput(): FloatBuffer = allocateFloatBuffer(CNN_FRAMES * FREQ_BINS)
 
     private fun zeroEmbedInput(): FloatBuffer = allocateFloatBuffer(EMBED_DIM)
 
-    private fun zeroStateInput(): FloatBuffer = allocateFloatBuffer(LSTM_DIM)
+    private fun zeroStackedStateInput(): FloatBuffer = allocateFloatBuffer(2 * LSTM_DIM)
 
     private fun allocateFloatBuffer(size: Int): FloatBuffer {
         return ByteBuffer.allocateDirect(size * Float.SIZE_BYTES)
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
             .apply { position(0) }
+    }
+
+    private fun readStackedState(
+        h: Array<Array<FloatArray>>,
+        c: Array<Array<FloatArray>>
+    ): LstmState {
+        return LstmState(
+            h1 = h[0][0].copyOf(),
+            c1 = c[0][0].copyOf(),
+            h2 = h[1][0].copyOf(),
+            c2 = c[1][0].copyOf()
+        )
     }
 
     internal fun loadDvectorForTesting(assetName: String): FloatArray {
@@ -306,12 +381,41 @@ internal class ManagedTseProbe(
         }
     }
 
-    private fun packNhwcWindow(cnnWindow: FloatArray): Array<Array<Array<FloatArray>>> {
-        return Array(1) { batch ->
-            Array(CNN_FRAMES) { frame ->
-                Array(FREQ_BINS) { bin ->
-                    FloatArray(1) {
-                        cnnWindow[batch * CNN_FRAMES * FREQ_BINS + frame * FREQ_BINS + bin]
+    private fun packStackedStateArray(
+        layer0: FloatArray,
+        layer1: FloatArray
+    ): Array<Array<FloatArray>> {
+        return Array(2) { layer ->
+            Array(1) {
+                when (layer) {
+                    0 -> layer0.copyOf()
+                    else -> layer1.copyOf()
+                }
+            }
+        }
+    }
+
+    private fun packWindowArray(cnnWindow: FloatArray): Any {
+        return when (inputLayout) {
+            InputLayout.NHWC -> {
+                Array(1) {
+                    Array(CNN_FRAMES) { frame ->
+                        Array(FREQ_BINS) { bin ->
+                            FloatArray(1) {
+                                cnnWindow[frame * FREQ_BINS + bin]
+                            }
+                        }
+                    }
+                }
+            }
+            InputLayout.NCHW -> {
+                Array(1) {
+                    Array(1) {
+                        Array(CNN_FRAMES) { frame ->
+                            FloatArray(FREQ_BINS) { bin ->
+                                cnnWindow[frame * FREQ_BINS + bin]
+                            }
+                        }
                     }
                 }
             }

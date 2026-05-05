@@ -21,7 +21,7 @@ internal class ManagedTseMaskPipeline(
     )
 
     suspend fun initialize(
-        modelAssetName: String = "voice_filter_lite_int8.tflite",
+        modelAssetName: String = "voice_filter_lite.tflite",
         dvectorAssetName: String = "dvector.bin"
     ): Boolean {
         reset()
