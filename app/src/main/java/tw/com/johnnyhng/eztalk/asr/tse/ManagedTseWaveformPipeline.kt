@@ -9,7 +9,7 @@ import android.content.Context
 internal class ManagedTseWaveformPipeline(
     context: Context,
     private val stftHelper: ManagedStftHelper = ManagedStftHelper(),
-    private val frameRunner: ManagedTseMaskFrameRunner = ManagedTseTransformerFrameRunner(context),
+    private val frameRunner: ManagedTseMaskFrameRunner = ManagedTseFrameRunner(context),
     private val reconstructor: ManagedTseWaveformReconstructor = ManagedTseWaveformReconstructor()
 ) {
     internal data class WaveformFrameResult(
@@ -22,8 +22,8 @@ internal class ManagedTseWaveformPipeline(
     )
 
     suspend fun initialize(
-        modelAssetName: String = "voice_filter_tcn_64d_fp16_split.tflite",
-        dvectorAssetName: String = "dvector_64d_norm.bin"
+        modelAssetName: String = "voice_filter_lite.tflite",
+        dvectorAssetName: String = "dvector.bin"
     ): Boolean {
         reset()
         return frameRunner.initialize(

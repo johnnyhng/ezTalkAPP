@@ -362,8 +362,8 @@ class RecognitionManager(private val context: Context) {
                         }
                         val tseRuntime = when {
                             !shouldPostProcessManagedTse -> "raw_passthrough"
-                            managedTseAudio != null -> "managed_gpu_offline"
-                            else -> "gpu_required_unavailable_raw_passthrough"
+                            managedTseAudio != null -> "managed_lite_offline"
+                            else -> "managed_lite_unavailable_raw_passthrough"
                         }
                         val finalAsrInput = processedAudioToSave
 

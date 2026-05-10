@@ -639,6 +639,30 @@ Use:
   - it keeps attention-style ops that were the original reason to prefer TCN for Tensor G2 GPU testing
   - do not switch app default back to this artifact unless intentionally running a negative/control test
 
+### Return To Voice Filter Lite
+
+- date: `2026-05-10`
+- decision:
+  - abandon the TCN Tensor G2 GPU path for now
+  - return managed TSE default to the CNN+LSTM `voice_filter_lite.tflite` model
+- source assets:
+  - `/media/hhs/FastData/workspace/TSE/release/android/voice_filter_lite.tflite`
+  - `/media/hhs/FastData/workspace/TSE/release/android/dvector.bin`
+- app assets refreshed:
+  - `app/src/main/assets/voice_filter_lite.tflite`
+  - `app/src/main/assets/dvector.bin`
+- SHA-256:
+  - `voice_filter_lite.tflite`: `cb440929a5ac330e63ead111562f44d8f6ed24823d67a8b110956d6d457c1b51`
+  - `dvector.bin`: `c7e83afbb9676a28bac11856124e8330e54e60a28231474152c76e284df26756`
+- app changes:
+  - `ManagedTseMaskPipeline` now defaults to `ManagedTseFrameRunner`
+  - `ManagedTseWaveformPipeline` now defaults to `ManagedTseFrameRunner`
+  - default model/d-vector changed to `voice_filter_lite.tflite` + `dvector.bin`
+  - processed WAV runtime label changed from `managed_gpu_offline` to `managed_lite_offline`
+- note:
+  - this path uses the CNN+LSTM 4-input / 3-output contract through `ManagedTseProbe`
+  - acceleration verdict must be read from the next device log; the runtime label is intentionally neutral and no longer claims GPU
+
 ### GPU Delegate Binding Fix
 
 - date: `2026-05-09 16:30:10`
