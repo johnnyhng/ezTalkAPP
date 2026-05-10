@@ -266,15 +266,407 @@ Use:
   - app path uses custom STFT/IFFT/overlap-add and peak-normalizes offline output
   - listening and waveform parity still need validation
 
+### Follow-Up Artifact
+
+- date: `2026-05-07`
+- model candidate: `voice_filter_lite_ai_edge.tflite`
+- source note: `/media/hhs/FastData/workspace/TSE/release/android/litert_gpu_short_term.md`
+- tensor contract: same as `voice_filter_lite.tflite`
+  - `x [1,1,32,257]`
+  - `embed [1,192]`
+  - `h/c [2,1,512]`
+  - `mask [1,257,1]`
+- desktop verification note from source doc:
+  - `test_stream_litert.py --model release/android/voice_filter_lite_ai_edge.tflite`
+  - `675` frames
+  - average desktop CPU latency `33.90 ms/frame`
+  - output RMS matched the existing LiteRT export
+- app-side integration note:
+  - default managed TSE asset changed to `voice_filter_lite_ai_edge.tflite`
+  - actual asset remains ignored by `app/src/main/assets/.gitignore`
+- open issue:
+  - source doc warns GPU delegate and interpreter invoke should stay on the same thread
+  - current app initializes managed TSE from coroutine contexts and can invoke from later coroutine work
+  - this must be fixed before interpreting any Pixel/Tensor G2 GPU result as final
+
+### Transformer 64D Artifact
+
+- date: `2026-05-07`
+- model candidate: `voice_filter_transformer_64d_fp16.tflite`
+- d-vector candidate: `dvector_64d_norm.bin`
+- source note: `/media/hhs/FastData/workspace/TSE/docs/TRANSFORMER_DENOISE_ANDROID_DEPLOYMENT.md`
+- local asset note:
+  - copied to `app/src/main/assets/voice_filter_transformer_64d_fp16.tflite`
+  - copied to `app/src/main/assets/voice_filter_transformer_64d_int8.tflite`
+  - copied to `app/src/main/assets/dvector_64d.bin`
+  - copied to `app/src/main/assets/dvector_64d_norm.bin`
+  - model and d-vector assets remain ignored by `app/src/main/assets/.gitignore`
+- SHA-256:
+  - fp16 model: `294cd091ddf7b8b8711174a634ab8044e7684c45dbfaca4b0df766b2304b4fca`
+  - int8 model: `5c32dff01179dd41f27d4ec35dbb0ff7b5aedef0fe38843c895b7c4fe0f709e2`
+  - raw 64D d-vector: `65fc7e26f20bb76fd529761bb650ce2a849d4cbb1161531a664042b100435913`
+  - normalized 64D d-vector: `d985bff59eb10a64183633c9419153a210e22ecacc2bd450531715035b66218b`
+- default fp16 tensor contract:
+  - `spec_input float32 [1,80,257,1]`
+  - `embed_input float32 [1,64]`
+  - `pos_input float32 [1,81]`
+  - `mask output float32 [1,80,257,1]`
+- int8 artifact tensor contract:
+  - same inputs
+  - `mask output int8 [1,80,257,1]`
+  - output quantization: `scale=0.00390625`, `zeroPoint=-128`
+- streaming contract:
+  - one hop remains `160 samples / 10 ms`
+  - model context is `80` STFT frames, roughly `800 ms` of hop history
+  - runner shifts the spectrogram context and uses only output frame `79` as the current mask
+- denoise post-processing:
+  - `mask_power=1.0`
+  - `smoothing=0.7`
+  - `soft_gate=0.15`
+  - `soft_gate_gain=0.2`
+  - `hard_gate=0.08`
+  - no fixed target RMS normalization
+- app-side integration note:
+  - `ManagedTseMaskPipeline` and `ManagedTseWaveformPipeline` previously defaulted to `voice_filter_transformer_64d_fp16.tflite`
+  - default 64D embedding changed to `dvector_64d_norm.bin`
+  - transformer runner supports both float32 output and int8 output artifacts
+  - old LSTM `ManagedTseProbe` remains available as a separate runner path
+  - GPU delegate creation is attempted directly; if interpreter creation fails, app falls back to CPU
+  - transformer interpreter creation and invocation are pinned to one executor thread to satisfy GPU delegate thread affinity
+- open issue:
+  - no Pixel 7/Tensor G2 runtime log captured yet for this transformer model
+  - need confirm whether direct GPU delegate creation succeeds or falls back to CPU on device
+  - need compare saved `*.raw.app.wav` and transformer-processed `*.app.wav` by listening and waveform stats
+
+### Transformer 64D FP16 Pixel 7 Runtime
+
+- date: `2026-05-07 22:22:48`
+- device target: `Pixel 7 / Tensor G2`
+- model: `voice_filter_transformer_64d_fp16.tflite`
+- d-vector: `dvector_64d.bin`
+- tensor allocation: `pass`
+- observed tensor contract:
+  - input 0: `serving_default_spec_input:0 FLOAT32 [1,80,257,1]`
+  - input 1: `serving_default_embed_input:0 FLOAT32 [1,64]`
+  - input 2: `serving_default_pos_input:0 FLOAT32 [1,81]`
+  - output 0: `StatefulPartitionedCall_1:0 FLOAT32 [1,80,257,1]`
+  - quantization: `0.0/0`, as expected for float output
+- app runner branch: `outputType=FLOAT32`
+- GPU availability probe: `true`
+- selected accelerator: `CPU fallback`
+- immediate conclusion:
+  - fp16 model loads and allocates with the expected Android contract
+  - direct GPU delegate creation still does not become the active runtime on this device/app path
+  - next GPU investigation should focus on the warning/exception emitted before CPU fallback and on direct delegate factory support in Play services LiteRT
+
+### TCN Causal Ratio Tensor G2 Deployment Note
+
+- date: `2026-05-08`
+- source note: `/media/hhs/FastData/workspace/TSE/docs/TCN_CAUSAL_RATIO_TENSOR_G2_DEPLOYMENT.md`
+- recommended TCN artifacts now available in TSE release output:
+  - `voice_filter_tcn_64d_fp16.tflite`
+  - `voice_filter_tcn_64d_fp32.tflite`
+  - `voice_filter_tcn_64d_int8.tflite`
+  - `dvector_64d_norm.bin`
+- app default as of 2026-05-09:
+  - model: `voice_filter_tcn_64d_fp16.tflite`
+  - d-vector: `dvector_64d_norm.bin`
+  - local asset copied to `app/src/main/assets/voice_filter_tcn_64d_fp16.tflite`
+- SHA-256:
+  - TCN fp16 model: `1b5d564bc5497c4e61f98f793f6ad553afe1772365504e9ace4b737ed4695721`
+  - normalized 64D d-vector: `d985bff59eb10a64183633c9419153a210e22ecacc2bd450531715035b66218b`
+- TCN FP16/FP32 contract:
+  - `spec_input float32 [1,80,257,1]`
+  - `embed_input float32 [1,64]`
+  - `mask output float32 [1,80,257,1]`
+- important contract difference from current transformer runner:
+  - TCN has `2` inputs, no `pos_input`
+  - app runner now detects `2` inputs and invokes TCN with `specBuffer + embed`
+  - app runner still supports `3` input Transformer artifacts with `specBuffer + embed + posInput`
+- quality note from source doc:
+  - TCN FP16/FP32 TFLite is better than mixed audio but still below tuned Transformer/Lite AI Edge quality
+  - TCN is expected to be more Tensor G2 GPU-friendly because it is convolution-heavy and avoids attention/recurrent ops
+- static-shape export update:
+  - source script: `/media/hhs/FastData/workspace/TSE/scripts/export_tflite_tcn_64d_gpu.py`
+  - script now exports from a concrete function with fixed input signatures:
+    - `spec_input [1,80,257,1]`
+    - `embed_input [1,64]`
+  - local app asset refreshed from `/media/hhs/FastData/workspace/TSE/release/android/voice_filter_tcn_64d_fp16.tflite`
+  - expected Android signature after reinstall: no `-1` in `shapeSignature`
+  - 2026-05-09 20:23 artifact also removes GPU-hostile 4D tensors:
+    - `bad_4d_count=0`
+    - no `[128,1,1,1]` tensors remain
+
+### TCN 64D FP16 Pixel 7 Runtime
+
+- date: `2026-05-09 16:24:14`
+- device target: `Pixel 7 / Tensor G2`
+- model: `voice_filter_tcn_64d_fp16.tflite`
+- d-vector: `dvector_64d_norm.bin`
+- tensor allocation: `pass`
+- observed tensor contract:
+  - input 0: `serving_default_spec_input:0 FLOAT32 [1,80,257,1]`
+  - input 1: `serving_default_embed_input:0 FLOAT32 [1,64]`
+  - output 0: `StatefulPartitionedCall_1:0 FLOAT32 [1,80,257,1]`
+  - quantization: `0.0/0`, as expected for float output
+- app runner branch:
+  - `contract=TCN_2_INPUT`
+  - `outputType=FLOAT32`
+- GPU availability probe: `true`
+- selected accelerator: `CPU fallback`
+- immediate conclusion:
+  - TCN model loads with the expected 2-input Android contract
+  - switching away from Transformer did not by itself make the Play services GPU delegate active
+  - next required log is the GPU delegate creation exception before fallback; app initialized log now includes `gpuFailure=...`
+
+### TCN 64D FP16 Dynamic Signature Failure
+
+- date: `2026-05-09`
+- observed failure:
+  - GPU delegate factory is now being used correctly
+  - GPU delegate creation still failed with `Internal error: Cannot create interpreter`
+  - runtime logged: `Attempting to use a delegate that only supports static-sized tensors with a graph that has dynamic-sized tensors`
+- root cause:
+  - previous TCN fp16 artifact had static allocated shapes but dynamic signatures:
+    - `shape=[1,80,257,1] sig=[-1,80,257,1]`
+    - `shape=[1,64] sig=[-1,64]`
+  - Play services GPU delegate rejects dynamic tensor signatures during interpreter/delegate creation
+- fix applied:
+  - TSE export script now uses fixed concrete input signatures
+  - app asset refreshed to SHA `5fa053a18927e5537f1babc636abed30420612e66355bd3e2cfac673a0c35fa9`
+- expected next device log:
+  - input signatures should be `[1,80,257,1]` and `[1,64]`, not `[-1,...]`
+  - if signatures are static and GPU still fails, `gpuFailure` should identify a real op/delegate limitation
+
+### TCN 64D FP16 OpenCL Kernel Compile Failure
+
+- date: `2026-05-09 19:46`
+- static signature result:
+  - input 0: `spec_input FLOAT32 [1,80,257,1] sig=[1,80,257,1]`
+  - input 1: `embed_input FLOAT32 [1,64] sig=[1,64]`
+  - output 0: `Identity FLOAT32 [1,80,257,1] sig=[1,80,257,1]`
+- GPU delegate progress:
+  - `TfLiteGpuDelegateV2` was selected
+  - `Replacing 228 out of 228 node(s) with delegate`, one partition
+  - static signature issue is fixed
+- observed failure:
+  - OpenCL library loaded
+  - interpreter creation failed while building GPU program executable
+  - generated OpenCL contained invalid source:
+    - `read_imageh(... (int2)(((0) * shared_int4_2.y + (())), (0)))`
+    - compiler error: `expected expression`
+- conclusion:
+  - this is no longer an Android app binding issue or dynamic-shape issue
+  - this is a GPU delegate OpenCL codegen/compiler failure for the exported TCN graph on this Pixel/GMS runtime
+- app-side mitigation:
+  - force GPU delegate backend to `OPENGL` instead of default/OpenCL
+  - CPU/XNNPACK fallback remains enabled
+- expected next device log:
+  - success path: `accelerator=GPU delegate (OPENGL) gpuFailure=none`
+  - failure path: fallback with an OpenGL-specific `gpuFailure`
+
+### TCN 64D FP16 OpenGL Batch-Dimension Failure
+
+- date: `2026-05-09`
+- tested mitigation:
+  - app forced `GpuDelegateFactory.Options.GpuBackend.OPENGL`
+  - this bypassed the previous OpenCL codegen error path
+- observed result:
+  - static signatures remained correct:
+    - `spec_input [1,80,257,1] sig=[1,80,257,1]`
+    - `embed_input [1,64] sig=[1,64]`
+    - `Identity [1,80,257,1] sig=[1,80,257,1]`
+  - GPU delegate still failed during prepare/init
+- failure:
+  - `TfLiteGpuDelegate Init: Batch size mismatch, expected 1 but got 11 values with divergent batch sizes`
+  - offending tensors are all shaped `[128,1,1,1]`
+  - example tensor ids: `4, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51`
+- interpretation:
+  - TFLite GPU delegate treats 4D tensors as BHWC-style tensors where dim 0 is batch
+  - `[128,1,1,1]` is interpreted as batch `128`, conflicting with model batch `1`
+  - these tensors likely come from channel-wise constants or FiLM/BatchNorm-style broadcast tensors exported in a channel-first-like 4D shape
+- conclusion:
+  - GPU API binding is fixed
+  - static signature is fixed
+  - remaining blocker is TCN export graph layout/broadcast compatibility with TFLite GPU delegate
+- export-side fix direction:
+  - avoid graph tensors shaped `[128,1,1,1]`
+  - channel-wise broadcast constants should be represented as `[1,1,1,128]` for NHWC/BHWC GPU delegate compatibility
+  - inspect TFLite tensor ids around `4,6,11,16,...` to identify whether they originate from BatchNorm folding, FiLM gamma/beta, or Conv/SeparableConv reshapes
+- fix status:
+  - 2026-05-09 20:23 artifact changed TCN export to GPU-static variant
+  - TFLite tensor inspection reports `bad_4d_count=0`
+  - input/output signatures remain static
+- app-side status:
+  - CPU/XNNPACK fallback remains valid
+  - app asset refreshed to SHA `5fa053a18927e5537f1babc636abed30420612e66355bd3e2cfac673a0c35fa9`
+  - next device run should test whether GPU delegate now prepares successfully
+
+### TCN 64D FP16 FullyConnected GPU Failure
+
+- date: `2026-05-09`
+- artifact: `voice_filter_tcn_64d_fp16.tflite`
+- artifact SHA: `5fa053a18927e5537f1babc636abed30420612e66355bd3e2cfac673a0c35fa9`
+- status before this failure:
+  - static input/output signatures are fixed
+  - `[128,1,1,1]` bad 4D tensors are removed
+- observed OpenGL failure:
+  - `TfLiteGpuDelegate Init: FULLY_CONNECTED: Amount of input channels should match weights width`
+  - `Node number 228 (TfLiteGpuDelegateV2) failed to prepare`
+- local graph inspection:
+  - the GPU-static artifact uses many `FULLY_CONNECTED` ops
+  - embedding FiLM branches use valid 2D inputs such as `[1,64] x [128,64]`
+  - projection branches also use `FULLY_CONNECTED` over feature maps such as:
+    - input `[1,80,257,128]`
+    - weights `[128,128]`
+    - output `[1,80,257,128]`
+  - some FC/bias paths create intermediate rank-1 tensors such as `[128]`
+- interpretation:
+  - replacing 1x1 Conv/SeparableConv pointwise projection with `Dense` removed GPU-hostile 4D filter tensors
+  - but TFLite GPU delegate does not accept this rank-4 feature-map FULLY_CONNECTED pattern reliably
+- app mitigation:
+  - app now tries GPU delegate backends in order:
+    - default backend
+    - `OPENCL`
+    - `OPENGL`
+- app policy update:
+  - CPU/XNNPACK fallback is no longer allowed for managed TSE inference
+  - if all GPU delegate backends fail, managed TSE initialization fails
+  - DataCollect preserves the raw sibling WAV and saves `*.app.wav` as raw passthrough with runtime `gpu_required_unavailable_raw_passthrough`
+- export-side likely next step:
+  - avoid `FULLY_CONNECTED` on `[1,80,257,128]` feature maps
+  - either restore GPU-compatible `Conv2D 1x1` without producing `[128,1,1,1]` tensors, or restructure pointwise projection into ops that TFLite GPU accepts
+  - keep FiLM embedding Dense branches if they remain 2D `[1,64] -> [1,128]`
+
+### TCN 64D FP16 Conv Projection Artifact
+
+- date: `2026-05-09`
+- artifact SHA: `1b5d564bc5497c4e61f98f793f6ad553afe1772365504e9ace4b737ed4695721`
+- app asset refreshed from `/media/hhs/FastData/workspace/TSE/release/android/voice_filter_tcn_64d_fp16.tflite`
+- positive changes:
+  - static input/output signatures remain fixed
+  - rank-4 `FULLY_CONNECTED` count is `0`
+  - graph is again mostly `CONV_2D` / `DEPTHWISE_CONV_2D`
+- local tensor inspection:
+  - `bad_4d_count=40`
+  - offending constants are shaped `[128,1,1,128]`
+  - examples:
+    - `arith.constant52 [128,1,1,128]`
+    - `tfl.dequantize24 [128,1,1,128]`
+- risk:
+  - first dimension is still `128`, so TFLite GPU delegate may interpret these tensors as batch `128`
+  - this may reintroduce a batch-size mismatch during GPU prepare
+- next Android test:
+  - if GPU fails with batch mismatch, export still needs to force Conv2D filters into a layout accepted by the GPU delegate
+  - if GPU prepares, this artifact is the new best candidate
+
+### TCN 64D FP16 Split Conv Artifact
+
+- date: `2026-05-09`
+- artifact: `voice_filter_tcn_64d_fp16_split.tflite`
+- SHA-256: `2589ee129812d3918ee2284f0955a3415e810299d229debe9438b5a336efe8a3`
+- app default updated:
+  - `ManagedTseMaskPipeline`
+  - `ManagedTseWaveformPipeline`
+- tensor contract:
+  - input 0: `spec_input FLOAT32 [1,80,257,1] sig=[1,80,257,1]`
+  - input 1: `embed_input FLOAT32 [1,64] sig=[1,64]`
+  - output 0: `Identity FLOAT32 [1,80,257,1] sig=[1,80,257,1]`
+- graph inspection:
+  - `bad_4d_count=0`
+  - `rank4_fc_count=0`
+  - `CONV_2D=2561`
+  - `DEPTHWISE_CONV_2D=11`
+  - `FULLY_CONNECTED=21`, expected for 2D embedding/FiLM branches
+- assessment:
+  - cleanest GPU-delegate candidate so far
+  - high `CONV_2D` count means latency must be measured on device even if delegate prepare succeeds
+- expected next device log:
+  - success: `accelerator=GPU delegate (...)`
+  - failure: `gpuFailure` should identify a new, more specific delegate limitation
+
+### TCN 64D FP16 Split Conv Android Result
+
+- date: `2026-05-09 22:48`
+- artifact: `voice_filter_tcn_64d_fp16_split.tflite`
+- SHA-256: `2589ee129812d3918ee2284f0955a3415e810299d229debe9438b5a336efe8a3`
+- Android result: `fail`
+- policy: managed TSE is GPU-required, so initialization fails instead of falling back to CPU
+- observed delegate behavior:
+  - XNNPACK can create a CPU interpreter but is intentionally rejected for this path
+  - GPU DEFAULT / OPENCL replace `7908/7908` nodes, then fail during shader build
+  - GPU OPENGL replaces `7908/7908` nodes, then fails during prepare with divergent batch sizes
+- key errors:
+  - `Failed to build program executable`
+  - generated OpenCL contains `read_imageh(... + (()))`, which is malformed
+  - `Batch size mismatch, expected 1 but got 11 values with divergent batch sizes`
+  - internal transformed tensors still include shapes such as `[128,1,1,1]`
+- interpretation:
+  - local flatbuffer inspection is no longer enough; the raw model has no obvious bad 4D constants or rank-4 FC ops, but the Play services GPU delegate transformation still creates a layout it cannot compile
+  - this is a TFLite/GMS GPU delegate graph-lowering limitation for this TCN family on Tensor G2, not an app binding issue
+- app cleanup after this result:
+  - removed `DataCollectViewModel` startup `ManagedTseProbe` validation for the old LSTM model
+  - removed startup synthetic `ManagedTseMaskPipeline` probe
+  - removed the unused live `ManagedTseMaskPipeline`
+  - only the current live waveform pipeline initializes, avoiding repeated GPU delegate failures and old `voice_filter_lite_ai_edge` acceleration validation noise
+- next export-side direction:
+  - build a tiny GPU-smoke model from the same TCN block family and find the first block/op count that triggers malformed OpenCL
+  - reduce or replace the split-conv implementation that expands the graph to thousands of `CONV_2D` nodes
+  - test a real int8 export only if targeting CPU/NNAPI-style acceleration; int8 is unlikely to fix the current GPU delegate FP16/OpenCL codegen failure
+
+### Transformer 64D FP16 Recheck
+
+- date: `2026-05-09`
+- artifact: `/media/hhs/FastData/workspace/TSE/release/android/voice_filter_transformer_64d_fp16.tflite`
+- SHA-256: `294cd091ddf7b8b8711174a634ab8044e7684c45dbfaca4b0df766b2304b4fca`
+- app asset status:
+  - same SHA already present at `app/src/main/assets/voice_filter_transformer_64d_fp16.tflite`
+  - no asset refresh needed
+- tensor contract:
+  - input 0: `FLOAT32 [1,80,257,1] sig=[-1,80,257,1]`
+  - input 1: `FLOAT32 [1,64] sig=[-1,64]`
+  - input 2: `FLOAT32 [1,81] sig=[-1,81]`
+  - output 0: `FLOAT32 [1,80,257,1] sig=[-1,80,257,1]`
+- graph characteristics:
+  - `BATCH_MATMUL=6`
+  - `TRANSPOSE=12`
+  - `SOFTMAX=3`
+  - `FULLY_CONNECTED=21`
+  - `rank4_fc_count=0`
+  - `bad_4d_count=2`, filter-like tensors `[128,5,5,1]`
+- conclusion:
+  - this is still a dynamic-signature Transformer artifact
+  - it keeps attention-style ops that were the original reason to prefer TCN for Tensor G2 GPU testing
+  - do not switch app default back to this artifact unless intentionally running a negative/control test
+
+### GPU Delegate Binding Fix
+
+- date: `2026-05-09 16:30:10`
+- observed failure:
+  - `IllegalArgumentException`
+  - `Instantiated delegates (other than NnApiDelegate) are not allowed when using TF Lite from Google Play Services`
+  - Play services requires `InterpreterApi.Options.addDelegateFactory()` instead of `addDelegate()`
+- root cause:
+  - app was creating `com.google.android.gms.tflite.gpu.GpuDelegate()` directly
+  - that delegate instance was passed with `InterpreterApi.Options.addDelegate(delegate)`
+  - Google Play services LiteRT rejects manually instantiated delegates for GPU
+- fix:
+  - use `org.tensorflow.lite.gpu.GpuDelegateFactory`
+  - attach it through `InterpreterApi.Options.addDelegateFactory(GpuDelegateFactory(options))`
+  - keep CPU fallback if factory-based GPU interpreter creation still fails
+- expected next log:
+  - success path: `accelerator=GPU delegate gpuFailure=none`
+  - if graph/runtime still fails: fallback remains, but `gpuFailure` should now report the real delegate prepare/runtime error rather than the binding API error
+
 ### Overall Verdict
 
 - loadability: `pass`
-- acceleration verdict: `fail, CPU/XNNPACK fallback`
+- acceleration verdict: `LSTM/Transformer paths fell back to CPU; TCN 64D fp16 path pending device test`
 - latency verdict: `unknown`
-- quality verdict: `partially validated, non-zero processed waveform now produced`
+- quality verdict: `LSTM path partially validated; transformer 64D app output pending listening test`
 - live-path verdict: `not ready`
 - recommended next step:
   - capture app-side per-hop inference latency
   - compare saved `*.raw.app.wav` and `*.app.wav` by listening and waveform stats
-  - investigate GPU validation `benchmarkErrorCode=1008`
+  - confirm TCN 64D fp16 GPU delegate creation on Tensor G2
   - decide whether to align Android STFT/ISTFT more closely to the Python `librosa` reference

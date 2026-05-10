@@ -22,11 +22,7 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
 import tw.com.johnnyhng.eztalk.asr.datacollect.applyImportedLines as reduceApplyImportedLines
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToNext as reduceMoveToNext
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToPrevious as reduceMoveToPrevious
-import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseMaskPipeline
-import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseProbe
 import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseWaveformPipeline
-import kotlin.math.PI
-import kotlin.math.sin
 
 data class DataCollectUiState(
     val text: String = "我在做測試",
@@ -43,11 +39,9 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
 
     private val settingsManager = SettingsManager(application)
     private val appContext = application.applicationContext
-    private val managedMicPipeline = ManagedTseMaskPipeline(appContext)
     private val managedMicWaveformPipeline = ManagedTseWaveformPipeline(appContext)
     private val managedMicMutex = Mutex()
     private val managedMicPending = ArrayList<Float>()
-    private var managedMicPipelineReady = false
     private var managedMicWaveformPipelineReady = false
     private var managedMicHopCount = 0
 
@@ -59,40 +53,6 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            val probe = ManagedTseProbe(appContext)
-            val initialized = probe.initialize()
-            val dummyInferenceOk = if (initialized) probe.runDummyInference() else false
-            val hardwareStatus = probe.hardwareAccelerationStatus()
-            Log.i(
-                TAG,
-                "ManagedTseProbe startup result: initialized=$initialized dummyInferenceOk=$dummyInferenceOk hardwareAccelerated=${hardwareStatus.hardwareAccelerated} gpuAvailable=${hardwareStatus.gpuAvailable} selectedAccelerator=${hardwareStatus.selectedAccelerator} benchmarkPassed=${hardwareStatus.benchmarkPassed}"
-            )
-            probe.close()
-
-            val pipeline = ManagedTseMaskPipeline(appContext)
-            val pipelineInitialized = pipeline.initialize()
-            var processedHops = 0
-            var lastMaskStats = "n/a"
-            if (pipelineInitialized) {
-                repeat(4) { hopIndex ->
-                    val hop = FloatArray(160) { sampleIndex ->
-                        val t = (hopIndex * 160 + sampleIndex) / 16000.0
-                        (0.1 * sin(2.0 * PI * 440.0 * t)).toFloat()
-                    }
-                    val result = pipeline.processHop(hop) ?: return@repeat
-                    processedHops++
-                    lastMaskStats = summarizeMask(result.mask)
-                }
-            }
-            Log.i(
-                TAG,
-                "ManagedTseMaskPipeline startup result: initialized=$pipelineInitialized processedHops=$processedHops lastMaskStats=$lastMaskStats"
-            )
-            pipeline.close()
-
-            managedMicPipelineReady = managedMicPipeline.initialize()
-            Log.i(TAG, "ManagedTseMaskPipeline live probe ready: initialized=$managedMicPipelineReady")
-
             managedMicWaveformPipelineReady = managedMicWaveformPipeline.initialize()
             Log.i(TAG, "ManagedTseWaveformPipeline live probe ready: initialized=$managedMicWaveformPipelineReady")
         }
@@ -124,7 +84,6 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
             managedMicMutex.withLock {
                 managedMicPending.clear()
                 managedMicHopCount = 0
-                managedMicPipeline.reset()
                 managedMicWaveformPipeline.reset()
             }
         }
@@ -300,10 +259,6 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
         }
         cells.add(builder.toString().trim())
         return cells.firstOrNull { it.isNotBlank() } ?: ""
-    }
-
-    private fun summarizeMask(mask: FloatArray): String {
-        return summarizeArray(mask)
     }
 
     private fun summarizeArray(values: FloatArray): String {

@@ -72,7 +72,7 @@ internal class ManagedTseProbe(
     private var lastHardwareAccelerationStatus: HardwareAccelerationStatus? = null
     private var inputLayout: InputLayout = InputLayout.NHWC
 
-    suspend fun initialize(modelAssetName: String = "voice_filter_lite.tflite"): Boolean {
+    suspend fun initialize(modelAssetName: String = "voice_filter_lite_ai_edge.tflite"): Boolean {
         return try {
             val modelBuffer = loadMappedAsset(modelAssetName)
             val gpuAvailable = TfLiteGpu.isGpuDelegateAvailable(context).await()
@@ -137,7 +137,7 @@ internal class ManagedTseProbe(
     }
 
     fun runDummyInference(
-        modelAssetName: String = "voice_filter_lite.tflite",
+        modelAssetName: String = "voice_filter_lite_ai_edge.tflite",
         dvectorAssetName: String = "dvector.bin"
     ): Boolean {
         return try {

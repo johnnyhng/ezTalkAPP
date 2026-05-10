@@ -350,10 +350,20 @@ class RecognitionManager(private val context: Context) {
                                 "RecognitionManager raw sibling wav completed before managed TSE: path=${rawWavPath.orEmpty().ifBlank { "n/a" }}, samples=${rawAudioToSave.size}"
                             )
                         }
+                        val managedTseAudio = if (shouldPostProcessManagedTse) {
+                            runManagedTseOffline(rawAudioToSave, sessionId)
+                        } else {
+                            null
+                        }
                         val processedAudioToSave = if (shouldPostProcessManagedTse) {
-                            runManagedTseOffline(rawAudioToSave, sessionId) ?: rawPassthroughAudio
+                            managedTseAudio ?: rawPassthroughAudio
                         } else {
                             rawPassthroughAudio
+                        }
+                        val tseRuntime = when {
+                            !shouldPostProcessManagedTse -> "raw_passthrough"
+                            managedTseAudio != null -> "managed_gpu_offline"
+                            else -> "gpu_required_unavailable_raw_passthrough"
                         }
                         val finalAsrInput = processedAudioToSave
 
@@ -372,7 +382,7 @@ class RecognitionManager(private val context: Context) {
                             if (wavPath != null) {
                                 Log.i(
                                     TAG,
-                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseRequested=$dummyTseRequested, tseRuntime=${if (shouldPostProcessManagedTse) "managed_offline" else "raw_passthrough"}"
+                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseRequested=$dummyTseRequested, tseRuntime=$tseRuntime"
                                 )
                                 if (rawWavPath != null) {
                                     Log.i(

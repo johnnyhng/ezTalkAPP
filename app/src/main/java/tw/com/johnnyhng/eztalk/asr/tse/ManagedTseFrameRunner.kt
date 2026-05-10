@@ -14,16 +14,29 @@ import android.content.Context
  * - model creation/invocation
  * - real per-frame managed inference
  */
+internal interface ManagedTseMaskFrameRunner {
+    suspend fun initialize(
+        modelAssetName: String,
+        dvectorAssetName: String
+    ): Boolean
+
+    fun processMagnitudeFrame(magFrame: FloatArray): FloatArray?
+
+    fun reset()
+
+    fun close()
+}
+
 internal class ManagedTseFrameRunner(
     context: Context,
     private val probe: ManagedTseProbe = ManagedTseProbe(context),
     private val streamingState: ManagedTseStreamingState = ManagedTseStreamingState()
-) {
+) : ManagedTseMaskFrameRunner {
     private var embed: FloatArray? = null
 
-    suspend fun initialize(
-        modelAssetName: String = "voice_filter_lite.tflite",
-        dvectorAssetName: String = "dvector.bin"
+    override suspend fun initialize(
+        modelAssetName: String,
+        dvectorAssetName: String
     ): Boolean {
         val ok = probe.initialize(modelAssetName)
         if (!ok) return false
@@ -32,7 +45,7 @@ internal class ManagedTseFrameRunner(
         return true
     }
 
-    fun processMagnitudeFrame(magFrame: FloatArray): FloatArray? {
+    override fun processMagnitudeFrame(magFrame: FloatArray): FloatArray? {
         val localEmbed = embed ?: return null
         streamingState.appendMagnitudeFrame(magFrame)
         val result = probe.runSingleFrame(
@@ -44,11 +57,11 @@ internal class ManagedTseFrameRunner(
         return result.mask
     }
 
-    fun reset() {
+    override fun reset() {
         streamingState.reset()
     }
 
-    fun close() {
+    override fun close() {
         probe.close()
         embed = null
         streamingState.reset()
