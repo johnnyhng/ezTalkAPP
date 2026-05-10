@@ -18,6 +18,12 @@ class NativeTSE {
     companion object {
         private const val TAG = "NativeTSE"
 
+        const val ACCELERATION_CPU = 0
+        const val ACCELERATION_NNAPI_ACCELERATOR = 1
+        const val ACCELERATION_NNAPI_ACCELERATOR_FP16 = 2
+        const val ACCELERATION_NNAPI_MIXED = 3
+        const val ACCELERATION_NNAPI_MIXED_FP16 = 4
+
         init {
             try {
                 // Load dependencies first.
@@ -38,6 +44,19 @@ class NativeTSE {
      * @return Boolean success
      */
     external fun init(modelPath: String, dvectorPath: String): Boolean
+
+    /**
+     * Initialize with an experimental acceleration mode.
+     *
+     * `ACCELERATION_NNAPI_ACCELERATOR*` requests ORT NNAPI EP with NNAPI CPU
+     * disabled. `ACCELERATION_NNAPI_MIXED*` allows NNAPI CPU fallback and is
+     * useful only as a device experiment because it may be slower than ORT CPU.
+     */
+    external fun initWithAcceleration(
+        modelPath: String,
+        dvectorPath: String,
+        accelerationMode: Int
+    ): Boolean
 
     /**
      * Process a single 10 ms audio hop.

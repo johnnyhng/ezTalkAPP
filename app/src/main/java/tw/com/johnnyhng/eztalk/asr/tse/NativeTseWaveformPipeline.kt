@@ -20,18 +20,24 @@ internal class NativeTseWaveformPipeline(
     fun initialize(
         modelAssetName: String = "voice_filter_lite_int8.onnx",
         dvectorAssetName: String = "dvector.bin",
+        accelerationMode: Int = NativeTSE.ACCELERATION_CPU,
     ): Boolean {
         close()
         return try {
             val modelPath = copyAssetToCache(modelAssetName).absolutePath
             val dvectorPath = copyAssetToCache(dvectorAssetName).absolutePath
-            initialized = nativeTse.init(modelPath, dvectorPath)
+            initialized = if (accelerationMode == NativeTSE.ACCELERATION_CPU) {
+                nativeTse.init(modelPath, dvectorPath)
+            } else {
+                nativeTse.initWithAcceleration(modelPath, dvectorPath, accelerationMode)
+            }
             if (initialized) {
                 nativeTse.reset()
             }
+            Log.i(TAG, "Native TSE initialized. accelerationMode=$accelerationMode")
             initialized
         } catch (t: Throwable) {
-            Log.e(TAG, "NativeTseWaveformPipeline initialize failed", t)
+            Log.e(TAG, "NativeTseWaveformPipeline initialize failed. accelerationMode=$accelerationMode", t)
             initialized = false
             false
         }

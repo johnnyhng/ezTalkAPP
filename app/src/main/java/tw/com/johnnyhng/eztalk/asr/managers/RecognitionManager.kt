@@ -16,6 +16,7 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTseWaveformPipeline
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
@@ -350,19 +351,19 @@ class RecognitionManager(private val context: Context) {
                                 "RecognitionManager raw sibling wav completed before native TSE: path=${rawWavPath.orEmpty().ifBlank { "n/a" }}, samples=${rawAudioToSave.size}"
                             )
                         }
-                        val nativeTseAudio = if (shouldPostProcessNativeTse) {
+                        val nativeTseResult = if (shouldPostProcessNativeTse) {
                             runNativeTseOffline(rawAudioToSave, sessionId)
                         } else {
                             null
                         }
                         val processedAudioToSave = if (shouldPostProcessNativeTse) {
-                            nativeTseAudio ?: rawPassthroughAudio
+                            nativeTseResult?.samples ?: rawPassthroughAudio
                         } else {
                             rawPassthroughAudio
                         }
                         val tseRuntime = when {
                             !shouldPostProcessNativeTse -> "raw_passthrough"
-                            nativeTseAudio != null -> "native_onnx_lite_offline"
+                            nativeTseResult != null -> nativeTseResult.runtime
                             else -> "native_onnx_lite_unavailable_raw_passthrough"
                         }
                         val finalAsrInput = processedAudioToSave
@@ -470,29 +471,55 @@ class RecognitionManager(private val context: Context) {
         }
     }
 
-    private fun runNativeTseOffline(samples: FloatArray, sessionId: Long): FloatArray? {
-        if (samples.isEmpty()) return FloatArray(0)
+    private data class NativeTseOfflineResult(
+        val samples: FloatArray,
+        val runtime: String
+    )
 
+    private fun runNativeTseOffline(samples: FloatArray, sessionId: Long): NativeTseOfflineResult? {
+        if (samples.isEmpty()) return NativeTseOfflineResult(FloatArray(0), "native_onnx_lite_empty")
+
+        runNativeTseOfflineWithAcceleration(
+            samples = samples,
+            sessionId = sessionId,
+            accelerationMode = NativeTSE.ACCELERATION_NNAPI_ACCELERATOR,
+            runtime = "native_onnx_lite_nnapi_accelerator_offline"
+        )?.let { return it }
+
+        return runNativeTseOfflineWithAcceleration(
+            samples = samples,
+            sessionId = sessionId,
+            accelerationMode = NativeTSE.ACCELERATION_CPU,
+            runtime = "native_onnx_lite_cpu_offline"
+        )
+    }
+
+    private fun runNativeTseOfflineWithAcceleration(
+        samples: FloatArray,
+        sessionId: Long,
+        accelerationMode: Int,
+        runtime: String
+    ): NativeTseOfflineResult? {
         val pipeline = NativeTseWaveformPipeline(context)
         return try {
-            val initialized = pipeline.initialize()
+            val initialized = pipeline.initialize(accelerationMode = accelerationMode)
             if (!initialized) {
-                Log.w(TAG, "RecognitionManager native TSE offline skipped: sessionId=$sessionId, reason=init_failed")
+                Log.w(TAG, "RecognitionManager native TSE offline skipped: sessionId=$sessionId, runtime=$runtime, reason=init_failed")
                 return null
             }
 
             val processed = pipeline.process(samples)
             if (processed == null) {
-                Log.w(TAG, "RecognitionManager native TSE offline failed: sessionId=$sessionId, reason=process_failed")
+                Log.w(TAG, "RecognitionManager native TSE offline failed: sessionId=$sessionId, runtime=$runtime, reason=process_failed")
                 return null
             }
             Log.i(
                 TAG,
-                "RecognitionManager native TSE offline complete: sessionId=$sessionId, inputSamples=${samples.size}, outputSamples=${processed.size}"
+                "RecognitionManager native TSE offline complete: sessionId=$sessionId, runtime=$runtime, inputSamples=${samples.size}, outputSamples=${processed.size}"
             )
-            processed
+            NativeTseOfflineResult(processed, runtime)
         } catch (t: Throwable) {
-            Log.e(TAG, "RecognitionManager native TSE offline failed: sessionId=$sessionId", t)
+            Log.e(TAG, "RecognitionManager native TSE offline failed: sessionId=$sessionId, runtime=$runtime", t)
             null
         } finally {
             pipeline.close()
