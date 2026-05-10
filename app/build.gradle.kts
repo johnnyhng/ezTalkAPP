@@ -150,14 +150,6 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("androidx.compose.material:material-icons-extended-android:1.6.7")
     implementation("com.google.android.gms:play-services-auth:21.4.0")
-    // Managed LiteRT runtime via Google Play services.
-    implementation("com.google.android.gms:play-services-tflite-java:16.5.0")
-    implementation("com.google.android.gms:play-services-tflite-gpu:16.4.0") {
-        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
-    }
-    implementation("com.google.android.gms:play-services-tflite-acceleration-service:16.4.0-beta01") {
-        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
-    }
     implementation("com.google.mlkit:genai-prompt:1.0.0-alpha1")
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)

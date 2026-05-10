@@ -663,6 +663,119 @@ Use:
   - this path uses the CNN+LSTM 4-input / 3-output contract through `ManagedTseProbe`
   - acceleration verdict must be read from the next device log; the runtime label is intentionally neutral and no longer claims GPU
 
+### Voice Filter Lite GPU Validation Failure
+
+- date: `2026-05-10 18:22`
+- model: `voice_filter_lite.tflite`
+- observed result:
+  - Play services TFLite GPU module loads
+  - mini-benchmark runs against `voice_filter_lite`
+  - GPU validation fails with `BenchmarkError{stage=INITIALIZATION, benchmarkErrorCode=1008}`
+  - interpreter then initializes with XNNPACK CPU fallback
+- startup impact:
+  - validation attempt blocks cold startup for roughly 12-15 seconds
+  - app logs `Skipped 2546 frames`, consistent with startup work overwhelming UI responsiveness
+- app mitigation:
+  - `ManagedTseProbe` no longer calls `AccelerationService.selectBestConfig()` during normal initialization
+  - interpreter is created directly from Play services TFLite runtime
+  - log now reports `accelerator=CPU direct benchmarkPassed=false validationSkipped=true`
+- conclusion:
+  - this confirms GPU delegate is unavailable for the Lite CNN+LSTM path on the current device/runtime
+  - next optimization target is CPU latency and avoiding main-thread startup work, not more GPU validation retries
+
+### Voice Filter Lite Live CPU Latency
+
+- date: `2026-05-10 19:04`
+- model: `voice_filter_lite.tflite`
+- live log interpretation:
+  - hop 1 at `19:04:33.395`
+  - hop 700 at `19:05:15.828`
+  - 699 processed hops took roughly `42.4 s`
+  - each hop represents `10 ms` of audio
+- observed throughput:
+  - average wall-clock time is roughly `60 ms/hop`
+  - live path is about `6x` slower than real-time
+- app mitigation:
+  - live mic probe now logs per-hop `processMs`, `avgProcessMs`, and `maxProcessMs`
+  - live mic probe keeps a bounded pending buffer and drops old hops when it falls behind
+  - this prevents unbounded background backlog while preserving diagnostic stats
+- conclusion:
+  - CNN+LSTM Lite is functionally producing non-zero masks and reconstructed waveform
+  - current Android CPU pipeline is not live real-time at 10 ms hop cadence
+
+### Offline LiteRT Fallback Removed
+
+- date: `2026-05-10`
+- app change:
+  - removed `RecognitionManager.runManagedTseOffline()`
+  - removed the offline `ManagedTseWaveformPipeline` fallback after native TSE failure
+  - DataCollect final-utterance post-processing now uses native ONNX TSE if available
+  - if native ONNX TSE fails, the saved `.app.wav` uses raw passthrough
+- runtime labels:
+  - native success: `native_onnx_lite_offline`
+  - native unavailable: `native_onnx_lite_unavailable_raw_passthrough`
+- reason:
+  - avoid silently falling back to the slow LiteRT managed path
+  - keep native TSE as the only post-processing implementation under test
+
+### TensorFlow Lite Runtime Removed
+
+- date: `2026-05-10`
+- app change:
+  - removed all managed TSE Kotlin source files that used TensorFlow Lite / LiteRT
+  - removed `play-services-tflite-java`
+  - removed `play-services-tflite-gpu`
+  - removed `play-services-tflite-acceleration-service`
+  - removed the DataCollect live managed TSE probe
+- remaining TSE path:
+  - native ONNX `NativeTSE`
+  - `NativeTseWaveformPipeline`
+  - `RecognitionManager.runNativeTseOffline()`
+- expected device behavior:
+  - no `TFLite-in-PlayServices`
+  - no `tflite_gpu_dynamite`
+  - no `libtensorflowlite_jni_gms_client.so`
+  - DataCollect final utterance should log `native_onnx_lite_offline` on native success
+
+### Native ONNX Lite Current Performance
+
+- date: `2026-05-10 22:42`
+- runtime:
+  - native `NativeTSE`
+  - ONNX Runtime CPU only
+  - `intraOpThreads=1`
+  - `nnapiRequested=false`
+  - `nnapiAttached=false`
+- model contract:
+  - input `x [1,1,32,257]`
+  - input `embed [1,192]`
+  - input `h_in [2,1,512]`
+  - input `c_in [2,1,512]`
+  - output `mask [1,257,1]`
+  - output `h_out [2,1,512]`
+  - output `c_out [2,1,512]`
+- observed initialization:
+  - ORT session created in roughly `78 ms`
+- observed inference samples:
+  - `12.15 ms`
+  - `13.27 ms`
+  - `13.63 ms`
+  - `12.53 ms`
+  - `13.37 ms`
+- offline utterance result:
+  - input samples: `76928`
+  - output samples: `76928`
+  - runtime label: `native_onnx_lite_offline`
+  - app WAV saved successfully
+  - raw sibling WAV saved successfully
+- interpretation:
+  - native ONNX path is much faster than managed LiteRT/Kotlin STFT path
+  - current per-hop inference is still above the `10 ms` live budget, but close enough to optimize
+- next optimization candidates:
+  - benchmark `intraOpThreads=2` and `4`
+  - keep native session alive for live mode instead of initializing at final utterance time
+  - reduce JNI per-hop allocation/copying if moving this path into live processing
+
 ### GPU Delegate Binding Fix
 
 - date: `2026-05-09 16:30:10`

@@ -2,7 +2,6 @@ package tw.com.johnnyhng.eztalk.asr.managers
 
 import android.app.Application
 import android.net.Uri
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -12,8 +11,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.utils.deleteQueueState
 import tw.com.johnnyhng.eztalk.asr.utils.restoreQueueState
@@ -22,7 +19,6 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.QueueState
 import tw.com.johnnyhng.eztalk.asr.datacollect.applyImportedLines as reduceApplyImportedLines
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToNext as reduceMoveToNext
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToPrevious as reduceMoveToPrevious
-import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseWaveformPipeline
 
 data class DataCollectUiState(
     val text: String = "我在做測試",
@@ -33,17 +29,8 @@ data class DataCollectUiState(
 )
 
 class DataCollectViewModel(application: Application) : AndroidViewModel(application) {
-    companion object {
-        private const val TAG = "DataCollectViewModel"
-    }
-
     private val settingsManager = SettingsManager(application)
     private val appContext = application.applicationContext
-    private val managedMicWaveformPipeline = ManagedTseWaveformPipeline(appContext)
-    private val managedMicMutex = Mutex()
-    private val managedMicPending = ArrayList<Float>()
-    private var managedMicWaveformPipelineReady = false
-    private var managedMicHopCount = 0
 
     private val queue = ArrayDeque<String>()
     private val history = ArrayDeque<String>()
@@ -51,42 +38,12 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
     private val _uiState = MutableStateFlow(DataCollectUiState())
     val uiState: StateFlow<DataCollectUiState> = _uiState.asStateFlow()
 
-    init {
-        viewModelScope.launch(Dispatchers.IO) {
-            managedMicWaveformPipelineReady = managedMicWaveformPipeline.initialize()
-            Log.i(TAG, "ManagedTseWaveformPipeline live probe ready: initialized=$managedMicWaveformPipelineReady")
-        }
-    }
-
-    fun onLiveMicSamples(samples: FloatArray) {
-        if (samples.isEmpty() || !managedMicWaveformPipelineReady) return
-        viewModelScope.launch(Dispatchers.IO) {
-            managedMicMutex.withLock {
-                managedMicPending.addAll(samples.toList())
-                while (managedMicPending.size >= 160) {
-                    val hop = FloatArray(160) { idx -> managedMicPending[idx] }
-                    managedMicPending.subList(0, 160).clear()
-                    val result = managedMicWaveformPipeline.processHop(hop) ?: continue
-                    managedMicHopCount++
-                    if (managedMicHopCount <= 5 || managedMicHopCount % 25 == 0) {
-                        Log.i(
-                            TAG,
-                            "ManagedTseWaveformPipeline live mic stats: hop=$managedMicHopCount hopRms=${formatRms(hop)} magRms=${formatRms(result.magnitude)} magStats=${summarizeArray(result.magnitude)} mask=${summarizeArray(result.mask)} waveformRms=${formatRms(result.waveformHop)} waveformStats=${summarizeArray(result.waveformHop)}"
-                        )
-                    }
-                }
-            }
-        }
+    fun onLiveMicSamples(@Suppress("UNUSED_PARAMETER") samples: FloatArray) {
+        // No-op: native TSE is exercised by RecognitionManager.
     }
 
     fun resetLiveMicProbe() {
-        viewModelScope.launch(Dispatchers.IO) {
-            managedMicMutex.withLock {
-                managedMicPending.clear()
-                managedMicHopCount = 0
-                managedMicWaveformPipeline.reset()
-            }
-        }
+        // No-op: native TSE is exercised by RecognitionManager.
     }
 
     fun onTextChange(text: String) {
@@ -261,34 +218,4 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
         return cells.firstOrNull { it.isNotBlank() } ?: ""
     }
 
-    private fun summarizeArray(values: FloatArray): String {
-        if (values.isEmpty()) return "empty"
-        var min = Float.POSITIVE_INFINITY
-        var max = Float.NEGATIVE_INFINITY
-        var sum = 0f
-        for (value in values) {
-            if (value < min) min = value
-            if (value > max) max = value
-            sum += value
-        }
-        val avg = sum / values.size
-        return "min=${formatRms(min)} avg=${formatRms(avg)} max=${formatRms(max)}"
-    }
-
-    private fun formatRms(values: FloatArray): String {
-        if (values.isEmpty()) return "0.000000"
-        var sum = 0.0
-        for (value in values) {
-            sum += value * value
-        }
-        return formatRms(kotlin.math.sqrt(sum / values.size))
-    }
-
-    private fun formatRms(value: Double): String {
-        return "%.6f".format(value)
-    }
-
-    private fun formatRms(value: Float): String {
-        return "%.6f".format(value.toDouble())
-    }
 }

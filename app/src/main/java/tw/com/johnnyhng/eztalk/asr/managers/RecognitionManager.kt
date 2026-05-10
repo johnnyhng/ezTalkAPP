@@ -16,7 +16,6 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
-import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseWaveformPipeline
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTseWaveformPipeline
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
@@ -333,10 +332,10 @@ class RecognitionManager(private val context: Context) {
                             buffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
                         }
                         val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
-                        val shouldPostProcessManagedTse = isDataCollectMode && dummyTseRequested
+                        val shouldPostProcessNativeTse = isDataCollectMode && dummyTseRequested
                         val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                         val filename = "${timestamp}.app"
-                        val rawWavPath = if (shouldPostProcessManagedTse) {
+                        val rawWavPath = if (shouldPostProcessNativeTse) {
                             saveSiblingRawWav(
                                 userId = userId,
                                 baseFilename = timestamp,
@@ -345,32 +344,25 @@ class RecognitionManager(private val context: Context) {
                         } else {
                             null
                         }
-                        if (shouldPostProcessManagedTse) {
+                        if (shouldPostProcessNativeTse) {
                             Log.i(
                                 TAG,
-                                "RecognitionManager raw sibling wav completed before managed TSE: path=${rawWavPath.orEmpty().ifBlank { "n/a" }}, samples=${rawAudioToSave.size}"
+                                "RecognitionManager raw sibling wav completed before native TSE: path=${rawWavPath.orEmpty().ifBlank { "n/a" }}, samples=${rawAudioToSave.size}"
                             )
                         }
-                        val nativeTseAudio = if (shouldPostProcessManagedTse) {
+                        val nativeTseAudio = if (shouldPostProcessNativeTse) {
                             runNativeTseOffline(rawAudioToSave, sessionId)
                         } else {
                             null
                         }
-                        val managedTseAudio = if (shouldPostProcessManagedTse && nativeTseAudio == null) {
-                            runManagedTseOffline(rawAudioToSave, sessionId)
-                        } else {
-                            null
-                        }
-                        val tsePostProcessedAudio = nativeTseAudio ?: managedTseAudio
-                        val processedAudioToSave = if (shouldPostProcessManagedTse) {
-                            tsePostProcessedAudio ?: rawPassthroughAudio
+                        val processedAudioToSave = if (shouldPostProcessNativeTse) {
+                            nativeTseAudio ?: rawPassthroughAudio
                         } else {
                             rawPassthroughAudio
                         }
                         val tseRuntime = when {
-                            !shouldPostProcessManagedTse -> "raw_passthrough"
+                            !shouldPostProcessNativeTse -> "raw_passthrough"
                             nativeTseAudio != null -> "native_onnx_lite_offline"
-                            managedTseAudio != null -> "managed_lite_offline"
                             else -> "native_onnx_lite_unavailable_raw_passthrough"
                         }
                         val finalAsrInput = processedAudioToSave
@@ -478,55 +470,6 @@ class RecognitionManager(private val context: Context) {
         }
     }
 
-    private suspend fun runManagedTseOffline(samples: FloatArray, sessionId: Long): FloatArray? {
-        if (samples.isEmpty()) return FloatArray(0)
-
-        val pipeline = ManagedTseWaveformPipeline(context)
-        return try {
-            val initialized = pipeline.initialize()
-            if (!initialized) {
-                Log.w(TAG, "RecognitionManager managed TSE offline skipped: sessionId=$sessionId, reason=init_failed")
-                return null
-            }
-
-            val output = ArrayList<Float>(samples.size)
-            var offset = 0
-            var hopCount = 0
-            while (offset < samples.size) {
-                val remaining = samples.size - offset
-                val hop = FloatArray(TSE_HOP_SIZE)
-                samples.copyInto(
-                    destination = hop,
-                    destinationOffset = 0,
-                    startIndex = offset,
-                    endIndex = offset + min(remaining, TSE_HOP_SIZE)
-                )
-                val result = pipeline.processHop(hop)
-                if (result == null) {
-                    Log.w(TAG, "RecognitionManager managed TSE offline failed: sessionId=$sessionId, hop=$hopCount")
-                    return null
-                }
-                output.addAll(result.waveformHop.toList())
-                hopCount++
-                offset += TSE_HOP_SIZE
-            }
-
-            val processed = output.toFloatArray()
-                .copyOfRange(0, min(samples.size, output.size))
-                .normalizedForManagedTse()
-            Log.i(
-                TAG,
-                "RecognitionManager managed TSE offline complete: sessionId=$sessionId, inputSamples=${samples.size}, outputSamples=${processed.size}, hops=$hopCount"
-            )
-            processed
-        } catch (t: Throwable) {
-            Log.e(TAG, "RecognitionManager managed TSE offline failed: sessionId=$sessionId", t)
-            null
-        } finally {
-            pipeline.close()
-        }
-    }
-
     private fun runNativeTseOffline(samples: FloatArray, sessionId: Long): FloatArray? {
         if (samples.isEmpty()) return FloatArray(0)
 
@@ -565,24 +508,9 @@ class RecognitionManager(private val context: Context) {
         return kotlin.math.sqrt(sumSquares / samples.size).toFloat()
     }
 
-    private fun FloatArray.normalizedForManagedTse(): FloatArray {
-        var maxAbs = 0f
-        for (sample in this) {
-            val abs = kotlin.math.abs(sample)
-            if (abs > maxAbs) maxAbs = abs
-        }
-        if (maxAbs <= 1e-8f) return this
-        val scale = 0.9f / maxAbs
-        return FloatArray(size) { index -> this[index] * scale }
-    }
-
     private fun Float.format3(): String = String.format(Locale.US, "%.3f", this)
 
     fun updateDataCollectText(text: String) {
         _currentDataCollectText.value = text
-    }
-
-    companion object {
-        private const val TSE_HOP_SIZE = 160
     }
 }
