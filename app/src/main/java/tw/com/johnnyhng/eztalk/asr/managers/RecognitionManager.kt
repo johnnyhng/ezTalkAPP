@@ -17,6 +17,7 @@ import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.tse.ManagedTseWaveformPipeline
+import tw.com.johnnyhng.eztalk.asr.tse.NativeTseWaveformPipeline
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.buildTranscriptFileTargets
@@ -350,20 +351,27 @@ class RecognitionManager(private val context: Context) {
                                 "RecognitionManager raw sibling wav completed before managed TSE: path=${rawWavPath.orEmpty().ifBlank { "n/a" }}, samples=${rawAudioToSave.size}"
                             )
                         }
-                        val managedTseAudio = if (shouldPostProcessManagedTse) {
+                        val nativeTseAudio = if (shouldPostProcessManagedTse) {
+                            runNativeTseOffline(rawAudioToSave, sessionId)
+                        } else {
+                            null
+                        }
+                        val managedTseAudio = if (shouldPostProcessManagedTse && nativeTseAudio == null) {
                             runManagedTseOffline(rawAudioToSave, sessionId)
                         } else {
                             null
                         }
+                        val tsePostProcessedAudio = nativeTseAudio ?: managedTseAudio
                         val processedAudioToSave = if (shouldPostProcessManagedTse) {
-                            managedTseAudio ?: rawPassthroughAudio
+                            tsePostProcessedAudio ?: rawPassthroughAudio
                         } else {
                             rawPassthroughAudio
                         }
                         val tseRuntime = when {
                             !shouldPostProcessManagedTse -> "raw_passthrough"
+                            nativeTseAudio != null -> "native_onnx_lite_offline"
                             managedTseAudio != null -> "managed_lite_offline"
-                            else -> "managed_lite_unavailable_raw_passthrough"
+                            else -> "native_onnx_lite_unavailable_raw_passthrough"
                         }
                         val finalAsrInput = processedAudioToSave
 
@@ -513,6 +521,35 @@ class RecognitionManager(private val context: Context) {
             processed
         } catch (t: Throwable) {
             Log.e(TAG, "RecognitionManager managed TSE offline failed: sessionId=$sessionId", t)
+            null
+        } finally {
+            pipeline.close()
+        }
+    }
+
+    private fun runNativeTseOffline(samples: FloatArray, sessionId: Long): FloatArray? {
+        if (samples.isEmpty()) return FloatArray(0)
+
+        val pipeline = NativeTseWaveformPipeline(context)
+        return try {
+            val initialized = pipeline.initialize()
+            if (!initialized) {
+                Log.w(TAG, "RecognitionManager native TSE offline skipped: sessionId=$sessionId, reason=init_failed")
+                return null
+            }
+
+            val processed = pipeline.process(samples)
+            if (processed == null) {
+                Log.w(TAG, "RecognitionManager native TSE offline failed: sessionId=$sessionId, reason=process_failed")
+                return null
+            }
+            Log.i(
+                TAG,
+                "RecognitionManager native TSE offline complete: sessionId=$sessionId, inputSamples=${samples.size}, outputSamples=${processed.size}"
+            )
+            processed
+        } catch (t: Throwable) {
+            Log.e(TAG, "RecognitionManager native TSE offline failed: sessionId=$sessionId", t)
             null
         } finally {
             pipeline.close()
