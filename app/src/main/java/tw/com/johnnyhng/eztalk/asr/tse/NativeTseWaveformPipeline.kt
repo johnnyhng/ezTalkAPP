@@ -47,8 +47,10 @@ internal class NativeTseWaveformPipeline(
         if (!initialized) return null
         if (samples.isEmpty()) return FloatArray(0)
 
-        val output = ArrayList<Float>(samples.size + frameSize)
+        val hopCount = (samples.size + frameSize - 1) / frameSize
+        val output = FloatArray(hopCount * frameSize)
         var offset = 0
+        var outputOffset = 0
         while (offset < samples.size) {
             val hop = FloatArray(frameSize)
             val remaining = samples.size - offset
@@ -59,13 +61,13 @@ internal class NativeTseWaveformPipeline(
                 endIndex = offset + minOf(remaining, frameSize),
             )
             val processed = nativeTse.processFrame(hop) ?: return null
-            output.addAll(processed.toList())
+            processed.copyInto(output, destinationOffset = outputOffset)
             offset += frameSize
+            outputOffset += frameSize
         }
 
-        return output.toFloatArray()
-            .dropStreamingLatency()
-            .copyOfRange(0, samples.size)
+        return output
+            .dropStreamingLatency(targetSize = samples.size)
             .normalizedForNativeTse()
     }
 
@@ -87,9 +89,9 @@ internal class NativeTseWaveformPipeline(
         return target
     }
 
-    private fun FloatArray.dropStreamingLatency(latencySamples: Int = 240): FloatArray {
-        if (size <= latencySamples) return FloatArray(size)
-        return FloatArray(size) { index ->
+    private fun FloatArray.dropStreamingLatency(targetSize: Int, latencySamples: Int = 240): FloatArray {
+        if (size <= latencySamples) return FloatArray(targetSize)
+        return FloatArray(targetSize) { index ->
             val source = index + latencySamples
             if (source < size) this[source] else 0f
         }

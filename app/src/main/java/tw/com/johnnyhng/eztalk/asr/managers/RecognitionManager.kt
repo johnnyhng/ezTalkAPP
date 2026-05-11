@@ -16,7 +16,6 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
-import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTseWaveformPipeline
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
@@ -479,17 +478,9 @@ class RecognitionManager(private val context: Context) {
     private fun runNativeTseOffline(samples: FloatArray, sessionId: Long): NativeTseOfflineResult? {
         if (samples.isEmpty()) return NativeTseOfflineResult(FloatArray(0), "native_onnx_lite_empty")
 
-        runNativeTseOfflineWithAcceleration(
-            samples = samples,
-            sessionId = sessionId,
-            accelerationMode = NativeTSE.ACCELERATION_NNAPI_ACCELERATOR,
-            runtime = "native_onnx_lite_nnapi_accelerator_offline"
-        )?.let { return it }
-
         return runNativeTseOfflineWithAcceleration(
             samples = samples,
             sessionId = sessionId,
-            accelerationMode = NativeTSE.ACCELERATION_CPU,
             runtime = "native_onnx_lite_cpu_offline"
         )
     }
@@ -497,12 +488,11 @@ class RecognitionManager(private val context: Context) {
     private fun runNativeTseOfflineWithAcceleration(
         samples: FloatArray,
         sessionId: Long,
-        accelerationMode: Int,
         runtime: String
     ): NativeTseOfflineResult? {
         val pipeline = NativeTseWaveformPipeline(context)
         return try {
-            val initialized = pipeline.initialize(accelerationMode = accelerationMode)
+            val initialized = pipeline.initialize()
             if (!initialized) {
                 Log.w(TAG, "RecognitionManager native TSE offline skipped: sessionId=$sessionId, runtime=$runtime, reason=init_failed")
                 return null
