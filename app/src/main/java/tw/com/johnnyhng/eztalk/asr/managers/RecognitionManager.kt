@@ -24,6 +24,7 @@ import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
 import tw.com.johnnyhng.eztalk.asr.utils.saveJsonl
 import tw.com.johnnyhng.eztalk.asr.utils.buildWavHeaderBytes
 import tw.com.johnnyhng.eztalk.asr.utils.floatSamplesToPcm16
+import tw.com.johnnyhng.eztalk.asr.utils.sha256
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -365,8 +366,14 @@ class RecognitionManager(private val context: Context) {
                         } else {
                             rawPassthroughAudio
                         }
+                        
+                        val rawPcm = floatSamplesToPcm16(rawAudioToSave)
+                        val processedPcm = floatSamplesToPcm16(processedAudioToSave)
+                        val rawHash = sha256(rawPcm)
+                        val processedHash = sha256(processedPcm)
                         val rawRms = rms(rawAudioToSave)
                         val processedRms = rms(processedAudioToSave)
+                        
                         val tseRuntime = when {
                             !shouldPostProcessNativeTse -> "realtime_only_${if (dummyTseRequested) "native_onnx" else "passthrough"}"
                             nativeTseResult != null -> nativeTseResult.runtime
@@ -375,6 +382,10 @@ class RecognitionManager(private val context: Context) {
                         Log.i(
                             TAG,
                             "RecognitionManager TSE decision: sessionId=$sessionId, shouldPostProcess=$shouldPostProcessNativeTse, nativeTseResult=${nativeTseResult != null}, runtime=$tseRuntime, rawRms=${rawRms.format3()}, processedRms=${processedRms.format3()}"
+                        )
+                        Log.i(
+                            TAG,
+                            "RecognitionManager TSE integrity: sessionId=$sessionId, hashesMatch=${rawHash == processedHash}, rawHash=${rawHash.take(8)}, processedHash=${processedHash.take(8)}"
                         )
                         val finalAsrInput = processedAudioToSave
 

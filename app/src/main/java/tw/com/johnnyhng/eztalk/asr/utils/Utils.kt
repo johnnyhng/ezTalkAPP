@@ -15,7 +15,16 @@ import java.security.MessageDigest
  * @return The SHA-256 hash as a hexadecimal string.
  */
 fun sha256(input: String): String {
-    val bytes = input.toByteArray()
+    return sha256(input.toByteArray())
+}
+
+/**
+ * Computes the SHA-256 hash of a byte array.
+ *
+ * @param bytes The byte array to hash.
+ * @return The SHA-256 hash as a hexadecimal string.
+ */
+fun sha256(bytes: ByteArray): String {
     val md = MessageDigest.getInstance("SHA-256")
     val digest = md.digest(bytes)
     return digest.fold("") { str, it -> str + "%02x".format(it) }
