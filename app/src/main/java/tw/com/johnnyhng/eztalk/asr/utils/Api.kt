@@ -23,7 +23,11 @@ internal enum class FeedbackRoute {
 
 internal sealed class UploadRequestPlan {
     data class Json(val payload: JSONObject) : UploadRequestPlan()
-    data class Multipart(val file: File, val payload: JSONObject) : UploadRequestPlan()
+    data class Multipart(
+        val file: File,
+        val payload: JSONObject,
+        val rawTseFile: File? = null
+    ) : UploadRequestPlan()
 }
 
 internal data class FeedbackDispatchPlan(
@@ -33,7 +37,8 @@ internal data class FeedbackDispatchPlan(
 
 internal data class PackagedUploadJson(
     val metadata: JSONObject,
-    val raw: JSONArray
+    val raw: JSONArray,
+    val rawTse: JSONArray? = null
 )
 
 internal data class UploadMetadataSnapshot(
@@ -121,11 +126,18 @@ internal fun packageUploadJsonMetadata(path: String, userId: String): JSONObject
     }
 }
 
-internal fun buildUploadMetadataSource(path: String): UploadMetadataSource =
-    UploadMetadataSource(
-        wavFile = File(path),
-        jsonlFile = File(path.substringBeforeLast(".") + ".jsonl")
+internal fun buildUploadMetadataSource(path: String): UploadMetadataSource {
+    val wavFile = File(path)
+    val jsonlPath = if (path.endsWith(".raw.app.wav")) {
+        path.replace(".raw.app.wav", ".app.jsonl")
+    } else {
+        path.substringBeforeLast(".") + ".jsonl"
+    }
+    return UploadMetadataSource(
+        wavFile = wavFile,
+        jsonlFile = File(jsonlPath)
     )
+}
 
 internal fun readUploadMetadataSnapshot(
     jsonlFile: File,
@@ -295,26 +307,30 @@ internal fun buildFeedbackDispatchPlan(
 
 internal fun combineUploadJson(
     metadata: JSONObject?,
-    rawArray: JSONArray?
+    rawArray: JSONArray?,
+    rawTseArray: JSONArray? = null
 ): JSONObject? {
     if (metadata == null || rawArray == null) return null
     return JSONObject(metadata.toString()).apply {
         put("raw", rawArray)
+        rawTseArray?.let { put("raw_tse", it) }
     }
 }
 
 internal fun buildPackagedUploadJson(
     metadata: JSONObject?,
-    rawArray: JSONArray?
+    rawArray: JSONArray?,
+    rawTseArray: JSONArray? = null
 ): PackagedUploadJson? {
     if (metadata == null || rawArray == null) return null
-    return PackagedUploadJson(metadata = metadata, raw = rawArray)
+    return PackagedUploadJson(metadata = metadata, raw = rawArray, rawTse = rawTseArray)
 }
 
 internal fun buildMultipartRequestContent(
     jsonPayload: JSONObject,
     file: File,
-    boundary: String
+    boundary: String,
+    rawTseFile: File? = null
 ): MultipartRequestContent {
     val body = ByteArrayOutputStream().use { output ->
         DataOutputStream(output).use { dos ->
@@ -341,6 +357,22 @@ internal fun buildMultipartRequestContent(
                 }
             }
             dos.writeBytes(lineEnd)
+
+            if (rawTseFile != null && rawTseFile.exists()) {
+                dos.writeBytes(twoHyphens + boundary + lineEnd)
+                dos.writeBytes("Content-Disposition: form-data; name=\"raw_tse\"; filename=\"${rawTseFile.name}\"$lineEnd")
+                dos.writeBytes("Content-Type: audio/wav$lineEnd")
+                dos.writeBytes(lineEnd)
+
+                FileInputStream(rawTseFile).use { fis ->
+                    val buffer = ByteArray(4096)
+                    var bytesRead: Int
+                    while (fis.read(buffer).also { bytesRead = it } != -1) {
+                        dos.write(buffer, 0, bytesRead)
+                    }
+                }
+                dos.writeBytes(lineEnd)
+            }
 
             dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
         }
@@ -373,7 +405,8 @@ internal fun writeUploadRequest(
             val requestContent = buildMultipartRequestContent(
                 jsonPayload = plan.payload,
                 file = plan.file,
-                boundary = boundaryProvider()
+                boundary = boundaryProvider(),
+                rawTseFile = plan.rawTseFile
             )
             connection.setRequestProperty("Content-Type", requestContent.contentType)
             connection.outputStream.use { os ->
@@ -497,7 +530,9 @@ internal fun buildTransferRequestPlan(
         val metadata = metadataBuilder(filePath, userId) ?: return null
         val file = File(filePath)
         if (!file.exists()) return null
-        UploadRequestPlan.Multipart(file = file, payload = metadata)
+        val rawTsePath = findRawSiblingPath(filePath)
+        val rawTseFile = rawTsePath?.let { File(it) }?.takeIf { it.exists() }
+        UploadRequestPlan.Multipart(file = file, payload = metadata, rawTseFile = rawTseFile)
     }
 }
 
@@ -556,18 +591,36 @@ internal fun packageUploadJson(
         metadataLoader = metadataLoader,
         rawLoader = rawLoader
     ) ?: return null
-    return combineUploadJson(packaged.metadata, packaged.raw)
+    return combineUploadJson(packaged.metadata, packaged.raw, packaged.rawTse)
+}
+
+private fun findRawSiblingPath(filePath: String): String? {
+    val file = File(filePath)
+    if (!file.exists()) return null
+
+    val name = file.name
+    // If name is "20240512-123456.app.wav", look for "20240512-123456.raw.app.wav"
+    if (name.endsWith(".app.wav")) {
+        val rawName = name.replace(".app.wav", ".raw.app.wav")
+        val rawFile = File(file.parentFile, rawName)
+        if (rawFile.exists()) {
+            return rawFile.absolutePath
+        }
+    }
+    return null
 }
 
 internal fun buildUploadPackage(
     path: String,
     userId: String,
     metadataLoader: (String, String) -> JSONObject?,
-    rawLoader: (String) -> JSONArray?
+    rawLoader: (String) -> JSONArray?,
+    rawTseLoader: (String) -> JSONArray? = { findRawSiblingPath(it)?.let(rawLoader) }
 ): PackagedUploadJson? {
     val metadata = metadataLoader(path, userId) ?: return null
     val rawArray = rawLoader(path) ?: return null
-    return buildPackagedUploadJson(metadata, rawArray)
+    val rawTseArray = rawTseLoader(path)
+    return buildPackagedUploadJson(metadata, rawArray, rawTseArray)
 }
 
 internal fun executeFeedbackDispatch(
@@ -807,8 +860,16 @@ fun postTransfer(
             userId = userId,
             sendFileByJson = sendFileByJson
         )) {
-            is UploadRequestPlan.Json,
-            is UploadRequestPlan.Multipart -> builtPlan
+            is UploadRequestPlan.Json -> {
+                val keys = builtPlan.payload.keys().asSequence().toList()
+                Log.d(TAG, "postTransfer: JSON keys = $keys")
+                builtPlan
+            }
+            is UploadRequestPlan.Multipart -> {
+                val keys = builtPlan.payload.keys().asSequence().toList()
+                Log.d(TAG, "postTransfer: Multipart payload keys = $keys, hasRawTseFile = ${builtPlan.rawTseFile != null}")
+                builtPlan
+            }
             null -> {
                 Log.e(TAG, "Failed to create metadata for $filePath")
                 return false
