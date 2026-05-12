@@ -205,13 +205,17 @@ class RecognitionManager(private val context: Context) {
         val userId = userSettings.userId
         val dummyTseRequested = userSettings.useTseDetection
         val tsePreprocessor = if (dummyTseRequested) {
-            TseAudioPreprocessor().also { it.reset() }
+            TseAudioPreprocessor().also { 
+                it.initialize(context)
+                it.reset() 
+            }
         } else {
             null
         }
+        val tseRuntimeName = if (dummyTseRequested) "native_onnx_lite_realtime" else "raw_passthrough"
         Log.i(
             TAG,
-            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=$dummyTseRequested, tseRuntime=dummy_raw_passthrough, saveVadSegmentsOnly=$saveVadSegmentsOnly"
+            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=$dummyTseRequested, tseRuntime=$tseRuntimeName, saveVadSegmentsOnly=$saveVadSegmentsOnly"
         )
 
         var buffer = arrayListOf<Float>()
@@ -228,7 +232,8 @@ class RecognitionManager(private val context: Context) {
         var processedChunkCount = 0
 
         var done = false
-        while (!done) {
+        try {
+            while (!done) {
                 val s = samplesChannel.tryReceive().getOrNull()
                 val flushRequest = flushChannel.tryReceive().getOrNull()
 
@@ -258,7 +263,7 @@ class RecognitionManager(private val context: Context) {
                     if (dummyTseRequested && (processedChunkCount <= 5 || processedChunkCount % 25 == 0)) {
                         Log.i(
                             TAG,
-                            "RecognitionManager dummy TSE raw passthrough stats: sessionId=$sessionId, chunk=$processedChunkCount, rawRms=${rms(chunkOutput.rawAligned).format3()}, processedRms=${rms(chunkOutput.processed).format3()}"
+                            "RecognitionManager native TSE realtime stats: sessionId=$sessionId, chunk=$processedChunkCount, rawRms=${rms(chunkOutput.rawAligned).format3()}, processedRms=${rms(chunkOutput.processed).format3()}"
                         )
                     }
                 }
@@ -447,6 +452,9 @@ class RecognitionManager(private val context: Context) {
                         _countdownProgress.value = 0f
                     }
                 }
+            }
+        } finally {
+            tsePreprocessor?.release()
         }
     }
 

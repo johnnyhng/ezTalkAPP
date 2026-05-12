@@ -776,6 +776,63 @@ Use:
   - keep native session alive for live mode instead of initializing at final utterance time
   - reduce JNI per-hop allocation/copying if moving this path into live processing
 
+### Native ONNX Transformer 64D Int8
+- date: `2026-05-12`
+- source artifact:
+  - `/media/hhs/FastData/workspace/TSE/release/android/transformer_64d_int8.onnx`
+- app asset:
+  - `app/src/main/assets/transformer_64d_int8.onnx`
+- native engine:
+  - updated `libtse_engine.so` from latest release
+- acceleration:
+  - default to CPU (as requested for initial validation)
+- notes:
+  - switch from LSTM to Transformer architecture
+  - bottleneck dimension: 64D
+  - expected per-frame CPU latency: 3.9ms - 4.4ms (measured on Pixel 7/8)
+
+### Native ONNX 192D Negative Int8 Candidate
+
+- date: `2026-05-12`
+- source artifact:
+  - `/media/hhs/FastData/workspace/TSE/release/android/voice_filter_lite_192d_neg_int8.onnx`
+- app asset:
+  - `app/src/main/assets/voice_filter_lite_192d_neg_int8.onnx`
+- SHA-256:
+  - `781633d21e457d731e2c4e7399a3f6606471dec383dcb8f9ee3d8c09b2dcf105`
+- app defaults updated:
+  - `NativeTseWaveformPipeline`
+  - `TseAudioPreprocessor`
+- d-vector:
+  - unchanged: `dvector.bin`
+- expected next device log:
+  - native model input/output contract should remain 4-input / 3-output VoiceFilter Lite
+  - runtime label should remain native ONNX
+  - compare inference time and ASR/quality against previous `voice_filter_lite_int8.onnx`
+
+### Native IO Name Resolver Update
+
+- date: `2026-05-12`
+- observed failure:
+  - new `voice_filter_lite_192d_neg_int8.onnx` loads successfully
+  - model input names are `spec_input`, `embed_input`, `h_in`, `c_in`
+  - model output names are `mask_out`, `h_out`, `c_out`
+  - native engine was still hardcoded to old names `x`, `embed`, `mask`
+  - inference failed with `Invalid input name: x`
+- native fix:
+  - `TSEEngine` now resolves input/output names from the ORT session during initialization
+  - supported aliases include:
+    - input 0: `x`, `spec_input`, `serving_default_args_0`
+    - input 1: `embed`, `embed_input`, `serving_default_args_1`
+    - output 0: `mask`, `mask_out`, `serving_default_output_0_output`
+  - rebuilt `libtse_engine.so`
+  - copied rebuilt library into `app/src/main/jniLibs/arm64-v8a/libtse_engine.so`
+- native library SHA-256:
+  - `2e0f69286b6b0e007ca91ab368b495c798b2b41d572e9206eb09a60320514567`
+- expected next device log:
+  - `[Model] resolved inputs=[spec_input,embed_input,h_in,c_in] outputs=[mask_out,h_out,c_out]`
+  - no `Invalid input name: x`
+
 ### GPU Delegate Binding Fix
 
 - date: `2026-05-09 16:30:10`
