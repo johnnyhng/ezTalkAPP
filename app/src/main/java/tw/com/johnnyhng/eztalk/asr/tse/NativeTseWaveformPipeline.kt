@@ -66,9 +66,12 @@ internal class NativeTseWaveformPipeline(
             outputOffset += frameSize
         }
 
-        return output
+        val finalResult = output
             .dropStreamingLatency(targetSize = samples.size)
             .normalizedForNativeTse()
+            
+        Log.i(TAG, "NativeTseWaveformPipeline process complete: input=${samples.size}, output=${finalResult.size}")
+        return finalResult
     }
 
     fun close() {

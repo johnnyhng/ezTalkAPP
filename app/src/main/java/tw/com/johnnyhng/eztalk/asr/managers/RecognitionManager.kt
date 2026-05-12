@@ -337,7 +337,7 @@ class RecognitionManager(private val context: Context) {
                             buffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
                         }
                         val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
-                        val shouldPostProcessNativeTse = isDataCollectMode && dummyTseRequested
+                        val shouldPostProcessNativeTse = dummyTseRequested
                         val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                         val filename = "${timestamp}.app"
                         val rawWavPath = if (shouldPostProcessNativeTse) {
@@ -352,7 +352,7 @@ class RecognitionManager(private val context: Context) {
                         if (shouldPostProcessNativeTse) {
                             Log.i(
                                 TAG,
-                                "RecognitionManager raw sibling wav completed before native TSE: path=${rawWavPath.orEmpty().ifBlank { "n/a" }}, samples=${rawAudioToSave.size}"
+                                "RecognitionManager raw sibling wav completed before native TSE: path=${rawWavPath.orEmpty().ifBlank { "n/a" }}, samples=${rawAudioToSave.size}, isDataCollectMode=$isDataCollectMode"
                             )
                         }
                         val nativeTseResult = if (shouldPostProcessNativeTse) {
@@ -365,11 +365,17 @@ class RecognitionManager(private val context: Context) {
                         } else {
                             rawPassthroughAudio
                         }
+                        val rawRms = rms(rawAudioToSave)
+                        val processedRms = rms(processedAudioToSave)
                         val tseRuntime = when {
-                            !shouldPostProcessNativeTse -> "raw_passthrough"
+                            !shouldPostProcessNativeTse -> "realtime_only_${if (dummyTseRequested) "native_onnx" else "passthrough"}"
                             nativeTseResult != null -> nativeTseResult.runtime
-                            else -> "native_onnx_lite_unavailable_raw_passthrough"
+                            else -> "offline_failed_fallback_realtime"
                         }
+                        Log.i(
+                            TAG,
+                            "RecognitionManager TSE decision: sessionId=$sessionId, shouldPostProcess=$shouldPostProcessNativeTse, nativeTseResult=${nativeTseResult != null}, runtime=$tseRuntime, rawRms=${rawRms.format3()}, processedRms=${processedRms.format3()}"
+                        )
                         val finalAsrInput = processedAudioToSave
 
                         val stream = SimulateStreamingAsr.recognizer.createStream()
