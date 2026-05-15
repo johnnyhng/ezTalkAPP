@@ -35,8 +35,8 @@ internal class TseAudioPreprocessor(
         
         return try {
             val ntse = NativeTSE()
-            // The handover specifies transformer_64d_int8.onnx
-            val modelName = "transformer_64d_int8.onnx"
+            // Use INT8 model as requested.
+            val modelName = "transformer_energy_16d_1L_int8.onnx"
             val modelPath = copyAssetToCache(context, modelName).absolutePath
             val dvectorPath = copyAssetToCache(context, "dvector.bin").absolutePath
             

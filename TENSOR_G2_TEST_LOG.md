@@ -776,6 +776,19 @@ Use:
   - keep native session alive for live mode instead of initializing at final utterance time
   - reduce JNI per-hop allocation/copying if moving this path into live processing
 
+### Native ONNX Transformer 64D FP32 (Debug)
+- date: `2026-05-12`
+- source artifact:
+  - `/media/hhs/FastData/workspace/TSE/release/android/transformer_64d_fp32.onnx`
+- app asset:
+  - `app/src/main/assets/transformer_64d_fp32.onnx`
+- dvector:
+  - updated `dvector.bin`
+- acceleration:
+  - default to CPU
+- notes:
+  - use FP32 version for debugging and SHA256 integrity verification
+
 ### Native ONNX Transformer 64D Int8
 - date: `2026-05-12`
 - source artifact:
@@ -790,6 +803,49 @@ Use:
   - switch from LSTM to Transformer architecture
   - bottleneck dimension: 64D
   - expected per-frame CPU latency: 3.9ms - 4.4ms (measured on Pixel 7/8)
+
+### Native ONNX Transformer Energy 16D Int8
+
+- date: `2026-05-14`
+- source artifacts:
+  - `/media/hhs/FastData/workspace/TSE/release/android/libtse_engine.so`
+  - `/media/hhs/FastData/workspace/TSE/release/android/transformer_energy_16d_int8.onnx`
+  - `/media/hhs/FastData/workspace/TSE/release/android/dvector.bin`
+- app artifacts:
+  - `app/src/main/jniLibs/arm64-v8a/libtse_engine.so`
+  - `app/src/main/assets/transformer_energy_16d_int8.onnx`
+  - `app/src/main/assets/dvector.bin`
+- SHA-256:
+  - `libtse_engine.so`: `ab717097c82cbc320e6ae104fb911be5370e9dc38c11600d7ad045071d8eb4af`
+  - `transformer_energy_16d_int8.onnx`: `c034ecc27135f1b4fa9a59fa42a673e2e14fd036a15c2bf332f9682c2b741627`
+  - `dvector.bin`: `c7e83afbb9676a28bac11856124e8330e54e60a28231474152c76e284df26756`
+- app defaults updated:
+  - `NativeTseWaveformPipeline`
+  - `TseAudioPreprocessor`
+- note:
+  - rebuilt native engine contains `input_energy`, confirming this is the transformer energy native path
+- expected next device log:
+  - native model should initialize with energy-specific input contract
+  - compare realtime/offline quality and latency against previous `transformer_64d_int8.onnx` and energy 64D candidate
+
+### Native ONNX Transformer Energy 16D 1L Int8
+
+- date: `2026-05-15`
+- source artifact:
+  - `/media/hhs/FastData/workspace/TSE/release/android/transformer_energy_16d_1L_int8.onnx`
+- app asset:
+  - `app/src/main/assets/transformer_energy_16d_1L_int8.onnx`
+- SHA-256:
+  - `transformer_energy_16d_1L_int8.onnx`: `6506565fad661591bbb923d7a8ddc0cc1bb986c899e026ee50a4274462e88d38`
+- app defaults updated:
+  - `NativeTseWaveformPipeline`
+  - `TseAudioPreprocessor`
+- note:
+  - switch current native ONNX default from `transformer_energy_16d_int8.onnx` to the 1-layer 16D energy candidate
+  - keep CPU as the default execution path for Tensor G2 validation
+- expected next device log:
+  - native model should initialize through the existing JNI/ORT path
+  - compare realtime/offline latency and ASR quality against the previous 16D energy candidate
 
 ### Native ONNX 192D Negative Int8 Candidate
 

@@ -18,7 +18,7 @@ internal class NativeTseWaveformPipeline(
     private var initialized = false
 
     fun initialize(
-        modelAssetName: String = "transformer_64d_int8.onnx",
+        modelAssetName: String = "transformer_energy_16d_1L_int8.onnx",
         dvectorAssetName: String = "dvector.bin",
         accelerationMode: Int = NativeTSE.ACCELERATION_CPU,
     ): Boolean {
