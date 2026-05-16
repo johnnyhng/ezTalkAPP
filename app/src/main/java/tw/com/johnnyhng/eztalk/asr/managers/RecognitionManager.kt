@@ -471,6 +471,13 @@ class RecognitionManager(private val context: Context) {
 
                         // Reset for next utterance
                         val completedUtterance = utteranceIndex
+                        val droppedQueuedSamples = drainQueuedSamples(samplesChannel)
+                        if (droppedQueuedSamples > 0) {
+                            Log.i(
+                                TAG,
+                                "RecognitionManager dropped queued audio after finalization: sessionId=$sessionId, completedUtterance=$completedUtterance, samples=$droppedQueuedSamples, reason=avoid_backlog_as_next_utterance"
+                            )
+                        }
                         utteranceSegments.clear()
                         isSpeechStarted = false
                         vadInputBuffer = arrayListOf()
@@ -482,6 +489,7 @@ class RecognitionManager(private val context: Context) {
                         startTime = System.currentTimeMillis()
                         utteranceIndex += 1
                         utteranceVariantBuffer.reset()
+                        tsePreprocessor?.reset()
                         SimulateStreamingAsr.resetVadSafely()
                         Log.i(TAG, "RecognitionManager utterance reset complete: sessionId=$sessionId, completedUtterance=$completedUtterance, nextUtterance=$utteranceIndex, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName")
                         _isRecognizingSpeech.value = false
@@ -492,6 +500,15 @@ class RecognitionManager(private val context: Context) {
         } finally {
             tsePreprocessor?.release()
         }
+    }
+
+    private fun drainQueuedSamples(samplesChannel: Channel<FloatArray>): Int {
+        var droppedSamples = 0
+        while (true) {
+            val queued = samplesChannel.tryReceive().getOrNull() ?: break
+            droppedSamples += queued.size
+        }
+        return droppedSamples
     }
 
     private fun saveSiblingRawWav(
