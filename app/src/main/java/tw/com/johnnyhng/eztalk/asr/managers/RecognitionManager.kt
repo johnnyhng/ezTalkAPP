@@ -235,6 +235,7 @@ class RecognitionManager(private val context: Context) {
             "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=$dummyTseRequested, liveVadRuntime=$tseRuntimeName, vadInputSource=$vadInputSource, saveVadSegmentsOnly=$saveVadSegmentsOnly"
         )
 
+        val postFinalizationVadGuardMs = 1_000L
         var vadInputBuffer = arrayListOf<Float>()
         var rawAlignedBuffer = arrayListOf<Float>()
         val keep = (sampleRateInHz / 1000) * 500
@@ -248,6 +249,8 @@ class RecognitionManager(private val context: Context) {
         var lastVadPacketAt = 0L
         var processedChunkCount = 0
         var utteranceIndex = 1
+        var vadGuardUntilMs = 0L
+        var guardedSamples = 0
 
         var done = false
         try {
@@ -274,6 +277,25 @@ class RecognitionManager(private val context: Context) {
                         ?: tw.com.johnnyhng.eztalk.asr.tse.TseChunkOutput(s, s)
                     if (chunkOutput.processed.isEmpty() && chunkOutput.rawAligned.isEmpty()) {
                         continue
+                    }
+                    val nowMs = System.currentTimeMillis()
+                    if (nowMs < vadGuardUntilMs) {
+                        guardedSamples += chunkOutput.processed.size
+                        processedChunkCount += 1
+                        if (processedChunkCount <= 5 || processedChunkCount % 25 == 0) {
+                            Log.i(
+                                TAG,
+                                "RecognitionManager VAD guard active: sessionId=$sessionId, utterance=$utteranceIndex, chunk=$processedChunkCount, remainingMs=${vadGuardUntilMs - nowMs}, guardedSamples=$guardedSamples, rawRms=${rms(chunkOutput.rawAligned).format3()}, vadRms=${rms(chunkOutput.processed).format3()}"
+                            )
+                        }
+                        continue
+                    }
+                    if (guardedSamples > 0) {
+                        Log.i(
+                            TAG,
+                            "RecognitionManager VAD guard complete: sessionId=$sessionId, utterance=$utteranceIndex, guardedSamples=$guardedSamples, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName"
+                        )
+                        guardedSamples = 0
                     }
                     rawAlignedBuffer.addAll(chunkOutput.rawAligned.toList())
                     vadInputBuffer.addAll(chunkOutput.processed.toList())
@@ -488,10 +510,12 @@ class RecognitionManager(private val context: Context) {
                         lastVadPacketAt = 0L
                         startTime = System.currentTimeMillis()
                         utteranceIndex += 1
+                        vadGuardUntilMs = System.currentTimeMillis() + postFinalizationVadGuardMs
+                        guardedSamples = 0
                         utteranceVariantBuffer.reset()
                         tsePreprocessor?.reset()
                         SimulateStreamingAsr.resetVadSafely()
-                        Log.i(TAG, "RecognitionManager utterance reset complete: sessionId=$sessionId, completedUtterance=$completedUtterance, nextUtterance=$utteranceIndex, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName")
+                        Log.i(TAG, "RecognitionManager utterance reset complete: sessionId=$sessionId, completedUtterance=$completedUtterance, nextUtterance=$utteranceIndex, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName, vadGuardMs=$postFinalizationVadGuardMs")
                         _isRecognizingSpeech.value = false
                         _countdownProgress.value = 0f
                     }
