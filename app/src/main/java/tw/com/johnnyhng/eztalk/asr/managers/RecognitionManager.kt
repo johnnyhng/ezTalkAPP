@@ -17,6 +17,7 @@ import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTseWaveformPipeline
+import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.buildTranscriptFileTargets
@@ -205,15 +206,21 @@ class RecognitionManager(private val context: Context) {
         val saveVadSegmentsOnly = userSettings.saveVadSegmentsOnly
         val userId = userSettings.userId
         val dummyTseRequested = userSettings.useTseDetection
+        var tseRuntimeName = "raw_passthrough"
         val tsePreprocessor = if (dummyTseRequested) {
-            TseAudioPreprocessor().also { 
-                it.initialize(context)
-                it.reset() 
+            TseAudioPreprocessor().let { preprocessor ->
+                if (preprocessor.initialize(context)) {
+                    preprocessor.reset()
+                    tseRuntimeName = preprocessor.runtimeName
+                    preprocessor
+                } else {
+                    tseRuntimeName = preprocessor.runtimeName
+                    null
+                }
             }
         } else {
             null
         }
-        val tseRuntimeName = if (dummyTseRequested) "native_onnx_lite_realtime" else "raw_passthrough"
         Log.i(
             TAG,
             "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=$dummyTseRequested, tseRuntime=$tseRuntimeName, saveVadSegmentsOnly=$saveVadSegmentsOnly"
@@ -261,7 +268,7 @@ class RecognitionManager(private val context: Context) {
                     rawAlignedBuffer.addAll(chunkOutput.rawAligned.toList())
                     buffer.addAll(chunkOutput.processed.toList())
                     processedChunkCount += 1
-                    if (dummyTseRequested && (processedChunkCount <= 5 || processedChunkCount % 25 == 0)) {
+                    if (tsePreprocessor != null && (processedChunkCount <= 5 || processedChunkCount % 25 == 0)) {
                         Log.i(
                             TAG,
                             "RecognitionManager native TSE realtime stats: sessionId=$sessionId, chunk=$processedChunkCount, rawRms=${rms(chunkOutput.rawAligned).format3()}, processedRms=${rms(chunkOutput.processed).format3()}"
@@ -503,21 +510,24 @@ class RecognitionManager(private val context: Context) {
     private fun runNativeTseOffline(samples: FloatArray, sessionId: Long): NativeTseOfflineResult? {
         if (samples.isEmpty()) return NativeTseOfflineResult(FloatArray(0), "native_onnx_lite_empty")
 
+        val mode = NativeTSE.ACCELERATION_CPU
         return runNativeTseOfflineWithAcceleration(
             samples = samples,
             sessionId = sessionId,
-            runtime = "native_onnx_lite_cpu_offline"
+            runtime = "native_onnx_lite_${NativeTSE.accelerationModeName(mode)}_offline",
+            accelerationMode = mode
         )
     }
 
     private fun runNativeTseOfflineWithAcceleration(
         samples: FloatArray,
         sessionId: Long,
-        runtime: String
+        runtime: String,
+        accelerationMode: Int
     ): NativeTseOfflineResult? {
         val pipeline = NativeTseWaveformPipeline(context)
         return try {
-            val initialized = pipeline.initialize()
+            val initialized = pipeline.initialize(accelerationMode = accelerationMode)
             if (!initialized) {
                 Log.w(TAG, "RecognitionManager native TSE offline skipped: sessionId=$sessionId, runtime=$runtime, reason=init_failed")
                 return null

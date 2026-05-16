@@ -19,13 +19,16 @@ internal data class TseChunkOutput(
  */
 internal class TseAudioPreprocessor(
     private val frameSize: Int = 160,
-    private val latencySamples: Int = 240
+    private val latencySamples: Int = 240,
+    private val accelerationMode: Int = NativeTSE.ACCELERATION_CPU
 ) {
     private val TAG = "TseAudioPreprocessor"
     private val pendingRaw = ArrayList<Float>()
     private val rawDelayBuffer = ArrayList<Float>()
     private var nativeTse: NativeTSE? = null
     private var initialized = false
+    var runtimeName: String = "native_onnx_uninitialized"
+        private set
 
     /**
      * Initialize the native TSE engine with assets.
@@ -39,20 +42,29 @@ internal class TseAudioPreprocessor(
             val modelName = "transformer_energy_16d_1L_int8.onnx"
             val modelPath = copyAssetToCache(context, modelName).absolutePath
             val dvectorPath = copyAssetToCache(context, "dvector.bin").absolutePath
-            
-            // Use CPU for initial stability as requested.
-            if (ntse.init(modelPath, dvectorPath)) {
+
+            val accelerationName = NativeTSE.accelerationModeName(accelerationMode)
+            val nativeInitialized = if (accelerationMode == NativeTSE.ACCELERATION_CPU) {
+                ntse.init(modelPath, dvectorPath)
+            } else {
+                ntse.initWithAcceleration(modelPath, dvectorPath, accelerationMode)
+            }
+
+            if (nativeInitialized) {
                 ntse.reset()
                 nativeTse = ntse
                 initialized = true
-                Log.i(TAG, "Native TSE initialized on CPU using $modelName")
-                true
-            } else {
-                Log.e(TAG, "Failed to initialize Native TSE on CPU")
-                false
+                runtimeName = "native_onnx_lite_${accelerationName}_realtime"
+                Log.i(TAG, "Native TSE initialized using $modelName acceleration=$accelerationName")
+                return true
             }
+
+            Log.e(TAG, "Failed to initialize Native TSE using $modelName acceleration=$accelerationName")
+            runtimeName = "raw_passthrough_tse_init_failed"
+            false
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing Native TSE", e)
+            runtimeName = "raw_passthrough_tse_init_error"
             false
         }
     }

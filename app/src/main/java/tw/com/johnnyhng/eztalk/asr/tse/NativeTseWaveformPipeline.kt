@@ -26,6 +26,7 @@ internal class NativeTseWaveformPipeline(
         return try {
             val modelPath = copyAssetToCache(modelAssetName).absolutePath
             val dvectorPath = copyAssetToCache(dvectorAssetName).absolutePath
+            val accelerationName = NativeTSE.accelerationModeName(accelerationMode)
             initialized = if (accelerationMode == NativeTSE.ACCELERATION_CPU) {
                 nativeTse.init(modelPath, dvectorPath)
             } else {
@@ -33,11 +34,13 @@ internal class NativeTseWaveformPipeline(
             }
             if (initialized) {
                 nativeTse.reset()
+                Log.i(TAG, "Native TSE initialized. acceleration=$accelerationName")
+            } else {
+                Log.w(TAG, "Native TSE initialize returned false. acceleration=$accelerationName")
             }
-            Log.i(TAG, "Native TSE initialized. accelerationMode=$accelerationMode")
             initialized
         } catch (t: Throwable) {
-            Log.e(TAG, "NativeTseWaveformPipeline initialize failed. accelerationMode=$accelerationMode", t)
+            Log.e(TAG, "NativeTseWaveformPipeline initialize failed. acceleration=${NativeTSE.accelerationModeName(accelerationMode)}", t)
             initialized = false
             false
         }

@@ -837,15 +837,24 @@ Use:
   - `app/src/main/assets/transformer_energy_16d_1L_int8.onnx`
 - SHA-256:
   - `transformer_energy_16d_1L_int8.onnx`: `6506565fad661591bbb923d7a8ddc0cc1bb986c899e026ee50a4274462e88d38`
+  - `libtse_engine.so` with Android NNAPI disabled: `edb522453804b1923d417b62a0ba97e85e6cc84be2905aee88cf0a4c883dec61`
 - app defaults updated:
   - `NativeTseWaveformPipeline`
   - `TseAudioPreprocessor`
 - note:
   - switch current native ONNX default from `transformer_energy_16d_int8.onnx` to the 1-layer 16D energy candidate
-  - keep CPU as the default execution path for Tensor G2 validation
+  - NNAPI disabled after Tensor G2 validation showed pure EdgeTPU rejection and mixed mode running on `nnapi-reference`
+  - use `ACCELERATION_CPU` as the default execution path
 - expected next device log:
   - native model should initialize through the existing JNI/ORT path
+  - realtime runtime should report `native_onnx_lite_cpu_realtime`
   - compare realtime/offline latency and ASR quality against the previous 16D energy candidate
+- observed device log:
+  - `OrtSessionOptionsAppendExecutionProvider_Nnapi` attaches successfully with `flags=0x4`
+  - NNAPI selects `google-edgetpu`, then rejects the model with `The model cannot run using the current set of target devices`
+  - `nnapi_mixed` initializes only through `nnapi-reference`, with transformer inference around 19-25 ms
+  - app and Android native build are now back to CPU defaults to avoid NNAPI startup overhead
+  - CPU-only validation is faster on Pixel 10 Pro XL / Tensor path: transformer inference around 10.8-13.1 ms, with no `google-edgetpu` or `nnapi-reference` startup
 
 ### Native ONNX 192D Negative Int8 Candidate
 

@@ -24,6 +24,15 @@ class NativeTSE {
         const val ACCELERATION_NNAPI_MIXED = 3
         const val ACCELERATION_NNAPI_MIXED_FP16 = 4
 
+        fun accelerationModeName(mode: Int): String = when (mode) {
+            ACCELERATION_CPU -> "cpu"
+            ACCELERATION_NNAPI_ACCELERATOR -> "nnapi_accelerator"
+            ACCELERATION_NNAPI_ACCELERATOR_FP16 -> "nnapi_accelerator_fp16"
+            ACCELERATION_NNAPI_MIXED -> "nnapi_mixed"
+            ACCELERATION_NNAPI_MIXED_FP16 -> "nnapi_mixed_fp16"
+            else -> "unknown_$mode"
+        }
+
         init {
             try {
                 // Load dependencies first.
