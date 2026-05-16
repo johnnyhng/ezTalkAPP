@@ -39,6 +39,12 @@ class RecognitionManager(private val context: Context) {
         DATA_COLLECT,
     }
 
+    private enum class VadInputSource {
+        TSE_PROCESSED,
+        RAW_FALLBACK_TSE_DISABLED,
+        RAW_FALLBACK_TSE_INIT_FAILED,
+    }
+
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val audioIOManager = AudioIOManager(context)
     private var audioRecord: AudioRecord? = null
@@ -207,14 +213,17 @@ class RecognitionManager(private val context: Context) {
         val userId = userSettings.userId
         val dummyTseRequested = userSettings.useTseDetection
         var tseRuntimeName = "raw_passthrough"
+        var vadInputSource = VadInputSource.RAW_FALLBACK_TSE_DISABLED
         val tsePreprocessor = if (dummyTseRequested) {
             TseAudioPreprocessor().let { preprocessor ->
                 if (preprocessor.initialize(context)) {
                     preprocessor.reset()
                     tseRuntimeName = preprocessor.runtimeName
+                    vadInputSource = VadInputSource.TSE_PROCESSED
                     preprocessor
                 } else {
                     tseRuntimeName = preprocessor.runtimeName
+                    vadInputSource = VadInputSource.RAW_FALLBACK_TSE_INIT_FAILED
                     null
                 }
             }
@@ -223,10 +232,10 @@ class RecognitionManager(private val context: Context) {
         }
         Log.i(
             TAG,
-            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=$dummyTseRequested, tseRuntime=$tseRuntimeName, saveVadSegmentsOnly=$saveVadSegmentsOnly"
+            "RecognitionManager processAudio: sessionId=$sessionId, userId=$userId, useTseDetection=$dummyTseRequested, liveVadRuntime=$tseRuntimeName, vadInputSource=$vadInputSource, saveVadSegmentsOnly=$saveVadSegmentsOnly"
         )
 
-        var buffer = arrayListOf<Float>()
+        var vadInputBuffer = arrayListOf<Float>()
         var rawAlignedBuffer = arrayListOf<Float>()
         val keep = (sampleRateInHz / 1000) * 500
         var offset = 0
@@ -238,6 +247,7 @@ class RecognitionManager(private val context: Context) {
         val utteranceSegments = mutableListOf<FloatArray>()
         var lastVadPacketAt = 0L
         var processedChunkCount = 0
+        var utteranceIndex = 1
 
         var done = false
         try {
@@ -250,7 +260,7 @@ class RecognitionManager(private val context: Context) {
                         tsePreprocessor?.flush()?.let { tail ->
                             if (tail.processed.isNotEmpty()) {
                                 rawAlignedBuffer.addAll(tail.rawAligned.toList())
-                                buffer.addAll(tail.processed.toList())
+                                vadInputBuffer.addAll(tail.processed.toList())
                             }
                         }
                         Log.i(TAG, "RecognitionManager flush received: sessionId=$sessionId, closing processing loop")
@@ -266,19 +276,19 @@ class RecognitionManager(private val context: Context) {
                         continue
                     }
                     rawAlignedBuffer.addAll(chunkOutput.rawAligned.toList())
-                    buffer.addAll(chunkOutput.processed.toList())
+                    vadInputBuffer.addAll(chunkOutput.processed.toList())
                     processedChunkCount += 1
-                    if (tsePreprocessor != null && (processedChunkCount <= 5 || processedChunkCount % 25 == 0)) {
+                    if (processedChunkCount <= 5 || processedChunkCount % 25 == 0) {
                         Log.i(
                             TAG,
-                            "RecognitionManager native TSE realtime stats: sessionId=$sessionId, chunk=$processedChunkCount, rawRms=${rms(chunkOutput.rawAligned).format3()}, processedRms=${rms(chunkOutput.processed).format3()}"
+                            "RecognitionManager VAD input stats: sessionId=$sessionId, utterance=$utteranceIndex, chunk=$processedChunkCount, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName, rawRms=${rms(chunkOutput.rawAligned).format3()}, vadRms=${rms(chunkOutput.processed).format3()}"
                         )
                     }
                 }
 
                 // VAD Processing
-                while (offset + windowSize < buffer.size) {
-                    val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
+                while (offset + windowSize < vadInputBuffer.size) {
+                    val chunk = vadInputBuffer.subList(offset, offset + windowSize).toFloatArray()
                     SimulateStreamingAsr.acceptVadWaveformSafely(chunk)
                     offset += windowSize
                     if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
@@ -288,7 +298,7 @@ class RecognitionManager(private val context: Context) {
                         startTime = System.currentTimeMillis()
                         Log.i(
                             TAG,
-                            "RecognitionManager speech start detected: offset=$offset, bufferSize=${buffer.size}, rawAlignedBufferSize=${rawAlignedBuffer.size}, tseRequested=$dummyTseRequested"
+                            "RecognitionManager speech start detected: sessionId=$sessionId, utterance=$utteranceIndex, offset=$offset, vadInputBufferSize=${vadInputBuffer.size}, rawAlignedBufferSize=${rawAlignedBuffer.size}, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName"
                         )
                         if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
                     }
@@ -300,7 +310,7 @@ class RecognitionManager(private val context: Context) {
                     if (elapsed > partialIntervalMs) {
                         val stream = SimulateStreamingAsr.recognizer.createStream()
                         try {
-                            stream.acceptWaveform(buffer.subList(0, offset).toFloatArray(), sampleRateInHz)
+                            stream.acceptWaveform(vadInputBuffer.subList(0, offset).toFloatArray(), sampleRateInHz)
                             SimulateStreamingAsr.recognizer.decode(stream)
                             val result = SimulateStreamingAsr.recognizer.getResult(stream)
                             utteranceVariantBuffer.add(result.text)
@@ -331,18 +341,18 @@ class RecognitionManager(private val context: Context) {
                     if (since >= lingerMs || done || !_isStarted.value) {
                         Log.i(
                             TAG,
-                            "RecognitionManager final utterance trigger: since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, tseRequested=$dummyTseRequested"
+                            "RecognitionManager final utterance trigger: sessionId=$sessionId, utterance=$utteranceIndex, since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName"
                         )
                         val rawAudioToSave = if (saveVadSegmentsOnly) {
                             utteranceSegments.flatMap { it.toList() }.toFloatArray()
                         } else {
-                            lastSpeechDetectedOffset = min(buffer.size - 1, lastSpeechDetectedOffset + keep)
+                            lastSpeechDetectedOffset = min(vadInputBuffer.size - 1, lastSpeechDetectedOffset + keep)
                             rawAlignedBuffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
                         }
                         val rawPassthroughAudio = if (saveVadSegmentsOnly) {
                             utteranceSegments.flatMap { it.toList() }.toFloatArray()
                         } else {
-                            buffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
+                            vadInputBuffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
                         }
                         val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
                         val shouldPostProcessNativeTse = dummyTseRequested
@@ -388,7 +398,7 @@ class RecognitionManager(private val context: Context) {
                         }
                         Log.i(
                             TAG,
-                            "RecognitionManager TSE decision: sessionId=$sessionId, shouldPostProcess=$shouldPostProcessNativeTse, nativeTseResult=${nativeTseResult != null}, runtime=$tseRuntime, rawRms=${rawRms.format3()}, processedRms=${processedRms.format3()}"
+                            "RecognitionManager TSE decision: sessionId=$sessionId, utterance=$utteranceIndex, shouldPostProcess=$shouldPostProcessNativeTse, nativeTseResult=${nativeTseResult != null}, liveVadRuntime=$tseRuntimeName, savedWavRuntime=$tseRuntime, vadInputSource=$vadInputSource, rawRms=${rawRms.format3()}, processedRms=${processedRms.format3()}"
                         )
                         Log.i(
                             TAG,
@@ -411,7 +421,7 @@ class RecognitionManager(private val context: Context) {
                             if (wavPath != null) {
                                 Log.i(
                                     TAG,
-                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseRequested=$dummyTseRequested, tseRuntime=$tseRuntime"
+                                    "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseRequested=$dummyTseRequested, liveVadRuntime=$tseRuntimeName, savedWavRuntime=$tseRuntime, vadInputSource=$vadInputSource"
                                 )
                                 if (rawWavPath != null) {
                                     Log.i(
@@ -460,18 +470,20 @@ class RecognitionManager(private val context: Context) {
                         }
 
                         // Reset for next utterance
+                        val completedUtterance = utteranceIndex
                         utteranceSegments.clear()
                         isSpeechStarted = false
-                        buffer = arrayListOf()
+                        vadInputBuffer = arrayListOf()
                         rawAlignedBuffer = arrayListOf()
                         offset = 0
                         startOffset = 0
                         lastSpeechDetectedOffset = 0
                         lastVadPacketAt = 0L
                         startTime = System.currentTimeMillis()
+                        utteranceIndex += 1
                         utteranceVariantBuffer.reset()
                         SimulateStreamingAsr.resetVadSafely()
-                        Log.i(TAG, "RecognitionManager utterance reset complete: VAD state cleared for next utterance")
+                        Log.i(TAG, "RecognitionManager utterance reset complete: sessionId=$sessionId, completedUtterance=$completedUtterance, nextUtterance=$utteranceIndex, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName")
                         _isRecognizingSpeech.value = false
                         _countdownProgress.value = 0f
                     }
