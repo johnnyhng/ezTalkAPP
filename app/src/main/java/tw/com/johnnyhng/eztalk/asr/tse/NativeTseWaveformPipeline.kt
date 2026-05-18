@@ -72,6 +72,7 @@ internal class NativeTseWaveformPipeline(
         val finalResult = output
             .dropStreamingLatency(targetSize = samples.size)
             .normalizedForNativeTse()
+            .zeroIstftBoundaryArtifacts()
             
         Log.i(TAG, "NativeTseWaveformPipeline process complete: input=${samples.size}, output=${finalResult.size}")
         return finalResult
@@ -112,6 +113,19 @@ internal class NativeTseWaveformPipeline(
         if (maxAbs <= 1e-8f) return this
         val scale = 0.9f / maxAbs
         return FloatArray(size) { index -> this[index] * scale }
+    }
+
+    private fun FloatArray.zeroIstftBoundaryArtifacts(edgeSamples: Int = 400): FloatArray {
+        if (isEmpty()) return this
+        val muted = copyOf()
+        val edge = minOf(edgeSamples, muted.size / 4)
+        if (edge <= 0) return muted
+        for (index in 0 until edge) {
+            muted[index] = 0f
+            muted[muted.lastIndex - index] = 0f
+        }
+        Log.i(TAG, "NativeTseWaveformPipeline zeroed boundary artifacts: edgeSamples=$edge totalSamples=${muted.size}")
+        return muted
     }
 
     private companion object {
