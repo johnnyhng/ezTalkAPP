@@ -448,6 +448,8 @@ class RecognitionManager(private val context: Context) {
                             "final_range_probe sessionId=$sessionId utterance=$utteranceIndex detectOffset=$speechDetectedOffset saveStart=$saveStartOffset saveEnd=$saveEndOffset startMinusDetect=${if (speechDetectedOffset >= 0) saveStartOffset - speechDetectedOffset else 0} endMinusDetect=${if (speechDetectedOffset >= 0) saveEndOffset - speechDetectedOffset else 0} detectRawSize=$speechDetectedRawAlignedSize detectVadSize=$speechDetectedVadInputSize finalRawSize=${rawAlignedBuffer.size} finalVadSize=${vadInputBuffer.size}"
                         )
                         val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
+                        val shouldEndSessionAfterFinalUtterance =
+                            mode == RecordingMode.DATA_COLLECT || mode == RecordingMode.TRANSLATE
                         val shouldPostProcessNativeTse = dummyTseRequested
                         val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
                         val filename = "${timestamp}.app"
@@ -572,7 +574,7 @@ class RecognitionManager(private val context: Context) {
                                 ))
                                 Log.i(
                                     VAD_TAG,
-                                    "processing_done sessionId=$sessionId utterance=$utteranceIndex filename=$filename saveRange=[$saveStartOffset,$saveEndOffset) wavPath=$wavPath rawPath=${rawWavPath.orEmpty()} restartMode=${if (isDataCollectMode) "data_collect_session_restart" else "continuous"}"
+                                    "processing_done sessionId=$sessionId utterance=$utteranceIndex filename=$filename saveRange=[$saveStartOffset,$saveEndOffset) wavPath=$wavPath rawPath=${rawWavPath.orEmpty()} restartMode=${if (shouldEndSessionAfterFinalUtterance) "${mode.name.lowercase(Locale.US)}_session_restart" else "continuous"}"
                                 )
                             } else {
                                 Log.e(
@@ -593,32 +595,33 @@ class RecognitionManager(private val context: Context) {
                                 "RecognitionManager dropped queued audio after finalization: sessionId=$sessionId, completedUtterance=$completedUtterance, samples=$droppedQueuedSamples, reason=avoid_backlog_as_next_utterance"
                             )
                         }
-                        utteranceSegments.clear()
-                        isSpeechStarted = false
-                        vadInputBuffer = arrayListOf()
-                        rawAlignedBuffer = arrayListOf()
-                        offset = 0
-                        startOffset = 0
-                        lastSpeechDetectedOffset = 0
-                        lastVadPacketAt = 0L
-                        startTime = System.currentTimeMillis()
-                        utteranceIndex += 1
-                        vadGuardUntilMs = System.currentTimeMillis() + postFinalizationVadGuardMs
-                        guardedSamples = 0
-                        speechDetectedOffset = -1
-                        speechDetectedRawAlignedSize = 0
-                        speechDetectedVadInputSize = 0
-                        speechDetectedAtMs = 0L
-                        utteranceVariantBuffer.reset()
-                        tsePreprocessor?.reset()
-                        SimulateStreamingAsr.resetVadSafely()
-                        Log.i(TAG, "RecognitionManager utterance reset complete: sessionId=$sessionId, completedUtterance=$completedUtterance, nextUtterance=$utteranceIndex, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName, vadGuardMs=$postFinalizationVadGuardMs")
                         _isRecognizingSpeech.value = false
                         _countdownProgress.value = 0f
-                        if (mode == RecordingMode.DATA_COLLECT) {
+                        if (shouldEndSessionAfterFinalUtterance) {
                             _isStarted.value = false
                             done = true
-                            Log.i(TAG, "RecognitionManager data collect utterance session complete: sessionId=$sessionId, completedUtterance=$completedUtterance, reason=restart_after_session_finished")
+                            Log.i(TAG, "RecognitionManager utterance session complete: sessionId=$sessionId, mode=$mode, completedUtterance=$completedUtterance, reason=restart_after_session_finished")
+                        } else {
+                            utteranceSegments.clear()
+                            isSpeechStarted = false
+                            vadInputBuffer = arrayListOf()
+                            rawAlignedBuffer = arrayListOf()
+                            offset = 0
+                            startOffset = 0
+                            lastSpeechDetectedOffset = 0
+                            lastVadPacketAt = 0L
+                            startTime = System.currentTimeMillis()
+                            utteranceIndex += 1
+                            vadGuardUntilMs = System.currentTimeMillis() + postFinalizationVadGuardMs
+                            guardedSamples = 0
+                            speechDetectedOffset = -1
+                            speechDetectedRawAlignedSize = 0
+                            speechDetectedVadInputSize = 0
+                            speechDetectedAtMs = 0L
+                            utteranceVariantBuffer.reset()
+                            tsePreprocessor?.reset()
+                            SimulateStreamingAsr.resetVadSafely()
+                            Log.i(TAG, "RecognitionManager utterance reset complete: sessionId=$sessionId, completedUtterance=$completedUtterance, nextUtterance=$utteranceIndex, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName, vadGuardMs=$postFinalizationVadGuardMs")
                         }
                     }
                 }

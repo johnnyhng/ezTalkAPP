@@ -70,6 +70,7 @@ fun HomeScreen(
     val userSettings by homeViewModel.userSettings.collectAsState()
     val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
+    val lastRecordingSessionFinished by homeViewModel.lastRecordingSessionFinished.collectAsState()
     
     val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
@@ -89,6 +90,13 @@ fun HomeScreen(
     val autoplayQueue = remember { mutableStateListOf<HomeAutoplayQueueItem>() }
     var activeAutoplayWavPath by remember { mutableStateOf<String?>(null) }
     var restoreRecordingAfterAutoplay by remember { mutableStateOf(false) }
+    var pendingAutoplayRecordingRestore by remember { mutableStateOf(false) }
+    var autoplayRestoreWaitSession by remember { mutableLongStateOf(0L) }
+    var consumedAutoplayRestoreSession by remember { mutableLongStateOf(0L) }
+    var shouldResumeHomeRecording by remember { mutableStateOf(false) }
+    var pendingHomeRecordingRestart by remember { mutableStateOf(false) }
+    var homeRestartWaitSession by remember { mutableLongStateOf(0L) }
+    var consumedHomeRestartSession by remember { mutableLongStateOf(0L) }
 
     // TTS and Background Logic
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
@@ -219,6 +227,7 @@ fun HomeScreen(
 
     fun processAutoplayQueue() {
         if (!shouldAutoplayHome()) return
+        if (pendingAutoplayRecordingRestore) return
         if (activeAutoplayWavPath != null || !canStartAutoplayNow()) return
 
         while (autoplayQueue.isNotEmpty()) {
@@ -231,6 +240,11 @@ fun HomeScreen(
 
             restoreRecordingAfterAutoplay = isStarted
             if (restoreRecordingAfterAutoplay) {
+                autoplayRestoreWaitSession = lastRecordingSessionFinished
+                Log.i(
+                    TAG,
+                    "Home autoplay pausing recording: wav=${next.wavPath}, waitSession=$autoplayRestoreWaitSession"
+                )
                 homeViewModel.toggleRecording()
             }
             MediaController.stop()
@@ -268,7 +282,11 @@ fun HomeScreen(
                         restoreRecordingAfterAutoplay = false
                         activeAutoplayWavPath = null
                         if (shouldRestoreRecording) {
-                            homeViewModel.startTranslateRecording()
+                            pendingAutoplayRecordingRestore = true
+                            Log.i(
+                                TAG,
+                                "Home autoplay restore pending after done: wav=${next.wavPath}, waitSession=$autoplayRestoreWaitSession, lastFinishedSession=$lastRecordingSessionFinished"
+                            )
                         }
                         processAutoplayQueue()
                     }
@@ -278,14 +296,22 @@ fun HomeScreen(
                     restoreRecordingAfterAutoplay = false
                     activeAutoplayWavPath = null
                     if (shouldRestoreRecording) {
-                        homeViewModel.startTranslateRecording()
+                        pendingAutoplayRecordingRestore = true
+                        Log.i(
+                            TAG,
+                            "Home autoplay restore pending after error: wav=${next.wavPath}, waitSession=$autoplayRestoreWaitSession, lastFinishedSession=$lastRecordingSessionFinished"
+                        )
                     }
                     processAutoplayQueue()
                 }
             )
             if (!started) {
                 if (restoreRecordingAfterAutoplay) {
-                    homeViewModel.startTranslateRecording()
+                    pendingAutoplayRecordingRestore = true
+                    Log.i(
+                        TAG,
+                        "Home autoplay restore pending after start failure: wav=${next.wavPath}, waitSession=$autoplayRestoreWaitSession, lastFinishedSession=$lastRecordingSessionFinished"
+                    )
                 }
                 restoreRecordingAfterAutoplay = false
                 activeAutoplayWavPath = null
@@ -645,6 +671,16 @@ fun HomeScreen(
                 }
                 launchBackgroundCorrection(transcript)
                 launchBackgroundEnglishTranslation(transcript)
+
+                val wasRecordingAtFinal = isStarted
+                if (shouldResumeHomeRecording && !pendingHomeRecordingRestart) {
+                    homeRestartWaitSession = lastRecordingSessionFinished
+                    pendingHomeRecordingRestart = true
+                    Log.i(
+                        TAG,
+                        "Home recording restart pending after final transcript: wav=${transcript.wavFilePath}, wasRecording=$wasRecordingAtFinal, shouldResume=$shouldResumeHomeRecording, waitSession=$homeRestartWaitSession, lastFinishedSession=$lastRecordingSessionFinished"
+                    )
+                }
             }
         }
     }
@@ -668,6 +704,9 @@ fun HomeScreen(
             autoplayQueue.clear()
             activeAutoplayWavPath = null
             restoreRecordingAfterAutoplay = false
+            shouldResumeHomeRecording = false
+            pendingHomeRecordingRestart = false
+            pendingAutoplayRecordingRestore = false
             correctionJobs.values.forEach { it.cancel() }
             correctionJobs.clear()
             correctionRunning.clear()
@@ -705,9 +744,65 @@ fun HomeScreen(
             autoplayQueue.clear()
             activeAutoplayWavPath = null
             restoreRecordingAfterAutoplay = false
+            pendingAutoplayRecordingRestore = false
         } else {
             processAutoplayQueue()
         }
+    }
+
+    LaunchedEffect(
+        pendingAutoplayRecordingRestore,
+        lastRecordingSessionFinished,
+        activeAutoplayWavPath,
+        isAnyTtsSpeaking,
+        isStarted
+    ) {
+        if (!pendingAutoplayRecordingRestore) return@LaunchedEffect
+        Log.i(
+            TAG,
+            "Home autoplay restore check: pending=$pendingAutoplayRecordingRestore, lastFinishedSession=$lastRecordingSessionFinished, waitSession=$autoplayRestoreWaitSession, consumedSession=$consumedAutoplayRestoreSession, activeAutoplay=$activeAutoplayWavPath, ttsSpeaking=$isAnyTtsSpeaking, isStarted=$isStarted"
+        )
+        if (isStarted || activeAutoplayWavPath != null || isAnyTtsSpeaking) return@LaunchedEffect
+        if (lastRecordingSessionFinished <= autoplayRestoreWaitSession) {
+            Log.i(TAG, "Home autoplay restore waiting for recording session finish")
+            return@LaunchedEffect
+        }
+        if (lastRecordingSessionFinished <= consumedAutoplayRestoreSession) return@LaunchedEffect
+
+        pendingAutoplayRecordingRestore = false
+        consumedAutoplayRestoreSession = lastRecordingSessionFinished
+        Log.i(TAG, "Home autoplay restoring recording after session finished: sessionFinished=$lastRecordingSessionFinished")
+        homeViewModel.startTranslateRecording()
+    }
+
+    LaunchedEffect(
+        pendingHomeRecordingRestart,
+        lastRecordingSessionFinished,
+        isStarted,
+        activeAutoplayWavPath,
+        pendingAutoplayRecordingRestore
+    ) {
+        if (!pendingHomeRecordingRestart) return@LaunchedEffect
+        Log.i(
+            TAG,
+            "Home recording restart check: pending=$pendingHomeRecordingRestart, shouldResume=$shouldResumeHomeRecording, lastFinishedSession=$lastRecordingSessionFinished, waitSession=$homeRestartWaitSession, consumedSession=$consumedHomeRestartSession, isStarted=$isStarted, activeAutoplay=$activeAutoplayWavPath, autoplayRestorePending=$pendingAutoplayRecordingRestore"
+        )
+        if (!shouldResumeHomeRecording) {
+            pendingHomeRecordingRestart = false
+            Log.i(TAG, "Home recording restart cancelled: shouldResume=false")
+            return@LaunchedEffect
+        }
+        if (isStarted || activeAutoplayWavPath != null || pendingAutoplayRecordingRestore) return@LaunchedEffect
+        if (lastRecordingSessionFinished <= homeRestartWaitSession) {
+            Log.i(TAG, "Home recording restart waiting for recording session finish")
+            return@LaunchedEffect
+        }
+        if (lastRecordingSessionFinished <= consumedHomeRestartSession) return@LaunchedEffect
+
+        pendingHomeRecordingRestart = false
+        consumedHomeRestartSession = lastRecordingSessionFinished
+        Log.i(TAG, "Home recording TSE/session joined; resuming recording: sessionFinished=$lastRecordingSessionFinished")
+        homeViewModel.startTranslateRecording()
     }
 
     LaunchedEffect(userSettings.inlineEdit) {
@@ -730,8 +825,13 @@ fun HomeScreen(
                             ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
                             return@HomeButtonRow
                         }
+                        shouldResumeHomeRecording = true
+                        pendingHomeRecordingRestart = false
                         homeViewModel.startTranslateRecording()
                     } else {
+                        shouldResumeHomeRecording = false
+                        pendingHomeRecordingRestart = false
+                        pendingAutoplayRecordingRestore = false
                         homeViewModel.toggleRecording()
                     }
                 },
