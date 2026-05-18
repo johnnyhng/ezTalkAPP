@@ -94,6 +94,9 @@ class HomeViewModel @JvmOverloads constructor(
     private val _finalTranscript = MutableSharedFlow<Transcript>()
     val finalTranscript = _finalTranscript.asSharedFlow()
 
+    private val _lastRecordingSessionFinished = MutableStateFlow(0L)
+    val lastRecordingSessionFinished = _lastRecordingSessionFinished.asStateFlow()
+
     init {
         loadModels()
         
@@ -102,6 +105,10 @@ class HomeViewModel @JvmOverloads constructor(
         }
         recognitionManager.onFinalResult = { transcript ->
             viewModelScope.launch { _finalTranscript.emit(transcript) }
+        }
+        recognitionManager.onRecordingSessionFinished = { sessionId ->
+            android.util.Log.i(tw.com.johnnyhng.eztalk.asr.TAG, "HomeViewModel recording session finished observed: sessionId=$sessionId")
+            _lastRecordingSessionFinished.value = sessionId
         }
         recognitionManager.onAudioRoutingApplied = { message, activeInputLabel ->
             reportAudioInputRoutingState(message, activeInputLabel)

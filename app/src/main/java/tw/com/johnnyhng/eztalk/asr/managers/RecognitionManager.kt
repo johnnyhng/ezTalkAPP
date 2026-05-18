@@ -34,6 +34,10 @@ import kotlin.math.max
 import kotlin.math.min
 
 class RecognitionManager(private val context: Context) {
+    private companion object {
+        const val VAD_TAG = "ezTalk-VAD"
+    }
+
     private enum class RecordingMode {
         TRANSLATE,
         DATA_COLLECT,
@@ -75,6 +79,7 @@ class RecognitionManager(private val context: Context) {
     var onFinalResult: (Transcript) -> Unit = {}
     var onError: (String) -> Unit = {}
     var onAudioRoutingApplied: (String?, String?) -> Unit = { _, _ -> }
+    var onRecordingSessionFinished: (Long) -> Unit = {}
 
     @SuppressLint("MissingPermission")
     fun startTranslate(userSettings: UserSettings) {
@@ -139,7 +144,7 @@ class RecognitionManager(private val context: Context) {
             SimulateStreamingAsr.resetVadSafely()
 
             // Recording loop
-            launch(Dispatchers.IO) {
+            val recordingLoop = launch(Dispatchers.IO) {
                 val interval = 0.1
                 val readBufferSize = (interval * sampleRateInHz).toInt()
                 val buffer = ShortArray(readBufferSize)
@@ -177,8 +182,14 @@ class RecognitionManager(private val context: Context) {
                 _isStarted.value = false
                 _isRecognizingSpeech.value = false
                 _countdownProgress.value = 0f
+                withContext(NonCancellable) {
+                    stopAudioInput()
+                    recordingLoop.join()
+                    releaseAudioInputAfterStop()
+                }
                 Log.i(TAG, "RecognitionManager session finished: sessionId=$sessionId")
                 recognitionJob = null
+                onRecordingSessionFinished(sessionId)
             }
         }
     }
@@ -189,16 +200,30 @@ class RecognitionManager(private val context: Context) {
         _isStarted.value = false
         scope.launch {
             flushChannel.send(Unit)
+        }
+    }
+
+    private fun releaseAudioInput() {
+        stopAudioInput()
+        releaseAudioInputAfterStop()
+    }
+
+    private fun stopAudioInput() {
+        val recorder = audioRecord
+        if (recorder != null) {
             try {
-                audioRecord?.stop()
+                recorder.stop()
             } catch (e: IllegalStateException) {
                 Log.w(TAG, "AudioRecord.stop() called in invalid state", e)
             }
-            audioRecord?.release()
-            audioRecord = null
-            audioInputRoutingSession.release()
-            audioInputRoutingSession = NoopAudioInputRoutingSession
         }
+    }
+
+    private fun releaseAudioInputAfterStop() {
+        audioRecord?.release()
+        audioRecord = null
+        audioInputRoutingSession.release()
+        audioInputRoutingSession = NoopAudioInputRoutingSession
     }
 
     private suspend fun processAudio(
@@ -318,11 +343,15 @@ class RecognitionManager(private val context: Context) {
                         utteranceVariantBuffer.reset()
                         _isRecognizingSpeech.value = true
                         startTime = System.currentTimeMillis()
+                        if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
                         Log.i(
                             TAG,
                             "RecognitionManager speech start detected: sessionId=$sessionId, utterance=$utteranceIndex, offset=$offset, vadInputBufferSize=${vadInputBuffer.size}, rawAlignedBufferSize=${rawAlignedBuffer.size}, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName"
                         )
-                        if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
+                        Log.i(
+                            VAD_TAG,
+                            "speech_detected sessionId=$sessionId utterance=$utteranceIndex vadOffset=$offset saveStart=$startOffset preRollSamples=$keep vadInputSize=${vadInputBuffer.size} rawAlignedSize=${rawAlignedBuffer.size} rawRms=${rms(rawAlignedBuffer.takeLast(windowSize).toFloatArray()).format3()} vadRms=${rms(chunk).format3()} source=$vadInputSource runtime=$tseRuntimeName"
+                        )
                     }
                 }
 
@@ -353,6 +382,10 @@ class RecognitionManager(private val context: Context) {
                     }
                     utteranceSegments.add(seg)
                     lastVadPacketAt = System.currentTimeMillis()
+                    Log.i(
+                        VAD_TAG,
+                        "vad_segment sessionId=$sessionId utterance=$utteranceIndex segmentCount=${utteranceSegments.size} segmentSamples=${seg.size} lastSpeechOffset=$lastSpeechDetectedOffset currentOffset=$offset saveStart=$startOffset vadInputSize=${vadInputBuffer.size}"
+                    )
                 }
 
                 // Final Utterance Processing
@@ -365,6 +398,7 @@ class RecognitionManager(private val context: Context) {
                             TAG,
                             "RecognitionManager final utterance trigger: sessionId=$sessionId, utterance=$utteranceIndex, since=${since}ms, done=$done, started=${_isStarted.value}, segmentCount=${utteranceSegments.size}, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName"
                         )
+                        val saveStartOffset = if (saveVadSegmentsOnly) 0 else startOffset
                         val rawAudioToSave = if (saveVadSegmentsOnly) {
                             utteranceSegments.flatMap { it.toList() }.toFloatArray()
                         } else {
@@ -376,6 +410,11 @@ class RecognitionManager(private val context: Context) {
                         } else {
                             vadInputBuffer.subList(startOffset, lastSpeechDetectedOffset).toFloatArray()
                         }
+                        val saveEndOffset = if (saveVadSegmentsOnly) rawAudioToSave.size else lastSpeechDetectedOffset
+                        Log.i(
+                            VAD_TAG,
+                            "final_trigger sessionId=$sessionId utterance=$utteranceIndex sinceMs=$since segmentCount=${utteranceSegments.size} saveRange=[$saveStartOffset,$saveEndOffset) savedSamples=${rawAudioToSave.size} passthroughSamples=${rawPassthroughAudio.size} rawAlignedSize=${rawAlignedBuffer.size} vadInputSize=${vadInputBuffer.size} source=$vadInputSource runtime=$tseRuntimeName"
+                        )
                         val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
                         val shouldPostProcessNativeTse = dummyTseRequested
                         val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.getDefault()).format(Date())
@@ -393,6 +432,10 @@ class RecognitionManager(private val context: Context) {
                             Log.i(
                                 TAG,
                                 "RecognitionManager raw sibling wav completed before native TSE: path=${rawWavPath.orEmpty().ifBlank { "n/a" }}, samples=${rawAudioToSave.size}, isDataCollectMode=$isDataCollectMode"
+                            )
+                            Log.i(
+                                VAD_TAG,
+                                "raw_wav_saved sessionId=$sessionId utterance=$utteranceIndex path=${rawWavPath.orEmpty().ifBlank { "n/a" }} saveRange=[$saveStartOffset,$saveEndOffset) samples=${rawAudioToSave.size} rms=${rms(rawAudioToSave).format3()}"
                             )
                         }
                         val nativeTseResult = if (shouldPostProcessNativeTse) {
@@ -445,6 +488,10 @@ class RecognitionManager(private val context: Context) {
                                     TAG,
                                     "RecognitionManager processed wav saved: path=$wavPath, samples=${processedAudioToSave.size}, tseRequested=$dummyTseRequested, liveVadRuntime=$tseRuntimeName, savedWavRuntime=$tseRuntime, vadInputSource=$vadInputSource"
                                 )
+                                Log.i(
+                                    VAD_TAG,
+                                    "processed_wav_saved sessionId=$sessionId utterance=$utteranceIndex path=$wavPath saveRange=[$saveStartOffset,$saveEndOffset) rawSamples=${rawAudioToSave.size} processedSamples=${processedAudioToSave.size} rawRms=${rawRms.format3()} processedRms=${processedRms.format3()} runtime=$tseRuntime"
+                                )
                                 if (rawWavPath != null) {
                                     Log.i(
                                         TAG,
@@ -470,6 +517,10 @@ class RecognitionManager(private val context: Context) {
                                     mutable = !isDataCollectMode,
                                     utteranceVariants = utteranceBundle?.variants.orEmpty()
                                 )
+                                Log.i(
+                                    VAD_TAG,
+                                    "jsonl_saved sessionId=$sessionId utterance=$utteranceIndex filename=$filename saveRange=[$saveStartOffset,$saveEndOffset) checked=$isDataCollectMode variants=${utteranceBundle?.variants.orEmpty().size}"
+                                )
 
                                 onFinalResult(Transcript(
                                     recognizedText = originalText,
@@ -481,6 +532,10 @@ class RecognitionManager(private val context: Context) {
                                     utteranceVariants = utteranceBundle?.variants.orEmpty(),
                                     localCandidates = listOf(originalText)
                                 ))
+                                Log.i(
+                                    VAD_TAG,
+                                    "processing_done sessionId=$sessionId utterance=$utteranceIndex filename=$filename saveRange=[$saveStartOffset,$saveEndOffset) wavPath=$wavPath rawPath=${rawWavPath.orEmpty()} restartMode=${if (isDataCollectMode) "data_collect_session_restart" else "continuous"}"
+                                )
                             } else {
                                 Log.e(
                                     TAG,
@@ -518,6 +573,11 @@ class RecognitionManager(private val context: Context) {
                         Log.i(TAG, "RecognitionManager utterance reset complete: sessionId=$sessionId, completedUtterance=$completedUtterance, nextUtterance=$utteranceIndex, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName, vadGuardMs=$postFinalizationVadGuardMs")
                         _isRecognizingSpeech.value = false
                         _countdownProgress.value = 0f
+                        if (mode == RecordingMode.DATA_COLLECT) {
+                            _isStarted.value = false
+                            done = true
+                            Log.i(TAG, "RecognitionManager data collect utterance session complete: sessionId=$sessionId, completedUtterance=$completedUtterance, reason=restart_after_session_finished")
+                        }
                     }
                 }
             }
