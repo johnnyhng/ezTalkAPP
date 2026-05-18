@@ -4,7 +4,7 @@ package com.k2fsa.sherpa.onnx
 import android.content.res.AssetManager
 import android.util.Log
 
-private const val VAD_THRESHOLD = 0.65F
+private const val VAD_THRESHOLD = 0.5F
 private const val VAD_LOG_TAG = "ezTalk-VAD"
 
 data class SileroVadModelConfig(
