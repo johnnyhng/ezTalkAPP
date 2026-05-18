@@ -229,3 +229,38 @@ The fix is complete when:
 - Raw sibling WAV output remains available.
 - Final saved processed WAV behavior remains unchanged or is intentionally documented.
 
+## 2026-05-18 Partial ASR Prefix Issue
+
+After VAD was moved to `TSE_PROCESSED`, final saved WAVs and final ASR were correct, but `DataCollect` still received polluted `utteranceVariants` such as long background phrases before the expected target phrase.
+
+Debug evidence:
+
+- `timeline_probe` showed `rawAlignedSize == vadInputSize`, so raw and realtime TSE buffers were not drifting.
+- `speech_detect_probe` showed a normal preroll window around `saveStart`.
+- `final_range_probe` and `asr_compare` showed the final saved range recognized correctly from both raw and processed WAVs.
+- `partial_asr_probe` showed `inputRange=[0, offset)`, meaning partial ASR was fed from the beginning of the recording session instead of the current utterance start.
+
+Root cause:
+
+Partial ASR used the full session prefix:
+
+```text
+vadInputBuffer[0, offset)
+```
+
+That included silence, background speech, and non-target audio before `speech_detected`. Those partial results were appended into `utteranceVariantBuffer`, so `DataCollect` JSONL variants contained bad candidates even though the final saved WAV was correct.
+
+Fix:
+
+Partial ASR now uses the same utterance start basis as final saving:
+
+```text
+vadInputBuffer[startOffset, offset)
+```
+
+The debug log now records `partial_asr_probe inputRange=[startOffset, offset)`, plus `startMinusDetect` and `samplesSinceDetect`, so future regressions can be identified from logcat without inspecting saved audio.
+
+Related tuning:
+
+- VAD threshold was raised from `0.5` to `0.65` for both Silero VAD and Ten-VAD.
+- VAD config and range probes use `TAG=ezTalk-VAD`.

@@ -276,6 +276,10 @@ class RecognitionManager(private val context: Context) {
         var utteranceIndex = 1
         var vadGuardUntilMs = 0L
         var guardedSamples = 0
+        var speechDetectedOffset = -1
+        var speechDetectedRawAlignedSize = 0
+        var speechDetectedVadInputSize = 0
+        var speechDetectedAtMs = 0L
 
         var done = false
         try {
@@ -330,6 +334,10 @@ class RecognitionManager(private val context: Context) {
                             TAG,
                             "RecognitionManager VAD input stats: sessionId=$sessionId, utterance=$utteranceIndex, chunk=$processedChunkCount, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName, rawRms=${rms(chunkOutput.rawAligned).format3()}, vadRms=${rms(chunkOutput.processed).format3()}"
                         )
+                        Log.i(
+                            VAD_TAG,
+                            "timeline_probe sessionId=$sessionId utterance=$utteranceIndex chunk=$processedChunkCount rawAlignedSize=${rawAlignedBuffer.size} vadInputSize=${vadInputBuffer.size} delta=${rawAlignedBuffer.size - vadInputBuffer.size} rawChunk=${chunkOutput.rawAligned.size} processedChunk=${chunkOutput.processed.size} rawRms=${rms(chunkOutput.rawAligned).format3()} processedRms=${rms(chunkOutput.processed).format3()}"
+                        )
                     }
                 }
 
@@ -344,6 +352,16 @@ class RecognitionManager(private val context: Context) {
                         _isRecognizingSpeech.value = true
                         startTime = System.currentTimeMillis()
                         if (!saveVadSegmentsOnly) startOffset = max(0, offset - windowSize - keep)
+                        speechDetectedOffset = offset
+                        speechDetectedRawAlignedSize = rawAlignedBuffer.size
+                        speechDetectedVadInputSize = vadInputBuffer.size
+                        speechDetectedAtMs = System.currentTimeMillis()
+                        val beforeStart = max(0, offset - keep)
+                        val afterEnd = min(vadInputBuffer.size, offset + keep)
+                        val vadBefore = vadInputBuffer.subList(beforeStart, offset).toFloatArray()
+                        val vadAfter = vadInputBuffer.subList(offset, afterEnd).toFloatArray()
+                        val rawBefore = rawAlignedBuffer.subList(beforeStart.coerceAtMost(rawAlignedBuffer.size), offset.coerceAtMost(rawAlignedBuffer.size)).toFloatArray()
+                        val rawAfter = rawAlignedBuffer.subList(offset.coerceAtMost(rawAlignedBuffer.size), afterEnd.coerceAtMost(rawAlignedBuffer.size)).toFloatArray()
                         Log.i(
                             TAG,
                             "RecognitionManager speech start detected: sessionId=$sessionId, utterance=$utteranceIndex, offset=$offset, vadInputBufferSize=${vadInputBuffer.size}, rawAlignedBufferSize=${rawAlignedBuffer.size}, vadInputSource=$vadInputSource, liveVadRuntime=$tseRuntimeName"
@@ -352,6 +370,10 @@ class RecognitionManager(private val context: Context) {
                             VAD_TAG,
                             "speech_detected sessionId=$sessionId utterance=$utteranceIndex vadOffset=$offset saveStart=$startOffset preRollSamples=$keep vadInputSize=${vadInputBuffer.size} rawAlignedSize=${rawAlignedBuffer.size} rawRms=${rms(rawAlignedBuffer.takeLast(windowSize).toFloatArray()).format3()} vadRms=${rms(chunk).format3()} source=$vadInputSource runtime=$tseRuntimeName"
                         )
+                        Log.i(
+                            VAD_TAG,
+                            "speech_detect_probe sessionId=$sessionId utterance=$utteranceIndex vadOffset=$offset rawAlignedAtDetect=$speechDetectedRawAlignedSize vadInputAtDetect=$speechDetectedVadInputSize timelineDelta=${speechDetectedRawAlignedSize - speechDetectedVadInputSize} saveStart=$startOffset preRollSamples=$keep rawBeforeRms=${rms(rawBefore).format3()} rawAfterRms=${rms(rawAfter).format3()} vadBeforeRms=${rms(vadBefore).format3()} vadAfterRms=${rms(vadAfter).format3()}"
+                        )
                     }
                 }
 
@@ -359,12 +381,18 @@ class RecognitionManager(private val context: Context) {
                 if (isSpeechStarted) {
                     val elapsed = System.currentTimeMillis() - startTime
                     if (elapsed > partialIntervalMs) {
+                        val partialStartOffset = if (saveVadSegmentsOnly) 0 else startOffset.coerceAtMost(offset)
+                        val partialInput = vadInputBuffer.subList(partialStartOffset, offset).toFloatArray()
                         val stream = SimulateStreamingAsr.recognizer.createStream()
                         try {
-                            stream.acceptWaveform(vadInputBuffer.subList(0, offset).toFloatArray(), sampleRateInHz)
+                            stream.acceptWaveform(partialInput, sampleRateInHz)
                             SimulateStreamingAsr.recognizer.decode(stream)
                             val result = SimulateStreamingAsr.recognizer.getResult(stream)
                             utteranceVariantBuffer.add(result.text)
+                            Log.i(
+                                VAD_TAG,
+                                "partial_asr_probe sessionId=$sessionId utterance=$utteranceIndex elapsedMs=$elapsed inputRange=[$partialStartOffset,$offset) inputSamples=${partialInput.size} detectOffset=$speechDetectedOffset startMinusDetect=${if (speechDetectedOffset >= 0) partialStartOffset - speechDetectedOffset else 0} samplesSinceDetect=${if (speechDetectedOffset >= 0) offset - speechDetectedOffset else -1} msSinceDetect=${if (speechDetectedAtMs > 0L) System.currentTimeMillis() - speechDetectedAtMs else -1} text=${result.text}"
+                            )
                             if (result.text.isNotBlank()) {
                                 onPartialResult(result.text)
                             }
@@ -414,6 +442,10 @@ class RecognitionManager(private val context: Context) {
                         Log.i(
                             VAD_TAG,
                             "final_trigger sessionId=$sessionId utterance=$utteranceIndex sinceMs=$since segmentCount=${utteranceSegments.size} saveRange=[$saveStartOffset,$saveEndOffset) savedSamples=${rawAudioToSave.size} passthroughSamples=${rawPassthroughAudio.size} rawAlignedSize=${rawAlignedBuffer.size} vadInputSize=${vadInputBuffer.size} source=$vadInputSource runtime=$tseRuntimeName"
+                        )
+                        Log.i(
+                            VAD_TAG,
+                            "final_range_probe sessionId=$sessionId utterance=$utteranceIndex detectOffset=$speechDetectedOffset saveStart=$saveStartOffset saveEnd=$saveEndOffset startMinusDetect=${if (speechDetectedOffset >= 0) saveStartOffset - speechDetectedOffset else 0} endMinusDetect=${if (speechDetectedOffset >= 0) saveEndOffset - speechDetectedOffset else 0} detectRawSize=$speechDetectedRawAlignedSize detectVadSize=$speechDetectedVadInputSize finalRawSize=${rawAlignedBuffer.size} finalVadSize=${vadInputBuffer.size}"
                         )
                         val isDataCollectMode = mode == RecordingMode.DATA_COLLECT
                         val shouldPostProcessNativeTse = dummyTseRequested
@@ -468,6 +500,12 @@ class RecognitionManager(private val context: Context) {
                         Log.i(
                             TAG,
                             "RecognitionManager TSE integrity: sessionId=$sessionId, hashesMatch=${rawHash == processedHash}, rawHash=${rawHash.take(8)}, processedHash=${processedHash.take(8)}"
+                        )
+                        val rawAsrText = recognizeSamplesForLog(rawAudioToSave)
+                        val processedAsrText = recognizeSamplesForLog(processedAudioToSave)
+                        Log.i(
+                            VAD_TAG,
+                            "asr_compare sessionId=$sessionId utterance=$utteranceIndex saveRange=[$saveStartOffset,$saveEndOffset) rawText=$rawAsrText processedText=$processedAsrText rawSamples=${rawAudioToSave.size} processedSamples=${processedAudioToSave.size} rawRms=${rawRms.format3()} processedRms=${processedRms.format3()} runtime=$tseRuntime"
                         )
                         val finalAsrInput = processedAudioToSave
 
@@ -567,6 +605,10 @@ class RecognitionManager(private val context: Context) {
                         utteranceIndex += 1
                         vadGuardUntilMs = System.currentTimeMillis() + postFinalizationVadGuardMs
                         guardedSamples = 0
+                        speechDetectedOffset = -1
+                        speechDetectedRawAlignedSize = 0
+                        speechDetectedVadInputSize = 0
+                        speechDetectedAtMs = 0L
                         utteranceVariantBuffer.reset()
                         tsePreprocessor?.reset()
                         SimulateStreamingAsr.resetVadSafely()
@@ -583,6 +625,21 @@ class RecognitionManager(private val context: Context) {
             }
         } finally {
             tsePreprocessor?.release()
+        }
+    }
+
+    private fun recognizeSamplesForLog(samples: FloatArray): String {
+        if (samples.isEmpty()) return ""
+        val stream = SimulateStreamingAsr.recognizer.createStream()
+        return try {
+            stream.acceptWaveform(samples, sampleRateInHz)
+            SimulateStreamingAsr.recognizer.decode(stream)
+            SimulateStreamingAsr.recognizer.getResult(stream).text
+        } catch (e: Exception) {
+            Log.w(VAD_TAG, "asr_compare_failed samples=${samples.size}", e)
+            ""
+        } finally {
+            stream.release()
         }
     }
 
