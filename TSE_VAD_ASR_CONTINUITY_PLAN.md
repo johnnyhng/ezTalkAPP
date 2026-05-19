@@ -664,3 +664,54 @@ Verification:
 - With TSE disabled, speaker VAD input should show `RAW_FALLBACK_TSE_DISABLED`.
 - If TSE init fails, speaker VAD input should show `RAW_FALLBACK_TSE_INIT_FAILED`.
 - Partial and final ASR should still produce `SpeakerAsrUtteranceBundle` updates.
+
+## 2026-05-19 TSE VAD Rollout Status
+
+Current VAD consumers:
+
+```text
+RecognitionManager
+TranslateScreen
+SpeakerAsrController
+```
+
+Current status:
+
+- `RecognitionManager` routes VAD through realtime TSE when `useTseDetection=true`.
+- `RecognitionManager.DATA_COLLECT` ends each utterance session and lets DataCollect restart after `onRecordingSessionFinished`.
+- `RecognitionManager.TRANSLATE` also ends each utterance session and lets Home restart after `onRecordingSessionFinished`.
+- `TranslateScreen` now routes its independent VAD path through `TseAudioPreprocessor`.
+- `SpeakerAsrController` now routes its independent VAD path through `TseAudioPreprocessor`.
+
+Remaining direct VAD calls are expected and should be interpreted by owner:
+
+```text
+RecognitionManager.acceptVadWaveformSafely(chunk)
+TranslateScreen.acceptVadWaveformSafely(vadChunk)
+SpeakerAsrController.acceptVadWaveformSafely(chunk)
+```
+
+In all three cases, the variable passed to VAD is expected to be one of:
+
+```text
+TSE_PROCESSED
+RAW_FALLBACK_TSE_DISABLED
+RAW_FALLBACK_TSE_INIT_FAILED
+```
+
+No remaining screen should silently use raw mic audio for VAD when `useTseDetection=true` and realtime TSE initializes successfully.
+
+Post-rollout verification query:
+
+```text
+rg "acceptVadWaveformSafely|isVadSpeechDetectedSafely|popVadSegmentSafely" app/src/main/java/tw/com/johnnyhng/eztalk/asr -n
+```
+
+Expected owners after rollout:
+
+```text
+SimulateStreamingAsr.kt
+RecognitionManager.kt
+TranslateScreen.kt
+SpeakerAsrController.kt
+```
