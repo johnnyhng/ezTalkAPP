@@ -25,7 +25,12 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
 import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
+import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
+import java.util.Locale
 import kotlin.math.max
+
+private const val VAD_TAG = "ezTalk-VAD"
 
 internal data class SpeakerAsrState(
     val isRecording: Boolean = false,
@@ -117,13 +122,6 @@ internal class SpeakerAsrController(
                     activeInputLabel
                 )
                 while (state.isRecording) {
-                    // Stop record hardware if system is currently speaking/playing
-                    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                    val isSpeaking = audioManager.isMusicActive || audioManager.mode == android.media.AudioManager.MODE_IN_COMMUNICATION
-                    
-                    // Actually, let's use a simpler check: if we are in Speaker mode, 
-                    // we can't easily see the SpeakerPlaybackState here, but we can see the Global Routing state
-                    
                     val ret = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                     readLogger.onRead(ret, buffer, activeInputLabel)
                     if (ret > 0) {
@@ -188,117 +186,175 @@ internal class SpeakerAsrController(
         val utteranceSegments = mutableListOf<FloatArray>()
         var lastVadPacketAt = 0L
         var done = false
+        val tsePreprocessor = if (userSettings.useTseDetection) {
+            TseAudioPreprocessor(accelerationMode = NativeTSE.ACCELERATION_CPU).takeIf {
+                it.initialize(context.applicationContext)
+            }
+        } else {
+            null
+        }
+        val vadInputSource = when {
+            tsePreprocessor != null -> "TSE_PROCESSED"
+            userSettings.useTseDetection -> "RAW_FALLBACK_TSE_INIT_FAILED"
+            else -> "RAW_FALLBACK_TSE_DISABLED"
+        }
+        val liveVadRuntime = tsePreprocessor?.runtimeName ?: vadInputSource.lowercase(Locale.US)
+        var processedChunkCount = 0
+        Log.i(
+            TAG,
+            "SpeakerAsrController processAudio: useTseDetection=${userSettings.useTseDetection}, liveVadRuntime=$liveVadRuntime, vadInputSource=$vadInputSource"
+        )
 
-        while (!done) {
-            val samples = samplesChannel.tryReceive().getOrNull()
-            val flushRequest = flushChannel.tryReceive().getOrNull()
+        fun appendVadInput(rawChunk: FloatArray, vadChunk: FloatArray) {
+            if (vadChunk.isEmpty()) return
+            processedChunkCount += 1
+            buffer.addAll(vadChunk.toList())
+            if (processedChunkCount <= 5 || processedChunkCount % 25 == 0) {
+                Log.i(
+                    VAD_TAG,
+                    "speaker_vad_input chunk=$processedChunkCount source=$vadInputSource runtime=$liveVadRuntime rawSamples=${rawChunk.size} vadSamples=${vadChunk.size} bufferSize=${buffer.size}"
+                )
+            }
+        }
 
-            if (samples == null) {
-                if (flushRequest != null || samplesChannel.isClosedForReceive) {
-                    done = true
+        try {
+            while (!done) {
+                val samples = samplesChannel.tryReceive().getOrNull()
+                val flushRequest = flushChannel.tryReceive().getOrNull()
+
+                if (samples == null) {
+                    if (flushRequest != null || samplesChannel.isClosedForReceive) {
+                        tsePreprocessor?.flush()?.let { tail ->
+                            appendVadInput(
+                                rawChunk = tail.rawAligned,
+                                vadChunk = tail.processed
+                            )
+                        }
+                        done = true
+                    } else {
+                        delay(10)
+                    }
                 } else {
-                    delay(10)
+                    val chunkOutput = tsePreprocessor?.processChunk(samples)
+                    appendVadInput(
+                        rawChunk = chunkOutput?.rawAligned ?: samples,
+                        vadChunk = chunkOutput?.processed ?: samples
+                    )
                 }
-            } else {
-                buffer.addAll(samples.toList())
-            }
 
-            while (offset + windowSize < buffer.size) {
-                val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
-                SimulateStreamingAsr.acceptVadWaveformSafely(chunk)
-                offset += windowSize
-                if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
-                    isSpeechStarted = true
-                    utteranceBuffer.reset()
-                    updateState {
-                        it.copy(
-                            isRecognizingSpeech = true,
-                            countdownProgress = 0f,
-                            partialText = "",
-                            finalText = "",
-                            currentUtteranceVariants = emptyList(),
-                            finalUtteranceBundle = null
-                        )
-                    }
-                    startTime = System.currentTimeMillis()
-                    startOffset = max(0, offset - windowSize - keep)
-                }
-            }
-
-            if (isSpeechStarted) {
-                val elapsed = System.currentTimeMillis() - startTime
-                if (elapsed > partialIntervalMs) {
-                    val stream = SimulateStreamingAsr.recognizer.createStream()
-                    try {
-                        stream.acceptWaveform(buffer.subList(startOffset, offset).toFloatArray(), sampleRateInHz)
-                        SimulateStreamingAsr.recognizer.decode(stream)
-                        val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                        utteranceBuffer.add(result.text)
+                while (offset + windowSize < buffer.size) {
+                    val chunk = buffer.subList(offset, offset + windowSize).toFloatArray()
+                    SimulateStreamingAsr.acceptVadWaveformSafely(chunk)
+                    offset += windowSize
+                    if (!isSpeechStarted && SimulateStreamingAsr.isVadSpeechDetectedSafely()) {
+                        isSpeechStarted = true
+                        utteranceBuffer.reset()
                         updateState {
                             it.copy(
-                                partialText = result.text,
-                                currentUtteranceVariants = utteranceBuffer.variants()
+                                isRecognizingSpeech = true,
+                                countdownProgress = 0f,
+                                partialText = "",
+                                finalText = "",
+                                currentUtteranceVariants = emptyList(),
+                                finalUtteranceBundle = null
                             )
                         }
-                    } finally {
-                        stream.release()
-                    }
-                    startTime = System.currentTimeMillis()
-                }
-            }
-
-            while (true) {
-                val seg = SimulateStreamingAsr.popVadSegmentSafely() ?: break
-                utteranceSegments.add(seg)
-                lastVadPacketAt = System.currentTimeMillis()
-            }
-
-            if (utteranceSegments.isNotEmpty()) {
-                val since = System.currentTimeMillis() - lastVadPacketAt
-                updateState {
-                    it.copy(countdownProgress = (since.toFloat() / lingerMs).coerceIn(0f, 1f))
-                }
-
-                if (since >= lingerMs || done || !state.isRecording) {
-                    val concatenated = utteranceSegments.flatMap { it.toList() }.toFloatArray()
-                    val stream = SimulateStreamingAsr.recognizer.createStream()
-                    try {
-                        stream.acceptWaveform(concatenated, sampleRateInHz)
-                        SimulateStreamingAsr.recognizer.decode(stream)
-                        val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                        utteranceBuffer.add(result.text)
-                        val nextVersion = state.finalTextVersion + 1
-                        val finalUtteranceBundle = utteranceBuffer.build(nextVersion)
-                        Log.i(TAG, "Speaker ASR final result: ${result.text}")
-                        updateState {
-                            it.copy(
-                                partialText = result.text,
-                                finalText = result.text,
-                                finalTextVersion = nextVersion,
-                                currentUtteranceVariants = utteranceBuffer.variants(),
-                                finalUtteranceBundle = finalUtteranceBundle
-                            )
-                        }
-                    } catch (error: Exception) {
-                        Log.e(TAG, "Speaker local ASR decode failed", error)
-                    } finally {
-                        stream.release()
-                    }
-
-                    utteranceSegments.clear()
-                    utteranceBuffer.reset()
-                    isSpeechStarted = false
-                    buffer = arrayListOf()
-                    offset = 0
-                    startOffset = 0
-                    updateState {
-                        it.copy(
-                            isRecognizingSpeech = false,
-                            countdownProgress = 0f
+                        startTime = System.currentTimeMillis()
+                        startOffset = max(0, offset - windowSize - keep)
+                        Log.i(
+                            VAD_TAG,
+                            "speaker_speech_detected offset=$offset startOffset=$startOffset source=$vadInputSource runtime=$liveVadRuntime bufferSize=${buffer.size}"
                         )
                     }
                 }
+
+                if (isSpeechStarted) {
+                    val elapsed = System.currentTimeMillis() - startTime
+                    if (elapsed > partialIntervalMs) {
+                        val stream = SimulateStreamingAsr.recognizer.createStream()
+                        try {
+                            val inputStart = startOffset
+                            val inputEnd = offset
+                            stream.acceptWaveform(buffer.subList(inputStart, inputEnd).toFloatArray(), sampleRateInHz)
+                            SimulateStreamingAsr.recognizer.decode(stream)
+                            val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                            utteranceBuffer.add(result.text)
+                            Log.i(
+                                VAD_TAG,
+                                "speaker_partial_asr source=$vadInputSource runtime=$liveVadRuntime inputRange=[$inputStart,$inputEnd) text=${result.text}"
+                            )
+                            updateState {
+                                it.copy(
+                                    partialText = result.text,
+                                    currentUtteranceVariants = utteranceBuffer.variants()
+                                )
+                            }
+                        } finally {
+                            stream.release()
+                        }
+                        startTime = System.currentTimeMillis()
+                    }
+                }
+
+                while (true) {
+                    val seg = SimulateStreamingAsr.popVadSegmentSafely() ?: break
+                    utteranceSegments.add(seg)
+                    lastVadPacketAt = System.currentTimeMillis()
+                }
+
+                if (utteranceSegments.isNotEmpty()) {
+                    val since = System.currentTimeMillis() - lastVadPacketAt
+                    updateState {
+                        it.copy(countdownProgress = (since.toFloat() / lingerMs).coerceIn(0f, 1f))
+                    }
+
+                    if (since >= lingerMs || done || !state.isRecording) {
+                        val concatenated = utteranceSegments.flatMap { it.toList() }.toFloatArray()
+                        val stream = SimulateStreamingAsr.recognizer.createStream()
+                        try {
+                            stream.acceptWaveform(concatenated, sampleRateInHz)
+                            SimulateStreamingAsr.recognizer.decode(stream)
+                            val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                            utteranceBuffer.add(result.text)
+                            val nextVersion = state.finalTextVersion + 1
+                            val finalUtteranceBundle = utteranceBuffer.build(nextVersion)
+                            Log.i(TAG, "Speaker ASR final result: ${result.text}")
+                            Log.i(
+                                VAD_TAG,
+                                "speaker_final_asr source=$vadInputSource runtime=$liveVadRuntime samples=${concatenated.size} text=${result.text}"
+                            )
+                            updateState {
+                                it.copy(
+                                    partialText = result.text,
+                                    finalText = result.text,
+                                    finalTextVersion = nextVersion,
+                                    currentUtteranceVariants = utteranceBuffer.variants(),
+                                    finalUtteranceBundle = finalUtteranceBundle
+                                )
+                            }
+                        } catch (error: Exception) {
+                            Log.e(TAG, "Speaker local ASR decode failed", error)
+                        } finally {
+                            stream.release()
+                        }
+
+                        utteranceSegments.clear()
+                        utteranceBuffer.reset()
+                        isSpeechStarted = false
+                        buffer = arrayListOf()
+                        offset = 0
+                        startOffset = 0
+                        updateState {
+                            it.copy(
+                                isRecognizingSpeech = false,
+                                countdownProgress = 0f
+                            )
+                        }
+                    }
+                }
             }
+        } finally {
+            tsePreprocessor?.release()
         }
     }
 

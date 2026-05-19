@@ -604,3 +604,63 @@ Verification:
 - With TSE asset/init failure, confirm `RAW_FALLBACK_TSE_INIT_FAILED`.
 - Confirm TranslateScreen final saved WAV and JSONL still complete.
 - Confirm TTS playback pause/resume does not reuse stale TSE state after the processing coroutine ends.
+
+## 2026-05-19 SpeakerAsrController TSE Front-End Integration
+
+Problem:
+
+`SpeakerAsrController` also owns an independent `AudioRecord` and local `processAudio(...)` loop. It previously used:
+
+```text
+raw mic samples -> VAD -> partial ASR -> final ASR
+```
+
+So speaker mode did not use target-speaker extraction even when `useTseDetection=true`.
+
+Solution:
+
+Speaker ASR now initializes `TseAudioPreprocessor` when `useTseDetection=true` and routes live recognition through:
+
+```text
+raw mic samples
+  -> TseAudioPreprocessor.processChunk(...)
+  -> processed samples
+  -> Sherpa VAD
+  -> partial ASR
+  -> final ASR
+```
+
+The controller preserves its existing state model:
+
+- `partialText`
+- `finalText`
+- `currentUtteranceVariants`
+- `finalUtteranceBundle`
+- countdown progress
+
+The internal `buffer` now represents the stream used by VAD/ASR. When TSE is healthy, that stream is TSE processed audio.
+
+Fallback states are explicit:
+
+```text
+TSE_PROCESSED
+RAW_FALLBACK_TSE_INIT_FAILED
+RAW_FALLBACK_TSE_DISABLED
+```
+
+Expected logs:
+
+```text
+SpeakerAsrController processAudio: useTseDetection=true, liveVadRuntime=native_onnx_lite_cpu_realtime, vadInputSource=TSE_PROCESSED
+speaker_vad_input chunk=... source=TSE_PROCESSED runtime=...
+speaker_speech_detected offset=... startOffset=...
+speaker_partial_asr source=TSE_PROCESSED runtime=... inputRange=[start,end)
+speaker_final_asr source=TSE_PROCESSED runtime=... samples=...
+```
+
+Verification:
+
+- With `useTseDetection=true`, speaker VAD input logs should show `TSE_PROCESSED`.
+- With TSE disabled, speaker VAD input should show `RAW_FALLBACK_TSE_DISABLED`.
+- If TSE init fails, speaker VAD input should show `RAW_FALLBACK_TSE_INIT_FAILED`.
+- Partial and final ASR should still produce `SpeakerAsrUtteranceBundle` updates.
