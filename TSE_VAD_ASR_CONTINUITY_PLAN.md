@@ -543,3 +543,64 @@ Important behavior:
 - Every Home utterance after finalization starts with a fresh `RecognitionManager` session.
 - The restart happens after TSE/offline processing and audio loop join, not merely after UI receives a final transcript.
 - Manual Stop clears the resume intent and cancels pending restart.
+
+## 2026-05-19 TranslateScreen TSE Front-End Integration
+
+Problem:
+
+`TranslateScreen` has its own `AudioRecord` and processing coroutine, separate from `RecognitionManager`. Before this change, it fed raw mic chunks directly into Sherpa VAD:
+
+```text
+raw mic samples -> VAD -> ASR
+```
+
+That meant TranslateScreen did not benefit from the target-speaker front end even when `useTseDetection=true`.
+
+Solution:
+
+TranslateScreen now initializes `TseAudioPreprocessor` inside its processing coroutine when `useTseDetection=true`.
+
+The live path is:
+
+```text
+raw mic samples
+  -> TseAudioPreprocessor.processChunk(...)
+  -> processed samples
+  -> SimulateStreamingAsr.acceptVadWaveformSafely(...)
+  -> partial ASR
+  -> final ASR/save
+```
+
+Fallback remains explicit:
+
+```text
+TSE_PROCESSED
+RAW_FALLBACK_TSE_INIT_FAILED
+RAW_FALLBACK_TSE_DISABLED
+```
+
+TranslateScreen keeps its existing UI, feedback, candidate refresh, LLM correction, and WAV/JSONL save flow. The key change is that the `TranslateCaptureState.fullRecordingBuffer` now stores the VAD/ASR input stream. When TSE is healthy, that stream is TSE-processed audio.
+
+Partial ASR range:
+
+```text
+processedBuffer[speechStartOffset, currentOffset)
+```
+
+This mirrors the earlier prefix fix in `RecognitionManager`: partial ASR should not read from session offset `0` after speech start.
+
+Expected logs:
+
+```text
+TranslateScreen processAudio: useTseDetection=true, liveVadRuntime=native_onnx_lite_cpu_realtime, vadInputSource=TSE_PROCESSED
+translate_vad_input chunk=... source=TSE_PROCESSED runtime=...
+translate_partial_asr source=TSE_PROCESSED runtime=... inputRange=[start,end)
+```
+
+Verification:
+
+- With `useTseDetection=true`, confirm VAD input logs show `TSE_PROCESSED`.
+- With TSE disabled, confirm `RAW_FALLBACK_TSE_DISABLED`.
+- With TSE asset/init failure, confirm `RAW_FALLBACK_TSE_INIT_FAILED`.
+- Confirm TranslateScreen final saved WAV and JSONL still complete.
+- Confirm TTS playback pause/resume does not reuse stale TSE state after the processing coroutine ends.

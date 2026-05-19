@@ -54,6 +54,8 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
+import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
+import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.MediaController
 import tw.com.johnnyhng.eztalk.asr.utils.feedbackToBackend
@@ -81,6 +83,7 @@ import java.util.*
 private var audioRecord: AudioRecord? = null
 private var audioInputRoutingSession: AudioInputRoutingSession = NoopAudioInputRoutingSession
 private const val sampleRateInHz = 16000
+private const val VAD_TAG = "ezTalk-VAD"
 
 private data class TranslateUiState(
     val textInput: String = "",
@@ -366,7 +369,80 @@ fun TranslateScreen(
                     val keep = (sampleRateInHz / 1000) * reserveForPreviousSpeechDetectedMs
                     val captureState = TranslateCaptureState()
                     val realtimeRecognitionInterval = 500L // ms
+                    val tsePreprocessor = if (userSettings.useTseDetection) {
+                        TseAudioPreprocessor(accelerationMode = NativeTSE.ACCELERATION_CPU).takeIf {
+                            it.initialize(context.applicationContext)
+                        }
+                    } else {
+                        null
+                    }
+                    val vadInputSource = when {
+                        tsePreprocessor != null -> "TSE_PROCESSED"
+                        userSettings.useTseDetection -> "RAW_FALLBACK_TSE_INIT_FAILED"
+                        else -> "RAW_FALLBACK_TSE_DISABLED"
+                    }
+                    val liveVadRuntime = tsePreprocessor?.runtimeName ?: vadInputSource.lowercase(Locale.US)
+                    var processedChunkCount = 0
+                    Log.i(
+                        TAG,
+                        "TranslateScreen processAudio: useTseDetection=${userSettings.useTseDetection}, liveVadRuntime=$liveVadRuntime, vadInputSource=$vadInputSource"
+                    )
 
+                    fun processVadInput(rawChunk: FloatArray, vadChunk: FloatArray) {
+                        if (vadChunk.isEmpty()) return
+                        processedChunkCount += 1
+                        SimulateStreamingAsr.acceptVadWaveformSafely(vadChunk)
+                        appendTranslateSamples(
+                            state = captureState,
+                            samples = vadChunk,
+                            keepSamples = keep,
+                            speechDetected = SimulateStreamingAsr.isVadSpeechDetectedSafely()
+                        )
+                        if (processedChunkCount <= 5 || processedChunkCount % 25 == 0) {
+                            Log.i(
+                                VAD_TAG,
+                                "translate_vad_input chunk=$processedChunkCount source=$vadInputSource runtime=$liveVadRuntime rawSamples=${rawChunk.size} vadSamples=${vadChunk.size} bufferSize=${captureState.fullRecordingBuffer.size}"
+                            )
+                        }
+
+                        if (captureState.isSpeechStarted) {
+                            val now = System.currentTimeMillis()
+                            if (now - captureState.lastRealtimeRecognitionTime > realtimeRecognitionInterval) {
+                                captureState.lastRealtimeRecognitionTime = now
+                                val inputStart = captureState.speechStartOffset
+                                val inputEnd = captureState.fullRecordingBuffer.size
+                                val audioForRealtime = captureState.fullRecordingBuffer
+                                    .subList(
+                                        inputStart,
+                                        inputEnd
+                                    )
+                                    .toFloatArray()
+
+                                launch(IO) {
+                                    val stream = SimulateStreamingAsr.recognizer.createStream()
+                                    try {
+                                        stream.acceptWaveform(audioForRealtime, sampleRateInHz)
+                                        SimulateStreamingAsr.recognizer.decode(stream)
+                                        val result = SimulateStreamingAsr.recognizer.getResult(stream)
+                                        utteranceVariantBuffer.add(result.text)
+                                        Log.i(
+                                            VAD_TAG,
+                                            "translate_partial_asr source=$vadInputSource runtime=$liveVadRuntime inputRange=[$inputStart,$inputEnd) inputSamples=${audioForRealtime.size} text=${result.text}"
+                                        )
+                                        if (isStarted) {
+                                            withContext(Main) {
+                                                uiState = uiState.copy(textInput = result.text)
+                                            }
+                                        }
+                                    } finally {
+                                        stream.release()
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    try {
                     // Reset UI for new recording
                     withContext(Main) {
                         utteranceVariantBuffer.reset()
@@ -384,44 +460,11 @@ fun TranslateScreen(
                         val flushRequest = flushChannel.tryReceive().getOrNull()
 
                         if (s != null) {
-                            SimulateStreamingAsr.acceptVadWaveformSafely(s)
-                            appendTranslateSamples(
-                                state = captureState,
-                                samples = s,
-                                keepSamples = keep,
-                                speechDetected = SimulateStreamingAsr.isVadSpeechDetectedSafely()
+                            val chunkOutput = tsePreprocessor?.processChunk(s)
+                            processVadInput(
+                                rawChunk = chunkOutput?.rawAligned ?: s,
+                                vadChunk = chunkOutput?.processed ?: s
                             )
-
-                            if (captureState.isSpeechStarted) {
-                                val now = System.currentTimeMillis()
-                                if (now - captureState.lastRealtimeRecognitionTime > realtimeRecognitionInterval) {
-                                    captureState.lastRealtimeRecognitionTime = now
-                                    val audioForRealtime = captureState.fullRecordingBuffer
-                                        .subList(
-                                            captureState.speechStartOffset,
-                                            captureState.fullRecordingBuffer.size
-                                        )
-                                        .toFloatArray()
-                                    
-                                    // Fire-and-forget recognition job
-                                    launch(IO) {
-                                        val stream = SimulateStreamingAsr.recognizer.createStream()
-                                        try {
-                                            stream.acceptWaveform(audioForRealtime, sampleRateInHz)
-                                            SimulateStreamingAsr.recognizer.decode(stream)
-                                            val result = SimulateStreamingAsr.recognizer.getResult(stream)
-                                            utteranceVariantBuffer.add(result.text)
-                                            if (isStarted) { // check user hasn't stopped
-                                                withContext(Main) {
-                                                    uiState = uiState.copy(textInput = result.text)
-                                                }
-                                            }
-                                        } finally {
-                                            stream.release() 
-                                        }
-                                    }
-                                }
-                            }
                         }
 
                         while (true) {
@@ -435,6 +478,12 @@ fun TranslateScreen(
                                 flushRequested = flushRequest != null,
                                 samplesChannelClosed = samplesChannel.isClosedForReceive
                             )) {
+                            tsePreprocessor?.flush()?.let { tail ->
+                                processVadInput(
+                                    rawChunk = tail.rawAligned,
+                                    vadChunk = tail.processed
+                                )
+                            }
                             done = true
                         } else if (s == null) {
                             delay(10)
@@ -524,6 +573,9 @@ fun TranslateScreen(
                         withContext(Main) {
                             uiState = uiState.copy(isRecognizingSpeech = false)
                         }
+                    }
+                    } finally {
+                        tsePreprocessor?.release()
                     }
                 }
             }
