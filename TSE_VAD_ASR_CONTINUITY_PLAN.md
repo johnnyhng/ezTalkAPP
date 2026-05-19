@@ -233,12 +233,29 @@ The fix is complete when:
 
 After VAD was moved to `TSE_PROCESSED`, final saved WAVs and final ASR were correct, but `DataCollect` still received polluted `utteranceVariants` such as long background phrases before the expected target phrase.
 
+This was initially suspected to be a TSE voice alignment issue: the VAD speech flag might be emitted after realtime TSE latency, while the ASR slice might still include too much prefix audio. That suspicion was useful, but the probes showed the actual failure was not raw/TSE sample drift.
+
 Debug evidence:
 
 - `timeline_probe` showed `rawAlignedSize == vadInputSize`, so raw and realtime TSE buffers were not drifting.
 - `speech_detect_probe` showed a normal preroll window around `saveStart`.
 - `final_range_probe` and `asr_compare` showed the final saved range recognized correctly from both raw and processed WAVs.
 - `partial_asr_probe` showed `inputRange=[0, offset)`, meaning partial ASR was fed from the beginning of the recording session instead of the current utterance start.
+
+Alignment conclusion:
+
+```text
+rawAlignedSize == vadInputSize
+timelineDelta == 0
+```
+
+So the processed TSE buffer and raw-aligned buffer had matching sample timelines. The saved range was also correct:
+
+```text
+saveRange=[startOffset, lastSpeechDetectedOffset)
+```
+
+The bad prefix was introduced only by partial ASR, not by the final save range.
 
 Root cause:
 
@@ -250,6 +267,16 @@ vadInputBuffer[0, offset)
 
 That included silence, background speech, and non-target audio before `speech_detected`. Those partial results were appended into `utteranceVariantBuffer`, so `DataCollect` JSONL variants contained bad candidates even though the final saved WAV was correct.
 
+Observed symptom in logs:
+
+```text
+partial_asr_probe inputRange=[0,150016) ... text=<long unrelated prefix>
+final_range_probe saveRange=[132800,214336)
+asr_compare rawText=我在做測試 processedText=我在做測試
+```
+
+This means final audio recognition was already healthy, but the partial variants were polluted by the session prefix.
+
 Fix:
 
 Partial ASR now uses the same utterance start basis as final saving:
@@ -259,6 +286,23 @@ vadInputBuffer[startOffset, offset)
 ```
 
 The debug log now records `partial_asr_probe inputRange=[startOffset, offset)`, plus `startMinusDetect` and `samplesSinceDetect`, so future regressions can be identified from logcat without inspecting saved audio.
+
+Expected fixed logs:
+
+```text
+speech_detected vadOffset=141312 saveStart=132800
+partial_asr_probe inputRange=[132800,150016) startMinusDetect=-8512 ...
+final_range_probe saveRange=[132800,214336)
+```
+
+The negative `startMinusDetect` is expected because it is the configured preroll. The important point is that partial ASR starts from `saveStart`, not from `0`.
+
+Solution rule:
+
+- Use `rawAlignedBuffer` for raw sibling WAV and diagnostics.
+- Use `vadInputBuffer` for processed VAD/ASR audio.
+- Use `startOffset` as the lower bound for partial ASR and final ASR windows.
+- Never feed `vadInputBuffer[0, offset)` to ASR after speech has been detected unless the utterance genuinely starts at session offset `0`.
 
 Related tuning:
 
@@ -427,3 +471,75 @@ Negative tests:
 - Disable TSE: expect `RAW_FALLBACK_TSE_DISABLED`.
 - Break TSE asset path: expect `RAW_FALLBACK_TSE_INIT_FAILED`.
 - Confirm final ASR still completes in fallback modes.
+
+## 2026-05-19 Home Session-Finished Restart Solution
+
+Problem:
+
+`Home` still showed behavior similar to the earlier `DataCollect` issue: the first recording used the intended target-speaker path, but later utterances could start VAD too early or continue in a stale live session. The practical symptom was that only the first utterance was reliably:
+
+```text
+raw -> TSE -> VAD -> ASR
+```
+
+Root cause:
+
+The UI-layer restart gating alone was not enough. `RecognitionManager.TRANSLATE` still treated Home as a continuous session after final utterance handling:
+
+```text
+final utterance -> reset VAD/TSE state -> keep same recording session alive
+```
+
+That meant the next utterance could be detected inside the old session before the full finalization boundary was visible to Home. For the TSE/VAD/ASR pipeline, the safer boundary is the same one used by `DataCollect`: finish the utterance, finish offline TSE/save work, close the recording session, join the audio loop, then start a fresh session.
+
+Solution:
+
+`RecognitionManager` now ends the session after every final utterance for both:
+
+- `RecordingMode.DATA_COLLECT`
+- `RecordingMode.TRANSLATE`
+
+The finalization order is:
+
+```text
+final trigger
+raw sibling wav save
+offline native TSE process
+final ASR on processed audio
+processed wav save
+jsonl save
+processing_done log
+mark utterance session complete
+processAudio returns
+audio input stop
+recordingLoop.join()
+release audio input
+onRecordingSessionFinished(sessionId)
+```
+
+`Home.kt` mirrors the `DataCollect` restart pattern:
+
+1. User pressing Start sets a resume intent.
+2. On final transcript, Home records whether it should resume and stores the current `lastRecordingSessionFinished`.
+3. Home does not directly restart from the final transcript callback.
+4. Home waits until `lastRecordingSessionFinished` advances.
+5. Only after the previous session has finished and joined does Home call `startTranslateRecording()`.
+
+Expected logs:
+
+```text
+processing_done ... restartMode=translate_session_restart
+RecognitionManager utterance session complete: mode=TRANSLATE ... reason=restart_after_session_finished
+RecognitionManager session finished: sessionId=N
+HomeViewModel recording session finished observed: sessionId=N
+Home recording TSE/session joined; resuming recording: sessionFinished=N
+RecognitionManager start: sessionId=N+1, mode=TRANSLATE, useTseDetection=true
+RecognitionManager processAudio: ... vadInputSource=TSE_PROCESSED
+```
+
+Important behavior:
+
+- Home no longer relies on same-session VAD/TSE reset for the next utterance.
+- Every Home utterance after finalization starts with a fresh `RecognitionManager` session.
+- The restart happens after TSE/offline processing and audio loop join, not merely after UI receives a final transcript.
+- Manual Stop clears the resume intent and cancels pending restart.
