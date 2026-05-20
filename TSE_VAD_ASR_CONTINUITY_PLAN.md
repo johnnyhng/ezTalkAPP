@@ -1,4 +1,4 @@
-# TSE VAD ASR Continuity Plan
+ # TSE VAD ASR Continuity Plan
 
 ## Problem Statement
 
