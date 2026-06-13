@@ -2,6 +2,10 @@
 package com.k2fsa.sherpa.onnx
 
 import android.content.res.AssetManager
+import android.util.Log
+
+private const val VAD_THRESHOLD = 0.5F
+private const val VAD_LOG_TAG = "ezTalk-VAD"
 
 data class SileroVadModelConfig(
     var model: String = "",
@@ -120,7 +124,7 @@ fun getVadModelConfig(type: Int): VadModelConfig? {
             return VadModelConfig(
                 sileroVadModelConfig = SileroVadModelConfig(
                     model = "silero_vad.onnx",
-                    threshold = 0.5F,
+                    threshold = VAD_THRESHOLD,
                     minSilenceDuration = 0.25F,
                     minSpeechDuration = 0.25F,
                     windowSize = 512,
@@ -128,14 +132,16 @@ fun getVadModelConfig(type: Int): VadModelConfig? {
                 sampleRate = 16000,
                 numThreads = 1,
                 provider = "cpu",
-            )
+            ).also {
+                Log.i(VAD_LOG_TAG, "vad_config type=silero threshold=$VAD_THRESHOLD minSilence=0.25 minSpeech=0.25 windowSize=512")
+            }
         }
 
         1 -> {
             return VadModelConfig(
                 tenVadModelConfig = TenVadModelConfig(
                     model = "ten-vad.onnx",
-                    threshold = 0.5F,
+                    threshold = VAD_THRESHOLD,
                     minSilenceDuration = 0.25F,
                     minSpeechDuration = 0.25F,
                     windowSize = 256,
@@ -143,7 +149,9 @@ fun getVadModelConfig(type: Int): VadModelConfig? {
                 sampleRate = 16000,
                 numThreads = 1,
                 provider = "cpu",
-            )
+            ).also {
+                Log.i(VAD_LOG_TAG, "vad_config type=ten-vad threshold=$VAD_THRESHOLD minSilence=0.25 minSpeech=0.25 windowSize=256")
+            }
         }
     }
     return null
