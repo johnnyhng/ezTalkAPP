@@ -65,6 +65,7 @@ android {
             // Force extraction of native libs on device. This is a runtime workaround
             // for native components that do not load correctly directly from the APK.
             useLegacyPackaging = true
+            excludes += "**/libonnxruntime.legacy.so"
         }
     }
 }
@@ -154,7 +155,6 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.androidx.appcompat)
-
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")
     testImplementation(libs.androidx.test.core)
