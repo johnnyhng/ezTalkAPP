@@ -354,20 +354,53 @@ The Experiment feature (Project VOICE integration) is an AI-assisted input workf
 5. **UI Rendering**: Candidates are displayed in a high-contrast, large-target layout. Sentence candidates are visually stripped of prefixes to match the word completion style.
 6. **Action**: Selection triggers `applyCandidate`, which strips trailing Zhuyin symbols and appends the suffix.
 
+## Target Speaker Extraction (TSE) flow
+
+Target Speaker Extraction (TSE) is used to isolate a specific speaker's voice based on a pre-enrolled embedding, mitigating background voices and noise before feeding audio to VAD and ASR.
+
+### Key Components
+
+- **Native Engine ([NativeTSE.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/tse/NativeTSE.kt))**: Kotlin JNI wrapper that loads the native `libtse_engine.so` and `libonnxruntime.so` libraries. It runs the ONNX model (`transformer_energy_64d_1L_int8.onnx`) with the d-vector embedding (`dvector.bin`) on the CPU.
+- **Preprocessor ([TseAudioPreprocessor.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/tse/TseAudioPreprocessor.kt))**: Manages the rolling audio buffer, segments incoming samples into 160-sample (10ms) frames, feeds them to the JNI wrapper, and handles latency alignment.
+- **Waveform Pipeline ([NativeTseWaveformPipeline.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/tse/NativeTseWaveformPipeline.kt))**: Used to post-process raw audio offline at the end of an utterance to produce the finalized high-quality clean WAV.
+
+### Latency and Alignment
+
+The TSE model introduces a lookahead latency of **15ms (240 samples)**. To keep the raw microphone stream aligned with the TSE-processed stream (for sibling raw WAV saves and debugging), the preprocessor maintains a 240-sample delay buffer. Aligned raw samples are only emitted alongside processed samples once this buffer is saturated.
+
+### Inference Frequency Optimization
+
+To reduce the high CPU consumption and JNI overhead of running deep learning inference every 10ms frame, the native C++ engine accumulates **320ms (32 hops of 10ms / 5120 samples)** before invoking the model inference once for the entire accumulated block.
+
+### Runtime Integration and Fallbacks
+
+TSE is integrated across all screens that capture audio:
+- **`RecognitionManager`** (used by Home and DataCollect)
+- **`TranslateScreen`**
+- **`SpeakerAsrController`**
+
+If `useTseDetection` is enabled in settings:
+1. The app tries to initialize `TseAudioPreprocessor` with the ONNX model and d-vector assets.
+2. If initialization succeeds, VAD input source becomes `TSE_PROCESSED` and runs on the processed stream.
+3. If it fails (e.g. missing assets), it logs `RAW_FALLBACK_TSE_INIT_FAILED` and falls back to raw mic audio.
+4. If TSE is disabled, it logs `RAW_FALLBACK_TSE_DISABLED`.
+5. Silent fallbacks are prohibited; the active VAD runtime and input source are logged under `TAG=ezTalk-VAD` on every utterance.
+
 ## Main recognition flow
 
 The most important end-to-end path is:
 
 1. user starts recording
 2. microphone audio is read continuously
-3. VAD detects speech boundaries
-4. partial recognition updates the UI while the user is speaking
-5. once silence is long enough, the utterance is finalized
-6. audio is saved as WAV
-7. transcript metadata is saved as JSONL
-8. UI receives a final `Transcript`
-9. optional remote candidates are fetched
-10. user can review, edit, speak, play, delete, or upload feedback
+3. if `useTseDetection=true` and TSE is initialized, raw audio is routed through the TSE preprocessor
+4. VAD detects speech boundaries on the processed audio stream
+5. partial recognition updates the UI while the user is speaking
+6. once silence is long enough, the utterance is finalized
+7. audio is saved as WAV (including sibling raw WAV for comparison if TSE is active)
+8. transcript metadata is saved as JSONL
+9. UI receives a final `Transcript`
+10. optional remote candidates are fetched
+11. user can review, edit, speak, play, delete, or upload feedback
 
 ### Detailed recording path
 
@@ -378,8 +411,10 @@ What happens there:
 - `startTranslate(...)` and `startDataCollect(...)` both call a private `start(...)`
 - an `AudioRecord` instance is configured for 16 kHz mono PCM
 - raw microphone samples are read into a channel
-- a processing coroutine feeds the samples into VAD
-- once speech is active, periodic partial decoding produces live transcript updates
+- a processing coroutine reads the samples:
+  - if TSE is enabled and healthy, it passes them through `TseAudioPreprocessor.processChunk(...)` which yields aligned raw and processed frames.
+  - VAD consumes only the processed (TSE-processed or raw fallback) samples.
+- once speech is active, periodic partial decoding produces live transcript updates from the processed buffer
 - each non-blank partial/final result is added to an utterance variant buffer
 - once silence exceeds `lingerMs`, final decoding happens
 
@@ -392,7 +427,7 @@ For finalization:
   - the same as `originalText` in translate/home mode
   - the prompt text in data collect mode
 - the app saves:
-  - a `.wav`
+  - a `.wav` (processed output WAV and optional raw sibling WAV)
   - a `.jsonl`
 - then emits a `Transcript` via `onFinalResult`
 
