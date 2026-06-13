@@ -3,6 +3,7 @@ package tw.com.johnnyhng.eztalk.asr.screens
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,6 +49,7 @@ import tw.com.johnnyhng.eztalk.asr.widgets.CandidateList
 import tw.com.johnnyhng.eztalk.asr.widgets.WaveformDisplay
 import java.util.Locale
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.TAG
 
 @Composable
 fun DataCollectScreen(
@@ -64,6 +66,7 @@ fun DataCollectScreen(
     val userSettings by homeViewModel.userSettings.collectAsState()
     val selectedModel by homeViewModel.selectedModelFlow.collectAsState()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
+    val lastRecordingSessionFinished by homeViewModel.lastRecordingSessionFinished.collectAsState()
     val currentlyPlaying by MediaController.currentlyPlaying.collectAsState()
     val resultList = remember { mutableStateListOf<Transcript>() }
     val lazyColumnListState = rememberLazyListState()
@@ -72,6 +75,10 @@ fun DataCollectScreen(
         preferredOutputDeviceId = userSettings.preferredAudioOutputDeviceId
     )
     var isAutoFlowEnabled by rememberSaveable { mutableStateOf(false) }
+    var shouldResumeRecording by rememberSaveable { mutableStateOf(false) }
+    var pendingAutoRestart by rememberSaveable { mutableStateOf(false) }
+    var consumedAutoRestartSessionId by rememberSaveable { mutableStateOf(0L) }
+    val latestShouldResumeRecording by rememberUpdatedState(shouldResumeRecording)
     val latestIsSequenceMode by rememberUpdatedState(uiState.isSequenceMode)
     val latestIsAutoFlowEnabled by rememberUpdatedState(isAutoFlowEnabled)
 
@@ -108,10 +115,52 @@ fun DataCollectScreen(
                 }
                 lazyColumnListState.animateScrollToItem(resultList.lastIndex)
 
-                if (latestIsSequenceMode && latestIsAutoFlowEnabled && transcript.wavFilePath.isNotEmpty()) {
-                    dataCollectViewModel.moveToNext()
+                if (latestShouldResumeRecording && transcript.wavFilePath.isNotEmpty()) {
+                    Log.i(
+                        TAG,
+                        "DataCollect auto restart pending: wav=${transcript.wavFilePath}, shouldResumeRecording=$latestShouldResumeRecording, sequence=$latestIsSequenceMode, autoFlow=$latestIsAutoFlowEnabled, lastFinishedSession=$lastRecordingSessionFinished, consumedSession=$consumedAutoRestartSessionId"
+                    )
+                    pendingAutoRestart = true
+                } else {
+                    Log.i(
+                        TAG,
+                        "DataCollect auto restart not pending: wav=${transcript.wavFilePath}, shouldResumeRecording=$latestShouldResumeRecording, sequence=$latestIsSequenceMode, autoFlow=$latestIsAutoFlowEnabled, modifiedBlank=${transcript.modifiedText.isBlank()}"
+                    )
                 }
             }
+        }
+    }
+
+    LaunchedEffect(pendingAutoRestart, lastRecordingSessionFinished, latestIsSequenceMode, latestIsAutoFlowEnabled) {
+        Log.i(
+            TAG,
+            "DataCollect auto restart check: pending=$pendingAutoRestart, lastFinishedSession=$lastRecordingSessionFinished, consumedSession=$consumedAutoRestartSessionId, sequence=$latestIsSequenceMode, autoFlow=$latestIsAutoFlowEnabled, currentTextBlank=${uiState.text.isBlank()}"
+        )
+        if (!pendingAutoRestart) return@LaunchedEffect
+        if (lastRecordingSessionFinished <= consumedAutoRestartSessionId) {
+            Log.i(TAG, "DataCollect auto restart waiting for new finished session")
+            return@LaunchedEffect
+        }
+
+        pendingAutoRestart = false
+        consumedAutoRestartSessionId = lastRecordingSessionFinished
+        if (latestIsSequenceMode && latestIsAutoFlowEnabled) {
+            dataCollectViewModel.moveToNext()
+            Log.i(TAG, "DataCollect auto restart advanced sequence: sessionFinished=$lastRecordingSessionFinished")
+        } else {
+            Log.i(TAG, "DataCollect auto restart preserving current text: sequence=$latestIsSequenceMode, autoFlow=$latestIsAutoFlowEnabled")
+        }
+
+        val nextText = dataCollectViewModel.uiState.value.text
+        if (nextText.isNotBlank()) {
+            Log.i(
+                TAG,
+                "DataCollect auto restart starting next recording: sessionFinished=$lastRecordingSessionFinished, nextTextLength=${nextText.length}"
+            )
+            homeViewModel.startDataCollectRecording(nextText)
+        } else {
+            shouldResumeRecording = false
+            Log.i(TAG, "DataCollect auto restart skipped: next text is blank")
         }
     }
 
@@ -121,6 +170,18 @@ fun DataCollectScreen(
 
     LaunchedEffect(uiState.text) {
         homeViewModel.updateDataCollectText(uiState.text)
+    }
+
+    LaunchedEffect(latestAudioSamples) {
+        if (isStarted && latestAudioSamples.isNotEmpty()) {
+            dataCollectViewModel.onLiveMicSamples(latestAudioSamples)
+        }
+    }
+
+    LaunchedEffect(isStarted) {
+        if (!isStarted) {
+            dataCollectViewModel.resetLiveMicProbe()
+        }
     }
 
     Column(
@@ -200,9 +261,12 @@ fun DataCollectScreen(
                     if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                         ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.RECORD_AUDIO), 0)
                     } else {
+                        shouldResumeRecording = true
                         homeViewModel.startDataCollectRecording(uiState.text)
                     }
                 } else {
+                    shouldResumeRecording = false
+                    pendingAutoRestart = false
                     homeViewModel.toggleRecording()
                 }
             },
@@ -240,6 +304,19 @@ fun DataCollectScreen(
             onItemClick = { _, _ -> },
             onTtsClick = { _, _ -> },
             onPlayClick = { path ->
+                if (currentlyPlaying == path) {
+                    MediaController.stop()
+                } else {
+                    MediaController.play(
+                        context = context,
+                        filePath = path,
+                        userSettings = userSettings,
+                        onRoutingApplied = homeViewModel::reportAudioRoutingMessage
+                    )
+                }
+            },
+            onPlayRawClick = { path ->
+                if (path.isBlank()) return@CandidateList
                 if (currentlyPlaying == path) {
                     MediaController.stop()
                 } else {

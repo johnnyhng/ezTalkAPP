@@ -19,7 +19,8 @@ internal data class TranscriptFileTargets(
 
 internal data class DeleteTranscriptPlan(
     val wavFile: File,
-    val jsonlFile: File
+    val jsonlFile: File,
+    val rawSiblingWavFile: File? = null
 )
 
 /**
@@ -350,6 +351,22 @@ fun deleteTranscriptFiles(wavFilePath: String): Boolean {
         Log.w(TAG, "WAV file does not exist: $wavFilePath")
     }
 
+    deletePlan.rawSiblingWavFile?.let { rawSiblingWavFile ->
+        if (rawSiblingWavFile.exists()) {
+            try {
+                if (rawSiblingWavFile.delete()) {
+                    Log.i(TAG, "Successfully deleted raw sibling WAV file: ${rawSiblingWavFile.absolutePath}")
+                } else {
+                    Log.e(TAG, "Failed to delete raw sibling WAV file: ${rawSiblingWavFile.absolutePath}")
+                    allDeleted = false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting raw sibling WAV file: ${rawSiblingWavFile.absolutePath}", e)
+                allDeleted = false
+            }
+        }
+    }
+
     val jsonlFilePath = deletePlan.jsonlFile.absolutePath
     val jsonlFile = deletePlan.jsonlFile
     if (jsonlFile.exists()) {
@@ -371,8 +388,15 @@ fun deleteTranscriptFiles(wavFilePath: String): Boolean {
 }
 
 internal fun buildDeleteTranscriptPlan(wavFilePath: String): DeleteTranscriptPlan {
+    val wavFile = File(wavFilePath)
+    val rawSiblingWavFile = if (wavFile.name.endsWith(".app.wav") && !wavFile.name.endsWith(".raw.app.wav")) {
+        File(wavFile.parentFile, wavFile.name.removeSuffix(".app.wav") + ".raw.app.wav")
+    } else {
+        null
+    }
     return DeleteTranscriptPlan(
-        wavFile = File(wavFilePath),
-        jsonlFile = File(wavFilePath.replace(".wav", ".jsonl"))
+        wavFile = wavFile,
+        jsonlFile = File(wavFilePath.replace(".wav", ".jsonl")),
+        rawSiblingWavFile = rawSiblingWavFile
     )
 }

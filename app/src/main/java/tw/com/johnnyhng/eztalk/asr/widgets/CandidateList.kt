@@ -33,6 +33,7 @@ fun CandidateList(
     // Item Actions
     onTtsClick: (Int, String) -> Unit,
     onPlayClick: (String) -> Unit,
+    onPlayRawClick: (String) -> Unit = {},
     onDeleteClick: (Int, String) -> Unit,
     // Recognition states
     isRecognizingSpeech: Boolean,
@@ -92,6 +93,7 @@ fun CandidateList(
                     onClick = { if (result.mutable) onItemClick(index, result) },
                     onTtsClick = { onTtsClick(index, result.modifiedText) },
                     onPlayClick = { onPlayClick(result.wavFilePath) },
+                    onPlayRawClick = { onPlayRawClick(result.rawWavFilePath) },
                     onDeleteClick = { onDeleteClick(index, result.wavFilePath) }
                 )
             }
@@ -154,6 +156,7 @@ fun CandidateItemRow(
     onClick: () -> Unit,
     onTtsClick: () -> Unit,
     onPlayClick: () -> Unit,
+    onPlayRawClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
     Column(
@@ -194,14 +197,30 @@ fun CandidateItemRow(
                     }
                 }
 
-                IconButton(
-                    onClick = onPlayClick,
-                    enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == transcript.wavFilePath) && !isEditing
-                ) {
-                    Icon(
-                        imageVector = if (currentlyPlaying == transcript.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
-                        contentDescription = if (currentlyPlaying == transcript.wavFilePath) stringResource(id = R.string.stop) else stringResource(id = R.string.play)
-                    )
+                if (transcript.rawWavFilePath.isNotBlank()) {
+                    TextButton(
+                        onClick = onPlayClick,
+                        enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == transcript.wavFilePath) && !isEditing
+                    ) {
+                        Text(text = stringResource(R.string.play_tse_short))
+                    }
+
+                    TextButton(
+                        onClick = onPlayRawClick,
+                        enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == transcript.rawWavFilePath) && !isEditing
+                    ) {
+                        Text(text = stringResource(R.string.play_raw_short))
+                    }
+                } else {
+                    IconButton(
+                        onClick = onPlayClick,
+                        enabled = !isStarted && !isTtsSpeaking && (currentlyPlaying == null || currentlyPlaying == transcript.wavFilePath) && !isEditing
+                    ) {
+                        Icon(
+                            imageVector = if (currentlyPlaying == transcript.wavFilePath) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = if (currentlyPlaying == transcript.wavFilePath) stringResource(id = R.string.stop) else stringResource(id = R.string.play)
+                        )
+                    }
                 }
 
                 IconButton(

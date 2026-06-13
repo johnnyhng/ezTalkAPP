@@ -4,6 +4,7 @@ data class Transcript(
     val recognizedText: String,
     var modifiedText: String = recognizedText,
     var wavFilePath: String,
+    var rawWavFilePath: String = "",
     var checked: Boolean = false,
     var mutable: Boolean = true,
     var removable: Boolean = false,

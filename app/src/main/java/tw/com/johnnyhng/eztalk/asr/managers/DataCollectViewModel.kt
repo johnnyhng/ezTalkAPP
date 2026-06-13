@@ -21,7 +21,7 @@ import tw.com.johnnyhng.eztalk.asr.datacollect.moveToNext as reduceMoveToNext
 import tw.com.johnnyhng.eztalk.asr.datacollect.moveToPrevious as reduceMoveToPrevious
 
 data class DataCollectUiState(
-    val text: String = "",
+    val text: String = "我在做測試",
     val isSequenceMode: Boolean = false,
     val showNoQueueMessage: Boolean = false,
     val remainingCount: Int = 0,
@@ -37,6 +37,14 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _uiState = MutableStateFlow(DataCollectUiState())
     val uiState: StateFlow<DataCollectUiState> = _uiState.asStateFlow()
+
+    fun onLiveMicSamples(@Suppress("UNUSED_PARAMETER") samples: FloatArray) {
+        // No-op: native TSE is exercised by RecognitionManager.
+    }
+
+    fun resetLiveMicProbe() {
+        // No-op: native TSE is exercised by RecognitionManager.
+    }
 
     fun onTextChange(text: String) {
         _uiState.update { it.copy(text = text) }
@@ -209,4 +217,5 @@ class DataCollectViewModel(application: Application) : AndroidViewModel(applicat
         cells.add(builder.toString().trim())
         return cells.firstOrNull { it.isNotBlank() } ?: ""
     }
+
 }
