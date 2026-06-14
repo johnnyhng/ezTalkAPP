@@ -19,6 +19,8 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTseWaveformPipeline
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
+import tw.com.johnnyhng.eztalk.asr.managers.TseModelManager
+import tw.com.johnnyhng.eztalk.asr.data.classes.TseModel
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
 import tw.com.johnnyhng.eztalk.asr.utils.buildTranscriptFileTargets
 import tw.com.johnnyhng.eztalk.asr.utils.saveAsWav
@@ -239,15 +241,21 @@ class RecognitionManager(private val context: Context) {
         val dummyTseRequested = userSettings.useTseDetection
         var tseRuntimeName = "raw_passthrough"
         var vadInputSource = VadInputSource.RAW_FALLBACK_TSE_DISABLED
+        val tseModel = TseModelManager.getModel(context, userId, userSettings.selectedTseModelName)
         val tsePreprocessor = if (dummyTseRequested) {
             TseAudioPreprocessor().let { preprocessor ->
-                if (preprocessor.initialize(context)) {
+                val initialized = if (tseModel != null) {
+                    preprocessor.initialize(context, tseModel.modelPath, tseModel.dvectorPath)
+                } else {
+                    preprocessor.initialize(context)
+                }
+                if (initialized) {
                     preprocessor.reset()
-                    tseRuntimeName = preprocessor.runtimeName
+                    tseRuntimeName = tseModel?.name ?: preprocessor.runtimeName
                     vadInputSource = VadInputSource.TSE_PROCESSED
                     preprocessor
                 } else {
-                    tseRuntimeName = preprocessor.runtimeName
+                    tseRuntimeName = tseModel?.name ?: preprocessor.runtimeName
                     vadInputSource = VadInputSource.RAW_FALLBACK_TSE_INIT_FAILED
                     null
                 }
@@ -473,7 +481,7 @@ class RecognitionManager(private val context: Context) {
                             )
                         }
                         val nativeTseResult = if (shouldPostProcessNativeTse) {
-                            runNativeTseOffline(rawAudioToSave, sessionId)
+                            runNativeTseOffline(rawAudioToSave, sessionId, tseModel)
                         } else {
                             null
                         }
@@ -685,15 +693,17 @@ class RecognitionManager(private val context: Context) {
         val runtime: String
     )
 
-    private fun runNativeTseOffline(samples: FloatArray, sessionId: Long): NativeTseOfflineResult? {
+    private fun runNativeTseOffline(samples: FloatArray, sessionId: Long, tseModel: TseModel?): NativeTseOfflineResult? {
         if (samples.isEmpty()) return NativeTseOfflineResult(FloatArray(0), "native_onnx_lite_empty")
 
         val mode = NativeTSE.ACCELERATION_CPU
+        val runtimeName = tseModel?.name ?: "default"
         return runNativeTseOfflineWithAcceleration(
             samples = samples,
             sessionId = sessionId,
-            runtime = "native_onnx_lite_${NativeTSE.accelerationModeName(mode)}_offline",
-            accelerationMode = mode
+            runtime = "native_onnx_lite_${NativeTSE.accelerationModeName(mode)}_offline_${runtimeName}",
+            accelerationMode = mode,
+            tseModel = tseModel
         )
     }
 
@@ -701,11 +711,20 @@ class RecognitionManager(private val context: Context) {
         samples: FloatArray,
         sessionId: Long,
         runtime: String,
-        accelerationMode: Int
+        accelerationMode: Int,
+        tseModel: TseModel?
     ): NativeTseOfflineResult? {
         val pipeline = NativeTseWaveformPipeline(context)
         return try {
-            val initialized = pipeline.initialize(accelerationMode = accelerationMode)
+            val initialized = if (tseModel != null) {
+                pipeline.initialize(
+                    modelPath = tseModel.modelPath,
+                    dvectorPath = tseModel.dvectorPath,
+                    accelerationMode = accelerationMode
+                )
+            } else {
+                pipeline.initialize(accelerationMode = accelerationMode)
+            }
             if (!initialized) {
                 Log.w(TAG, "RecognitionManager native TSE offline skipped: sessionId=$sessionId, runtime=$runtime, reason=init_failed")
                 return null

@@ -18,14 +18,18 @@ internal class NativeTseWaveformPipeline(
     private var initialized = false
 
     fun initialize(
-        modelAssetName: String = "transformer_energy_64d_1L_int8.onnx",
-        dvectorAssetName: String = "dvector.bin",
+        modelPath: String,
+        dvectorPath: String,
         accelerationMode: Int = NativeTSE.ACCELERATION_CPU,
     ): Boolean {
         close()
         return try {
-            val modelPath = copyAssetToCache(modelAssetName).absolutePath
-            val dvectorPath = copyAssetToCache(dvectorAssetName).absolutePath
+            val modelFile = File(modelPath)
+            val dvectorFile = File(dvectorPath)
+            if (!modelFile.exists() || !dvectorFile.exists()) {
+                Log.e(TAG, "TSE Model or dvector path does not exist. modelPath=$modelPath, dvectorPath=$dvectorPath")
+                return false
+            }
             val accelerationName = NativeTSE.accelerationModeName(accelerationMode)
             initialized = if (accelerationMode == NativeTSE.ACCELERATION_CPU) {
                 nativeTse.init(modelPath, dvectorPath)
@@ -34,13 +38,27 @@ internal class NativeTseWaveformPipeline(
             }
             if (initialized) {
                 nativeTse.reset()
-                Log.i(TAG, "Native TSE initialized. acceleration=$accelerationName")
+                Log.i(TAG, "Native TSE initialized. modelPath=$modelPath, dvectorPath=$dvectorPath, acceleration=$accelerationName")
             } else {
                 Log.w(TAG, "Native TSE initialize returned false. acceleration=$accelerationName")
             }
             initialized
         } catch (t: Throwable) {
             Log.e(TAG, "NativeTseWaveformPipeline initialize failed. acceleration=${NativeTSE.accelerationModeName(accelerationMode)}", t)
+            initialized = false
+            false
+        }
+    }
+
+    fun initialize(
+        accelerationMode: Int = NativeTSE.ACCELERATION_CPU,
+    ): Boolean {
+        return try {
+            val modelPath = copyAssetToCache("transformer_energy_64d_1L_int8.onnx").absolutePath
+            val dvectorPath = copyAssetToCache("dvector.bin").absolutePath
+            initialize(modelPath, dvectorPath, accelerationMode)
+        } catch (t: Throwable) {
+            Log.e(TAG, "NativeTseWaveformPipeline initialize assets failed", t)
             initialized = false
             false
         }

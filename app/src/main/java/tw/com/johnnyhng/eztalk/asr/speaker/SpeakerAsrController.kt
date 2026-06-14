@@ -25,6 +25,8 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioIOManager
 import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import tw.com.johnnyhng.eztalk.asr.managers.TseModelManager
+import tw.com.johnnyhng.eztalk.asr.data.classes.TseModel
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
 import java.util.Locale
@@ -186,9 +188,14 @@ internal class SpeakerAsrController(
         val utteranceSegments = mutableListOf<FloatArray>()
         var lastVadPacketAt = 0L
         var done = false
+        val tseModel = TseModelManager.getModel(context.applicationContext, userSettings.userId, userSettings.selectedTseModelName)
         val tsePreprocessor = if (userSettings.useTseDetection) {
-            TseAudioPreprocessor(accelerationMode = NativeTSE.ACCELERATION_CPU).takeIf {
-                it.initialize(context.applicationContext)
+            TseAudioPreprocessor(accelerationMode = NativeTSE.ACCELERATION_CPU).takeIf { preprocessor ->
+                if (tseModel != null) {
+                    preprocessor.initialize(context.applicationContext, tseModel.modelPath, tseModel.dvectorPath)
+                } else {
+                    preprocessor.initialize(context.applicationContext)
+                }
             }
         } else {
             null

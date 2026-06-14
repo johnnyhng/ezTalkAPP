@@ -54,6 +54,8 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
+import tw.com.johnnyhng.eztalk.asr.managers.TseModelManager
+import tw.com.johnnyhng.eztalk.asr.data.classes.TseModel
 import tw.com.johnnyhng.eztalk.asr.tse.NativeTSE
 import tw.com.johnnyhng.eztalk.asr.tse.TseAudioPreprocessor
 import tw.com.johnnyhng.eztalk.asr.utterance.AsrUtteranceVariantBuffer
@@ -369,9 +371,14 @@ fun TranslateScreen(
                     val keep = (sampleRateInHz / 1000) * reserveForPreviousSpeechDetectedMs
                     val captureState = TranslateCaptureState()
                     val realtimeRecognitionInterval = 500L // ms
+                    val tseModel = TseModelManager.getModel(context.applicationContext, userSettings.userId, userSettings.selectedTseModelName)
                     val tsePreprocessor = if (userSettings.useTseDetection) {
-                        TseAudioPreprocessor(accelerationMode = NativeTSE.ACCELERATION_CPU).takeIf {
-                            it.initialize(context.applicationContext)
+                        TseAudioPreprocessor(accelerationMode = NativeTSE.ACCELERATION_CPU).takeIf { preprocessor ->
+                            if (tseModel != null) {
+                                preprocessor.initialize(context.applicationContext, tseModel.modelPath, tseModel.dvectorPath)
+                            } else {
+                                preprocessor.initialize(context.applicationContext)
+                            }
                         }
                     } else {
                         null

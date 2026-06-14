@@ -31,17 +31,21 @@ internal class TseAudioPreprocessor(
         private set
 
     /**
-     * Initialize the native TSE engine with assets.
+     * Initialize the native TSE engine with a custom model and dvector path.
      */
-    fun initialize(context: Context): Boolean {
+    fun initialize(context: Context, modelPath: String, dvectorPath: String): Boolean {
         if (initialized) return true
         
         return try {
             val ntse = NativeTSE()
-            // Use INT8 model as requested.
-            val modelName = "transformer_energy_64d_1L_int8.onnx"
-            val modelPath = copyAssetToCache(context, modelName).absolutePath
-            val dvectorPath = copyAssetToCache(context, "dvector.bin").absolutePath
+            val modelFile = File(modelPath)
+            val dvectorFile = File(dvectorPath)
+
+            if (!modelFile.exists() || !dvectorFile.exists()) {
+                Log.e(TAG, "TSE Model or dvector path does not exist. modelPath=$modelPath, dvectorPath=$dvectorPath")
+                runtimeName = "raw_passthrough_tse_files_not_found"
+                return false
+            }
 
             val accelerationName = NativeTSE.accelerationModeName(accelerationMode)
             val nativeInitialized = if (accelerationMode == NativeTSE.ACCELERATION_CPU) {
@@ -55,16 +59,32 @@ internal class TseAudioPreprocessor(
                 nativeTse = ntse
                 initialized = true
                 runtimeName = "native_onnx_lite_${accelerationName}_realtime"
-                Log.i(TAG, "Native TSE initialized using $modelName acceleration=$accelerationName")
+                Log.i(TAG, "Native TSE initialized using modelPath=$modelPath dvectorPath=$dvectorPath acceleration=$accelerationName")
                 return true
             }
 
-            Log.e(TAG, "Failed to initialize Native TSE using $modelName acceleration=$accelerationName")
+            Log.e(TAG, "Failed to initialize Native TSE using modelPath=$modelPath dvectorPath=$dvectorPath acceleration=$accelerationName")
             runtimeName = "raw_passthrough_tse_init_failed"
             false
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing Native TSE", e)
             runtimeName = "raw_passthrough_tse_init_error"
+            false
+        }
+    }
+
+    /**
+     * Initialize the native TSE engine with assets.
+     */
+    fun initialize(context: Context): Boolean {
+        return try {
+            val modelName = "transformer_energy_64d_1L_int8.onnx"
+            val modelPath = copyAssetToCache(context, modelName).absolutePath
+            val dvectorPath = copyAssetToCache(context, "dvector.bin").absolutePath
+            initialize(context, modelPath, dvectorPath)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up assets for Native TSE", e)
+            runtimeName = "raw_passthrough_tse_asset_error"
             false
         }
     }

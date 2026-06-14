@@ -18,6 +18,7 @@ data class UserSettings(
     val geminiModel: String = "gemini-2.5-flash",
     val speakerLlmExecutionMode: String = "cloud",
     val useTseDetection: Boolean = false,
+    val selectedTseModelName: String = "",
     val autoplay: Boolean = false,
     val enableHomeLlmCorrection: Boolean = false,
     val enableHomeEnglishTranslation: Boolean = false,

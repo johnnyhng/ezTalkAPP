@@ -18,8 +18,12 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioRoutingRepository
 import tw.com.johnnyhng.eztalk.asr.audio.AudioRoutingStatus
 import tw.com.johnnyhng.eztalk.asr.sanitizeEntryScreenRoute
 import tw.com.johnnyhng.eztalk.asr.data.classes.Model
+import tw.com.johnnyhng.eztalk.asr.data.classes.TseModel
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import tw.com.johnnyhng.eztalk.asr.managers.TseModelManager
+import tw.com.johnnyhng.eztalk.asr.managers.RemoteTseModelRepository
+import tw.com.johnnyhng.eztalk.asr.managers.DirectUrlRemoteTseModelRepository
 import tw.com.johnnyhng.eztalk.asr.utils.checkModelUpdate
 import tw.com.johnnyhng.eztalk.asr.utils.sha256
 import java.io.File
@@ -30,7 +34,8 @@ sealed class DownloadUiEvent {
 
 class HomeViewModel @JvmOverloads constructor(
     application: Application,
-    private val remoteModelRepository: RemoteModelRepository = DirectUrlRemoteModelRepository
+    private val remoteModelRepository: RemoteModelRepository = DirectUrlRemoteModelRepository,
+    private val remoteTseModelRepository: RemoteTseModelRepository = DirectUrlRemoteTseModelRepository
 ) : AndroidViewModel(application) {
     private val settingsManager = SettingsManager(application)
     private val audioRoutingRepository = AudioRoutingRepository(application)
@@ -75,6 +80,33 @@ class HomeViewModel @JvmOverloads constructor(
     var isFetchingRemoteModels by mutableStateOf(false)
     var remoteModelsErrorMessage by mutableStateOf<String?>(null)
 
+    // TSE Model Management
+    private val _tseModels = mutableStateListOf<TseModel>()
+    val tseModels: List<TseModel> get() = _tseModels
+
+    private val _selectedTseModel = MutableStateFlow<TseModel?>(null)
+    val selectedTseModelFlow = _selectedTseModel.asStateFlow()
+    val selectedTseModel: TseModel? get() = _selectedTseModel.value
+
+    private val _showRemoteTseModelsDialog = MutableStateFlow(false)
+    val showRemoteTseModelsDialog = _showRemoteTseModelsDialog.asStateFlow()
+
+    private val _isDownloadingTse = MutableStateFlow(false)
+    val isDownloadingTseFlow = _isDownloadingTse.asStateFlow()
+    val isDownloadingTse: Boolean get() = _isDownloadingTse.value
+
+    private val _downloadTseProgress = MutableStateFlow<Float?>(null)
+    val downloadTseProgressFlow = _downloadTseProgress.asStateFlow()
+    val downloadTseProgress: Float? get() = _downloadTseProgress.value
+
+    val canDeleteTseModel: Boolean get() = _tseModels.size > 1
+
+    // Remote TSE models for the dialog
+    private val _remoteTseModels = mutableStateListOf<RemoteModelDescriptor>()
+    val remoteTseModels: List<RemoteModelDescriptor> get() = _remoteTseModels
+    var isFetchingRemoteTseModels by mutableStateOf(false)
+    var remoteTseModelsErrorMessage by mutableStateOf<String?>(null)
+
     // Recognition Manager integration
     private val recognitionManager = RecognitionManager(application)
     private val recognizerInitMutex = Mutex()
@@ -99,6 +131,7 @@ class HomeViewModel @JvmOverloads constructor(
 
     init {
         loadModels()
+        loadTseModels()
         
         recognitionManager.onPartialResult = { text ->
             viewModelScope.launch { _partialText.emit(text) }
@@ -126,6 +159,13 @@ class HomeViewModel @JvmOverloads constructor(
                     val model = _models.find { it.name == settings.selectedModelName }
                     if (model != null) {
                         _selectedModel.value = model
+                    }
+                }
+
+                if (settings.selectedTseModelName.isNotBlank()) {
+                    val tseModel = _tseModels.find { it.name == settings.selectedTseModelName }
+                    if (tseModel != null) {
+                        _selectedTseModel.value = tseModel
                     }
                 }
                 refreshAudioRoutingStatus()
@@ -218,6 +258,105 @@ class HomeViewModel @JvmOverloads constructor(
             viewModelScope.launch {
                 settingsManager.updateSettings(userSettings.value.copy(selectedModelName = name))
             }
+        }
+    }
+
+    private fun loadTseModels() {
+        viewModelScope.launch {
+            userSettings.collectLatest { settings ->
+                val list = TseModelManager.listModels(getApplication(), settings.userId)
+                _tseModels.clear()
+                _tseModels.addAll(list)
+                
+                // If no TSE model selected yet, or selected TSE model not in list, pick first or use settings
+                if (_selectedTseModel.value == null || _tseModels.none { it.name == _selectedTseModel.value?.name }) {
+                    val savedModel = if (settings.selectedTseModelName.isNotBlank()) 
+                        list.find { it.name == settings.selectedTseModelName } else null
+                    _selectedTseModel.value = savedModel ?: list.firstOrNull()
+                }
+            }
+        }
+    }
+
+    fun updateTseModelName(name: String) {
+        val tseModel = _tseModels.find { it.name == name }
+        if (tseModel != null) {
+            _selectedTseModel.value = tseModel
+            viewModelScope.launch {
+                settingsManager.updateSettings(userSettings.value.copy(selectedTseModelName = name))
+            }
+        }
+    }
+
+    fun deleteTseModel(tseModel: TseModel) {
+        if (TseModelManager.deleteModel(getApplication(), userSettings.value.userId, tseModel.name)) {
+            loadTseModels()
+        }
+    }
+
+    fun showRemoteTseModelsDialog() {
+        _showRemoteTseModelsDialog.value = true
+        fetchRemoteTseModels()
+    }
+
+    fun dismissRemoteTseModelsDialog() {
+        _showRemoteTseModelsDialog.value = false
+    }
+
+    private fun fetchRemoteTseModels() {
+        isFetchingRemoteTseModels = true
+        remoteTseModelsErrorMessage = null
+        viewModelScope.launch {
+            try {
+                val selectedRemoteTseModelName = selectedTseModel?.name
+                    ?: userSettings.value.selectedTseModelName.ifBlank { "default" }
+                val remoteTseModelResult = withContext(Dispatchers.IO) {
+                    remoteTseModelRepository.listRemoteTseModels(
+                        modelApiBaseUrl = userSettings.value.backendUrl,
+                        userId = userSettings.value.userId,
+                        selectedModelName = selectedRemoteTseModelName,
+                        allowInsecureTls = userSettings.value.allowInsecureTls
+                    )
+                }
+                _remoteTseModels.clear()
+                _remoteTseModels.addAll(remoteTseModelResult.models)
+                remoteTseModelsErrorMessage = remoteTseModelResult.errorMessage
+            } finally {
+                isFetchingRemoteTseModels = false
+            }
+        }
+    }
+
+    fun downloadTseModel(remoteModel: RemoteModelDescriptor) {
+        viewModelScope.launch {
+            _isDownloadingTse.value = true
+            _downloadTseProgress.value = null
+            val result = withContext(Dispatchers.IO) {
+                remoteTseModelRepository.downloadTseModel(
+                    modelApiBaseUrl = userSettings.value.backendUrl,
+                    userId = userSettings.value.userId,
+                    remoteModel = remoteModel,
+                    userModelsDir = getApplication<Application>().filesDir.resolve("tse_models/${userSettings.value.userId}"),
+                    allowInsecureTls = userSettings.value.allowInsecureTls,
+                    onProgress = { progress -> _downloadTseProgress.value = progress }
+                )
+            }
+            _isDownloadingTse.value = false
+            _downloadTseProgress.value = null
+
+            result.fold(
+                onSuccess = {
+                    _downloadEventFlow.emit(DownloadUiEvent.ShowToast("Download complete: ${remoteModel.name}"))
+                    loadTseModels()
+                },
+                onFailure = { error ->
+                    _downloadEventFlow.emit(
+                        DownloadUiEvent.ShowToast(
+                            error.message ?: "Download failed: ${remoteModel.name}"
+                        )
+                    )
+                }
+            )
         }
     }
 

@@ -66,6 +66,7 @@ import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmStatus
 import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.widgets.RemoteModelsManager
+import tw.com.johnnyhng.eztalk.asr.widgets.RemoteTseModelsManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -185,6 +186,14 @@ fun SettingsScreen(
     val isDownloading by homeViewModel.isDownloadingFlow.collectAsState()
     val downloadProgress by homeViewModel.downloadProgressFlow.collectAsState()
     val canDeleteModel = homeViewModel.canDeleteModel
+
+    val showRemoteTseModelsDialog by homeViewModel.showRemoteTseModelsDialog.collectAsState()
+    val tseModels = homeViewModel.tseModels
+    val selectedTseModel = homeViewModel.selectedTseModel
+    var tseModelMenuExpanded by remember { mutableStateOf(false) }
+    val isDownloadingTse by homeViewModel.isDownloadingTseFlow.collectAsState()
+    val downloadTseProgress by homeViewModel.downloadTseProgressFlow.collectAsState()
+    val canDeleteTseModel = homeViewModel.canDeleteTseModel
     val entryScreenOptions = listOf(
         NavRoutes.Home.route to context.getString(R.string.home),
         NavRoutes.Translate.route to context.getString(R.string.translate),
@@ -329,6 +338,10 @@ fun SettingsScreen(
 
     if (showRemoteModelsDialog) {
         RemoteModelsManager(homeViewModel = homeViewModel)
+    }
+
+    if (showRemoteTseModelsDialog) {
+        RemoteTseModelsManager(homeViewModel = homeViewModel)
     }
 
     Column(
@@ -517,6 +530,70 @@ fun SettingsScreen(
         }
         if (isDownloading) {
             val progress = downloadProgress
+            if (progress != null) {
+                LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+
+        // TSE Model Selection
+        Column(modifier = Modifier.padding(vertical = 16.dp)) {
+            Text(stringResource(R.string.tse_model), style = MaterialTheme.typography.titleMedium)
+            ExposedDropdownMenuBox(
+                expanded = tseModelMenuExpanded,
+                onExpandedChange = {
+                    if (!isDownloadingTse) {
+                        tseModelMenuExpanded = !tseModelMenuExpanded
+                    }
+                },
+            ) {
+                OutlinedTextField(
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    readOnly = true,
+                    value = selectedTseModel?.name ?: stringResource(R.string.no_tse_model_selected),
+                    onValueChange = {},
+                    label = { Text(stringResource(R.string.tse_model)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tseModelMenuExpanded) },
+                    enabled = !isDownloadingTse
+                )
+                ExposedDropdownMenu(
+                    expanded = tseModelMenuExpanded,
+                    onDismissRequest = { tseModelMenuExpanded = false },
+                    modifier = Modifier.exposedDropdownSize()
+                ) {
+                    tseModels.forEach { model ->
+                        DropdownMenuItem(
+                            text = { Text(model.name) },
+                            onClick = {
+                                homeViewModel.updateTseModelName(model.name)
+                                tseModelMenuExpanded = false
+                            },
+                            leadingIcon = {
+                                RadioButton(
+                                    selected = selectedTseModel?.name == model.name,
+                                    onClick = null
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onClick = {
+                homeViewModel.showRemoteTseModelsDialog()
+            }, enabled = !isDownloadingTse && backendUrl.isNotBlank()) {
+                Icon(Icons.Default.Cloud, contentDescription = stringResource(R.string.check_version))
+            }
+            IconButton(onClick = {
+                selectedTseModel?.let(homeViewModel::deleteTseModel)
+            }, enabled = !isDownloadingTse && canDeleteTseModel) {
+                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_tse_model))
+            }
+        }
+        if (isDownloadingTse) {
+            val progress = downloadTseProgress
             if (progress != null) {
                 LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
             } else {

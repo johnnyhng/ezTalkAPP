@@ -7,6 +7,9 @@ internal object BackendEndpoints {
     private const val LIST_MODELS_SEGMENT = "list_models"
     private const val CHECK_UPDATE_SEGMENT = "check_update"
     private const val FILES_SEGMENT = "files"
+    private const val LIST_TSE_MODELS_SEGMENT = "list_tse_models"
+    private const val CHECK_TSE_UPDATE_SEGMENT = "check_tse_update"
+    private const val TSE_FILES_SEGMENT = "tse_files"
 
     fun apiBaseUrl(baseUrl: String): String = baseUrl.trim().removeSuffix("/")
 
@@ -27,6 +30,15 @@ internal object BackendEndpoints {
 
     fun downloadFile(baseUrl: String, userId: String, modelName: String, filename: String): String =
         buildEndpoint(baseUrl, FILES_SEGMENT, userId.substringBefore("@"), modelName, filename)
+
+    fun listTseModels(baseUrl: String, userId: String): String =
+        buildEndpoint(baseUrl, LIST_TSE_MODELS_SEGMENT, userId.substringBefore("@"))
+
+    fun checkTseUpdate(baseUrl: String, userId: String): String =
+        buildEndpoint(baseUrl, CHECK_TSE_UPDATE_SEGMENT, userId.substringBefore("@"))
+
+    fun downloadTseFile(baseUrl: String, userId: String, modelName: String, filename: String): String =
+        buildEndpoint(baseUrl, TSE_FILES_SEGMENT, userId.substringBefore("@"), modelName, filename)
 
     private fun buildEndpoint(baseUrl: String, vararg segments: String): String {
         val apiBase = apiBaseUrl(baseUrl)

@@ -216,3 +216,129 @@ internal fun downloadModelFileResult(
         ModelDownloadResult(success = false, errorMessage = detail)
     }
 }
+
+internal fun buildTseModelFileUrl(
+    baseUrl: String,
+    userId: String,
+    modelName: String,
+    filename: String
+): String = BackendEndpoints.downloadTseFile(baseUrl, userId, modelName, filename)
+
+internal fun listRemoteTseModelsResult(
+    baseUrl: String,
+    userId: String,
+    allowInsecureTls: Boolean = false
+): RemoteModelListResult {
+    return try {
+        val connection = executeRequestWithRedirects(
+            endpoint = BackendEndpoints.listTseModels(baseUrl, userId),
+            method = "GET",
+            allowInsecureTls = allowInsecureTls,
+            connectTimeoutMs = 15000,
+            readTimeoutMs = 15000
+        ) ?: return RemoteModelListResult(emptyList(), "Unable to create remote TSE model request")
+
+        val responseCode = connection.responseCode
+        if (!isSuccessfulResponse(responseCode)) {
+            Log.e(TAG, "listRemoteTseModels failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
+            return RemoteModelListResult(
+                models = emptyList(),
+                errorMessage = "Remote TSE model request failed with HTTP $responseCode"
+            )
+        }
+
+        val responseBody = readStreamText(connection.inputStream)
+            ?: return RemoteModelListResult(emptyList(), "Remote TSE model response was empty")
+        RemoteModelListResult(parseRemoteModelList(responseBody).models)
+    } catch (e: Exception) {
+        val detail = TLSExpireResolver.resolveMessage(e, "listRemoteTseModels failed")
+        Log.e(TAG, "Exception during listRemoteTseModels: $detail", e)
+        RemoteModelListResult(emptyList(), detail)
+    }
+}
+
+internal fun checkTseModelUpdate(
+    baseUrl: String,
+    userId: String,
+    modelName: String,
+    allowInsecureTls: Boolean = false
+): RemoteModelUpdate? {
+    return try {
+        val connection = executeRequestWithRedirects(
+            endpoint = BackendEndpoints.checkTseUpdate(baseUrl, userId),
+            method = "GET",
+            allowInsecureTls = allowInsecureTls,
+            connectTimeoutMs = 15000,
+            readTimeoutMs = 15000
+        ) ?: return null
+
+        val responseCode = connection.responseCode
+        if (!isSuccessfulResponse(responseCode)) {
+            Log.e(TAG, "checkTseModelUpdate failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
+            return null
+        }
+
+        val responseBody = readStreamText(connection.inputStream) ?: return null
+        parseRemoteModelUpdate(responseBody, modelName)
+    } catch (e: Exception) {
+        val detail = TLSExpireResolver.resolveMessage(e, "checkTseModelUpdate failed")
+        Log.e(TAG, "Exception during checkTseModelUpdate: $detail", e)
+        null
+    }
+}
+
+internal fun downloadTseModelFileResult(
+    baseUrl: String,
+    userId: String,
+    modelName: String,
+    filename: String,
+    targetFile: File,
+    allowInsecureTls: Boolean = false,
+    onProgress: (Float?) -> Unit = {}
+): ModelDownloadResult {
+    return try {
+        val connection = executeRequestWithRedirects(
+            endpoint = buildTseModelFileUrl(baseUrl, userId, modelName, filename),
+            method = "GET",
+            allowInsecureTls = allowInsecureTls,
+            connectTimeoutMs = 15000,
+            readTimeoutMs = 15000
+        ) ?: return ModelDownloadResult(false, "Unable to create TSE model download request")
+
+        val responseCode = connection.responseCode
+        if (!isSuccessfulResponse(responseCode)) {
+            Log.e(TAG, "downloadTseModelFile failed. Response code: $responseCode, message: ${connection.responseMessage}")
+            Log.e(TAG, "Error body: ${readStreamText(connection.errorStream)}")
+            return ModelDownloadResult(
+                success = false,
+                errorMessage = "TSE model download failed with HTTP $responseCode"
+            )
+        }
+
+        targetFile.parentFile?.mkdirs()
+        val contentLength = connection.contentLengthLong
+        connection.inputStream.use { input ->
+            FileOutputStream(targetFile).use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var bytesRead: Int
+                var totalRead = 0L
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    totalRead += bytesRead
+                    if (contentLength > 0L) {
+                        onProgress((totalRead.toFloat() / contentLength).coerceIn(0f, 1f))
+                    } else {
+                        onProgress(null)
+                    }
+                }
+            }
+        }
+        ModelDownloadResult(success = true)
+    } catch (e: Exception) {
+        val detail = TLSExpireResolver.resolveMessage(e, "downloadTseModelFile failed")
+        Log.e(TAG, "Exception during downloadTseModelFile: $detail", e)
+        ModelDownloadResult(success = false, errorMessage = detail)
+    }
+}

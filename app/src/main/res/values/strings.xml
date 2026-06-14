@@ -29,10 +29,15 @@
     <string name="gemini_oauth_status_invalid_scope">Gemini OAuth: invalid_scope. Check Google Cloud consent screen, add the generative-language.retriever scope, add your account to test users, and enable the Generative Language API.</string>
     <string name="gemini_oauth_status_unknown_error">Gemini OAuth token check failed</string>
     <string name="asr_model">ASR Model</string>
+    <string name="tse_model">TSE Model</string>
     <string name="asr_loading_title">ASR loading</string>
     <string name="asr_loading_message">Loading ASR model, please wait.</string>
     <string name="no_model_selected">No model selected</string>
+    <string name="no_tse_model_selected">No TSE model selected</string>
     <string name="selected_model">Selected Model</string>
+    <string name="delete_tse_model">Delete TSE model</string>
+    <string name="available_remote_tse_models">Available Remote TSE Models</string>
+    <string name="no_remote_tse_models_found">No remote TSE models found.</string>
     <string name="no_models_found">No models found</string>
     <string name="model_download_url">Model Download URL</string>
     <string name="check_version">Check version</string>
