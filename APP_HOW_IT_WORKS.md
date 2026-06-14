@@ -111,6 +111,13 @@ The main state/control classes live under [app/src/main/java/tw/com/johnnyhng/ez
 - [RemoteModelRepository.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/RemoteModelRepository.kt)
   - lists remote models from backend
   - downloads selected model files into the local per-user model directory
+- [TseModelManager.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/TseModelManager.kt)
+  - lists available local TSE models per user (expects both `model.onnx` and `dvector.bin` inside folder)
+  - copies default TSE assets to cache on demand
+  - deletes custom TSE models
+- [RemoteTseModelRepository.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/managers/RemoteTseModelRepository.kt)
+  - lists remote TSE models from backend
+  - downloads selected TSE model files (`model.onnx` and `dvector.bin`) into the local per-user TSE model directory
 - [SpeakerViewModel.kt](/home/hhs/workspace/ezTalkAPP/app/src/main/java/tw/com/johnnyhng/eztalk/asr/speaker/SpeakerViewModel.kt)
   - owns local speaker explorer state
   - owns local folder / txt rename dialogs and progress state
@@ -203,6 +210,7 @@ Important settings include:
 - `enableTtsFeedback`
 - `autoplay`
 - `selectedModelName`
+- `selectedTseModelName`
 - `enableHomeLlmCorrection`
 - `enableTranslateLlmCorrection`
 - `includeRemoteCandidatesInUtteranceVariants`
@@ -380,11 +388,24 @@ TSE is integrated across all screens that capture audio:
 - **`SpeakerAsrController`**
 
 If `useTseDetection` is enabled in settings:
-1. The app tries to initialize `TseAudioPreprocessor` with the ONNX model and d-vector assets.
-2. If initialization succeeds, VAD input source becomes `TSE_PROCESSED` and runs on the processed stream.
-3. If it fails (e.g. missing assets), it logs `RAW_FALLBACK_TSE_INIT_FAILED` and falls back to raw mic audio.
-4. If TSE is disabled, it logs `RAW_FALLBACK_TSE_DISABLED`.
-5. Silent fallbacks are prohibited; the active VAD runtime and input source are logged under `TAG=ezTalk-VAD` on every utterance.
+1. The app queries `TseModelManager` to resolve the current active `TseModel` path based on the user's settings. If none is explicitly selected or if files are missing, it falls back to the default TSE assets (extracting them to cache if needed).
+2. The app tries to initialize `TseAudioPreprocessor` with the resolved paths of `model.onnx` and `dvector.bin`.
+3. If initialization succeeds, VAD input source becomes `TSE_PROCESSED` and runs on the processed stream.
+4. If it fails (e.g. missing files), it logs `RAW_FALLBACK_TSE_INIT_FAILED` and falls back to raw mic audio.
+5. If TSE is disabled, it logs `RAW_FALLBACK_TSE_DISABLED`.
+6. Silent fallbacks are prohibited; the active VAD runtime and input source are logged under `TAG=ezTalk-VAD` on every utterance.
+
+### Dynamic Model Selection and Remote Download
+
+TSE models can be managed dynamically rather than being hardcoded to internal assets.
+* **Storage Location**: Dynamic TSE model folders are kept under `files/tse_models/<userId>/<modelName>/`. A valid model folder must contain both `model.onnx` and `dvector.bin`.
+* **API Endpoints**:
+  - `GET <backendUrl>/list_tse_models/<user_id>` returns a list of available remote TSE models.
+  - `GET <backendUrl>/check_tse_update/<user_id>` checks if a newer version of the selected model is available by comparing SHA-256 hashes.
+  - `GET <backendUrl>/tse_files/<user_id>/<modelName>/<fileName>` downloads the requested model files.
+* **UI Controls**:
+  - `SettingsScreen` includes a dropdown list of all active local TSE models.
+  - Users can launch a `RemoteTseModelsManager` dialog from settings to see the list of remote TSE models, view download progress, trigger downloads, or delete local TSE models to reclaim space.
 
 ## Main recognition flow
 
