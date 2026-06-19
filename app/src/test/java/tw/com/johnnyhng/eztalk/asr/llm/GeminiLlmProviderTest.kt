@@ -4,8 +4,11 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.net.HttpURLConnection
 
+@RunWith(RobolectricTestRunner::class)
 class GeminiLlmProviderTest {
     @Test
     fun generate_returnsParsedResponseOnSuccess() = runBlocking {

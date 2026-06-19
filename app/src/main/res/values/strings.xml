@@ -46,8 +46,9 @@
     <string name="advanced_settings">Advanced settings</string>
     <string name="speaker_llm_execution_mode_label">LLM execution mode</string>
     <string name="speaker_llm_execution_mode_auto_local">Local (Auto)</string>
+    <string name="speaker_llm_execution_mode_local_gemma">Gemma 2 2B (MediaPipe)</string>
     <string name="speaker_llm_execution_mode_cloud">Cloud LLM</string>
-    <string name="speaker_llm_execution_mode_summary">Cloud LLM is the default because local Gemini Nano currently performs worse for Chinese. Switch to Local (Auto) only when you want to test on-device fallback.</string>
+    <string name="speaker_llm_execution_mode_summary">Cloud LLM is the default because local Gemini Nano currently performs worse for Chinese. Switch to Local (Auto) or Gemma 2 2B only when you want to test on-device fallback.</string>
     <string name="speech_detection_mode_label">Speech detection mode</string>
     <string name="speech_detection_mode_vad">VAD (default)</string>
     <string name="speech_detection_mode_tse">TSE (user voice detection)</string>
@@ -77,6 +78,12 @@
     <string name="speaker_local_llm_status_downloading">Downloading</string>
     <string name="speaker_local_llm_status_unavailable">Unavailable</string>
     <string name="speaker_local_llm_status_error">Error: %1$s</string>
+    <string name="speaker_local_gemma_status_label">Local Gemma 2 2B: %1$s</string>
+    <string name="speaker_local_gemma_download">Download Gemma 2 2B</string>
+    <string name="speaker_local_gemma_refresh">Refresh Gemma status</string>
+    <string name="speaker_local_gemma_download_complete">Gemma 2 2B download complete</string>
+    <string name="speaker_local_gemma_download_failed">Gemma 2 2B download failed: %1$s</string>
+    <string name="speaker_local_gemma_download_progress">Gemma: Downloaded %1$d / %2$d bytes</string>
     <string name="allow_insecure_tls">Allow insecure TLS</string>
     <string name="allow_insecure_tls_summary">Bypass certificate validation for backend requests. Short-term use only.</string>
     <string name="delay">Delay: %1$d ms</string>

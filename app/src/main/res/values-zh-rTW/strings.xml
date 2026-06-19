@@ -41,8 +41,9 @@
     <string name="advanced_settings">進階設定</string>
     <string name="speaker_llm_execution_mode_label">LLM 執行模式</string>
     <string name="speaker_llm_execution_mode_auto_local">Local（Auto）</string>
+    <string name="speaker_llm_execution_mode_local_gemma">Gemma 2 2B (MediaPipe)</string>
     <string name="speaker_llm_execution_mode_cloud">Cloud LLM</string>
-    <string name="speaker_llm_execution_mode_summary">目前預設使用 Cloud LLM，因為 local Gemini Nano 對中文表現較差。只有在你要測試裝置端 fallback 時，才建議切到 Local（Auto）。</string>
+    <string name="speaker_llm_execution_mode_summary">目前預設使用 Cloud LLM，因為 local Gemini Nano 對中文表現較差。只有在你要測試裝置端 fallback 時，才建議切到 Local（Auto）或 Gemma 2 2B。</string>
     <string name="speech_detection_mode_label">語音偵測模式</string>
     <string name="speech_detection_mode_vad">VAD（預設）</string>
     <string name="speech_detection_mode_tse">TSE（使用者語音偵測）</string>
@@ -72,6 +73,12 @@
     <string name="speaker_local_llm_status_downloading">下載中</string>
     <string name="speaker_local_llm_status_unavailable">不可用</string>
     <string name="speaker_local_llm_status_error">錯誤：%1$s</string>
+    <string name="speaker_local_gemma_status_label">Local Gemma 2 2B：%1$s</string>
+    <string name="speaker_local_gemma_download">下載 Gemma 2 2B</string>
+    <string name="speaker_local_gemma_refresh">重新整理 Gemma 狀態</string>
+    <string name="speaker_local_gemma_download_complete">Gemma 2 2B 下載完成</string>
+    <string name="speaker_local_gemma_download_failed">Gemma 2 2B 下載失敗：%1$s</string>
+    <string name="speaker_local_gemma_download_progress">Gemma：已下載 %1$d / %2$d 位元組</string>
     <string name="allow_insecure_tls">允許不安全的 TLS</string>
     <string name="allow_insecure_tls_summary">略過後端憑證驗證，只建議短期應急使用。</string>
     <string name="delay">延遲: %1$d 毫秒</string>

@@ -40,6 +40,21 @@ internal class SpeakerLlmProviderFactory(
                 )
             }
 
+            SpeakerLlmExecutionMode.LOCAL_GEMMA -> {
+                val gemmaStatus = LocalGemmaModelManager(appContext).check()
+                val gemmaProvider = if (gemmaStatus is SpeakerLocalLlmStatus.Available) {
+                    LocalGemmaMediapipeLlmProvider(appContext)
+                } else {
+                    null
+                }
+                SpeakerLlmRuntimeSelection(
+                    provider = gemmaProvider ?: cloudProvider,
+                    sourceLabel = if (gemmaProvider != null) "local_gemma" else "cloud",
+                    localStatus = gemmaStatus,
+                    executionMode = executionMode
+                )
+            }
+
             SpeakerLlmExecutionMode.CLOUD -> {
                 SpeakerLlmRuntimeSelection(
                     provider = cloudProvider,
