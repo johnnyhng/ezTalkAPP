@@ -55,6 +55,11 @@ class NativeTSE {
     external fun init(modelPath: String, dvectorPath: String): Boolean
 
     /**
+     * Initialize the TSE Engine for K speakers.
+     */
+    external fun initMulti(modelPath: String, dvectorPaths: Array<String>): Boolean
+
+    /**
      * Initialize with an experimental acceleration mode.
      *
      * `ACCELERATION_NNAPI_ACCELERATOR*` requests ORT NNAPI EP with NNAPI CPU
@@ -68,6 +73,15 @@ class NativeTSE {
     ): Boolean
 
     /**
+     * Initialize K speakers with an experimental acceleration mode.
+     */
+    external fun initWithAccelerationMulti(
+        modelPath: String,
+        dvectorPaths: Array<String>,
+        accelerationMode: Int
+    ): Boolean
+
+    /**
      * Process a single 10 ms audio hop.
      *
      * The native engine keeps its own analysis buffer, synthesis overlap buffer,
@@ -77,6 +91,12 @@ class NativeTSE {
      * @return Processed FloatArray or null if failed
      */
     external fun processFrame(audioFrame: FloatArray): FloatArray?
+
+    /**
+     * Process a single 10 ms audio hop for K speakers.
+     * Returns a flat FloatArray of size K * 160.
+     */
+    external fun processFrameMulti(audioFrame: FloatArray): FloatArray?
 
     /**
      * Reset internal state (buffers and history) for a new utterance
