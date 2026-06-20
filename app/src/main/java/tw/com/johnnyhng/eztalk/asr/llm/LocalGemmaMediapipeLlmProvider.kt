@@ -30,8 +30,6 @@ internal class LocalGemmaMediapipeLlmProvider(
             val options = LlmInference.LlmInferenceOptions.builder()
                 .setModelPath(modelPath)
                 .setMaxTokens(1024)
-                .setTemperature(0.0f)
-                .setTopK(3)
                 .build()
             
             val inference = LlmInference.createFromOptions(context, options)

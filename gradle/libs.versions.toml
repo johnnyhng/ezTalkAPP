@@ -14,7 +14,7 @@ appcompat = "1.7.1"
 googleServices = "4.4.3"
 firebaseAuth = "23.1.0"
 firebaseFirestore = "25.1.4"
-mediapipeTasksGenai = "0.10.14"
+mediapipeTasksGenai = "0.10.35"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
