@@ -96,6 +96,10 @@
     <string name="speaker_local_gemma4_url_summary">Specify a custom model URL to download from your own server or Hugging Face.</string>
     <string name="speaker_local_gemma4_token_label">Hugging Face Access Token (Optional)</string>
     <string name="speaker_local_gemma4_token_summary">Enter your Hugging Face Token if the download URL is a gated repository.</string>
+    <string name="speaker_local_gemma4_import">Import local .litertlm file</string>
+    <string name="speaker_local_gemma4_import_success">Model imported successfully.</string>
+    <string name="speaker_local_gemma4_import_failed">Failed to import model.</string>
+    <string name="speaker_local_gemma4_import_error">Import error: %1$s</string>
     <string name="allow_insecure_tls">Allow insecure TLS</string>
     <string name="allow_insecure_tls_summary">Bypass certificate validation for backend requests. Short-term use only.</string>
     <string name="delay">Delay: %1$d ms</string>

@@ -69,6 +69,8 @@ import tw.com.johnnyhng.eztalk.asr.managers.DownloadUiEvent
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.widgets.RemoteModelsManager
 import tw.com.johnnyhng.eztalk.asr.widgets.RemoteTseModelsManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -312,6 +314,45 @@ fun SettingsScreen(
             geminiAuthStatus = GeminiAuthStatus.Error(
                 context.getString(R.string.gemini_oauth_status_consent_denied)
             )
+        }
+    }
+
+    val gemma4FilePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        val success = localGemma4ModelManager.importModel(inputStream)
+                        withContext(Dispatchers.Main) {
+                            if (success) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.speaker_local_gemma4_import_success),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.speaker_local_gemma4_import_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            refreshLocalGemma4Status()
+                        }
+                    }
+                } catch (e: java.lang.Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.speaker_local_gemma4_import_error, e.message),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        refreshLocalGemma4Status()
+                    }
+                }
+            }
         }
     }
 
@@ -1212,6 +1253,12 @@ fun SettingsScreen(
                             enabled = !isDownloading && !isLocalGemma4DownloadRunning
                         ) {
                             Text(stringResource(R.string.speaker_local_gemma4_refresh))
+                        }
+                        Button(
+                            onClick = { gemma4FilePickerLauncher.launch("*/*") },
+                            enabled = !isDownloading && !isLocalGemma4DownloadRunning
+                        ) {
+                            Text(stringResource(R.string.speaker_local_gemma4_import))
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))

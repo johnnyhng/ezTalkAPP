@@ -91,6 +91,10 @@
     <string name="speaker_local_gemma4_url_summary">指定從您自己的伺服器或 Hugging Face 下載模型的自訂網址。</string>
     <string name="speaker_local_gemma4_token_label">Hugging Face 存取 Token (選填)</string>
     <string name="speaker_local_gemma4_token_summary">若下載網址為受限的 Hugging Face 儲存庫，請在此輸入您的 Token。</string>
+    <string name="speaker_local_gemma4_import">匯入本機 .litertlm 檔案</string>
+    <string name="speaker_local_gemma4_import_success">模型匯入成功。</string>
+    <string name="speaker_local_gemma4_import_failed">模型匯入失敗。</string>
+    <string name="speaker_local_gemma4_import_error">匯入錯誤：%1$s</string>
     <string name="allow_insecure_tls">允許不安全的 TLS</string>
     <string name="allow_insecure_tls_summary">略過後端憑證驗證，只建議短期應急使用。</string>
     <string name="delay">延遲: %1$d 毫秒</string>

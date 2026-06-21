@@ -116,4 +116,36 @@ internal class LocalGemma4ModelManager(
             SpeakerLocalLlmStatus.Error(e.message ?: "Unknown download error")
         }
     }
+
+    suspend fun importModel(inputStream: java.io.InputStream): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (!modelDir.exists()) {
+                modelDir.mkdirs()
+            }
+            if (tempFile.exists()) {
+                tempFile.delete()
+            }
+            inputStream.use { input ->
+                FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            if (tempFile.exists() && tempFile.length() > 0) {
+                if (modelFile.exists()) {
+                    modelFile.delete()
+                }
+                tempFile.renameTo(modelFile)
+                Log.i(TAG, "Gemma 4 E2B model imported successfully.")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error importing Gemma 4 E2B model", e)
+            if (tempFile.exists()) {
+                tempFile.delete()
+            }
+            false
+        }
+    }
 }
