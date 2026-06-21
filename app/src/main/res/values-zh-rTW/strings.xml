@@ -79,6 +79,18 @@
     <string name="speaker_local_gemma_download_complete">Gemma 2 2B 下載完成</string>
     <string name="speaker_local_gemma_download_failed">Gemma 2 2B 下載失敗：%1$s</string>
     <string name="speaker_local_gemma_download_progress">Gemma：已下載 %1$d / %2$d 位元組</string>
+    
+    <string name="speaker_llm_execution_mode_local_gemma4">Gemma 4 E2B (LiteRT-LM)</string>
+    <string name="speaker_local_gemma4_status_label">Local Gemma 4 E2B：%1$s</string>
+    <string name="speaker_local_gemma4_download">下載 Gemma 4 E2B</string>
+    <string name="speaker_local_gemma4_refresh">重新整理 Gemma 4 狀態</string>
+    <string name="speaker_local_gemma4_download_complete">Gemma 4 E2B 下載完成</string>
+    <string name="speaker_local_gemma4_download_failed">Gemma 4 E2B 下載失敗：%1$s</string>
+    <string name="speaker_local_gemma4_download_progress">Gemma 4：已下載 %1$d / %2$d 位元組</string>
+    <string name="speaker_local_gemma4_url_label">Gemma 4 下載網址</string>
+    <string name="speaker_local_gemma4_url_summary">指定從您自己的伺服器或 Hugging Face 下載模型的自訂網址。</string>
+    <string name="speaker_local_gemma4_token_label">Hugging Face 存取 Token (選填)</string>
+    <string name="speaker_local_gemma4_token_summary">若下載網址為受限的 Hugging Face 儲存庫，請在此輸入您的 Token。</string>
     <string name="allow_insecure_tls">允許不安全的 TLS</string>
     <string name="allow_insecure_tls_summary">略過後端憑證驗證，只建議短期應急使用。</string>
     <string name="delay">延遲: %1$d 毫秒</string>

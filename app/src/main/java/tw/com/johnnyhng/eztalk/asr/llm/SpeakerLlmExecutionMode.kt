@@ -5,6 +5,7 @@ internal enum class SpeakerLlmExecutionMode(
 ) {
     AUTO_LOCAL("auto_local"),
     LOCAL_GEMMA("local_gemma"),
+    LOCAL_GEMMA4("local_gemma4"),
     CLOUD("cloud");
 
     companion object {

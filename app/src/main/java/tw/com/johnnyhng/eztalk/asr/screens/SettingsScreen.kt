@@ -61,6 +61,7 @@ import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
 import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
 import tw.com.johnnyhng.eztalk.asr.llm.GoogleAuthGeminiAccessTokenProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaModelManager
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemma4ModelManager
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmAvailabilityChecker
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmStatus
@@ -181,6 +182,41 @@ private fun localGemmaProgressText(
     }
 }
 
+private fun localGemma4StatusText(
+    context: android.content.Context,
+    status: SpeakerLocalLlmStatus
+): String {
+    return when (status) {
+        SpeakerLocalLlmStatus.Checking -> context.getString(R.string.speaker_local_llm_status_checking)
+        SpeakerLocalLlmStatus.Available -> context.getString(R.string.speaker_local_llm_status_available)
+        SpeakerLocalLlmStatus.Downloadable -> context.getString(R.string.speaker_local_llm_status_downloadable)
+        is SpeakerLocalLlmStatus.Downloading -> context.getString(R.string.speaker_local_llm_status_downloading)
+        SpeakerLocalLlmStatus.Unavailable -> context.getString(R.string.speaker_local_llm_status_unavailable)
+        is SpeakerLocalLlmStatus.Error -> context.getString(
+            R.string.speaker_local_llm_status_error,
+            status.message
+        )
+    }
+}
+
+private fun localGemma4ProgressText(
+    context: android.content.Context,
+    status: SpeakerLocalLlmStatus
+): String? {
+    status as? SpeakerLocalLlmStatus.Downloading ?: return null
+    val downloadedBytes = status.downloadedBytes ?: return null
+    val totalBytes = status.totalBytes
+    return if (totalBytes != null && totalBytes > 0L) {
+        context.getString(
+            R.string.speaker_local_gemma4_download_progress,
+            downloadedBytes,
+            totalBytes
+        )
+    } else {
+        null
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -203,6 +239,8 @@ fun SettingsScreen(
     var audioOutputMenuExpanded by remember { mutableStateOf(false) }
     var advancedSettingsExpanded by rememberSaveable { mutableStateOf(false) }
     var backendUrl by remember(userSettings.backendUrl) { mutableStateOf(userSettings.backendUrl) }
+    var gemma4Url by remember(userSettings.gemma4Url) { mutableStateOf(userSettings.gemma4Url) }
+    var gemma4Token by remember(userSettings.gemma4Token) { mutableStateOf(userSettings.gemma4Token) }
     val geminiModelOptions = listOf(
         "none" to context.getString(R.string.gemini_model_option_none),
         "gemini-2.5-flash" to context.getString(R.string.gemini_model_option_flash_default)
@@ -214,6 +252,7 @@ fun SettingsScreen(
     val speakerLlmExecutionModeOptions = listOf(
         SpeakerLlmExecutionMode.AUTO_LOCAL.storageValue to context.getString(R.string.speaker_llm_execution_mode_auto_local),
         SpeakerLlmExecutionMode.LOCAL_GEMMA.storageValue to context.getString(R.string.speaker_llm_execution_mode_local_gemma),
+        SpeakerLlmExecutionMode.LOCAL_GEMMA4.storageValue to context.getString(R.string.speaker_llm_execution_mode_local_gemma4),
         SpeakerLlmExecutionMode.CLOUD.storageValue to context.getString(R.string.speaker_llm_execution_mode_cloud)
     )
     val selectedSpeakerLlmExecutionModeLabel = speakerLlmExecutionModeOptions
@@ -247,17 +286,22 @@ fun SettingsScreen(
     val tokenProvider = remember(appContext) { GoogleAuthGeminiAccessTokenProvider(appContext) }
     val localLlmAvailabilityChecker = remember(appContext) { SpeakerLocalLlmAvailabilityChecker(appContext) }
     val localGemmaModelManager = remember(appContext) { LocalGemmaModelManager(appContext) }
+    val localGemma4ModelManager = remember(appContext) { LocalGemma4ModelManager(appContext) }
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
     var geminiAuthStatus by remember { mutableStateOf<GeminiAuthStatus>(GeminiAuthStatus.NotSignedIn) }
     var localLlmStatus by remember { mutableStateOf<SpeakerLocalLlmStatus>(SpeakerLocalLlmStatus.Checking) }
     var localGemmaStatus by remember { mutableStateOf<SpeakerLocalLlmStatus>(SpeakerLocalLlmStatus.Checking) }
+    var localGemma4Status by remember { mutableStateOf<SpeakerLocalLlmStatus>(SpeakerLocalLlmStatus.Checking) }
     var isLocalLlmDownloadRunning by remember { mutableStateOf(false) }
     var isLocalGemmaDownloadRunning by remember { mutableStateOf(false) }
+    var isLocalGemma4DownloadRunning by remember { mutableStateOf(false) }
     lateinit var refreshGeminiAuthStatus: (GoogleAccountSession?) -> Unit
     lateinit var refreshLocalLlmStatus: () -> Unit
     lateinit var refreshLocalGemmaStatus: () -> Unit
+    lateinit var refreshLocalGemma4Status: () -> Unit
     lateinit var launchLocalLlmDownload: () -> Unit
     lateinit var launchLocalGemmaDownload: () -> Unit
+    lateinit var launchLocalGemma4Download: () -> Unit
 
     val geminiConsentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -393,6 +437,51 @@ fun SettingsScreen(
         }
     }
 
+    refreshLocalGemma4Status = refresh@{
+        localGemma4Status = SpeakerLocalLlmStatus.Checking
+        scope.launch {
+            localGemma4Status = localGemma4ModelManager.check()
+        }
+    }
+
+    launchLocalGemma4Download = launch@{
+        if (isLocalGemma4DownloadRunning) return@launch
+        isLocalGemma4DownloadRunning = true
+        scope.launch {
+            localGemma4Status = SpeakerLocalLlmStatus.Downloading()
+            val finalStatus = localGemma4ModelManager.download(
+                urlStr = gemma4Url,
+                token = gemma4Token
+            ) { status ->
+                localGemma4Status = status
+            }
+            localGemma4Status = finalStatus
+            isLocalGemma4DownloadRunning = false
+            when (finalStatus) {
+                SpeakerLocalLlmStatus.Available -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.speaker_local_gemma4_download_complete),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                is SpeakerLocalLlmStatus.Error -> {
+                    Toast.makeText(
+                        context,
+                        context.getString(
+                            R.string.speaker_local_gemma4_download_failed,
+                            finalStatus.message
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                else -> Unit
+            }
+        }
+    }
+
     LaunchedEffect(signInManager, context, userSettings.userId) {
         val session = signInManager.getCurrentSession(context)
         googleSession = session
@@ -405,6 +494,7 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         refreshLocalLlmStatus()
         refreshLocalGemmaStatus()
+        refreshLocalGemma4Status()
     }
 
     LaunchedEffect(Unit) {
@@ -1056,6 +1146,72 @@ fun SettingsScreen(
                             enabled = !isDownloading && !isLocalGemmaDownloadRunning
                         ) {
                             Text(stringResource(R.string.speaker_local_gemma_refresh))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = gemma4Url,
+                        onValueChange = {
+                            gemma4Url = it
+                            homeViewModel.updateGemma4Url(it)
+                        },
+                        label = { Text(stringResource(R.string.speaker_local_gemma4_url_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isDownloading && !isLocalGemma4DownloadRunning
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = gemma4Token,
+                        onValueChange = {
+                            gemma4Token = it
+                            homeViewModel.updateGemma4Token(it)
+                        },
+                        label = { Text(stringResource(R.string.speaker_local_gemma4_token_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isDownloading && !isLocalGemma4DownloadRunning
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.speaker_local_gemma4_status_label,
+                            localGemma4StatusText(context, localGemma4Status)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    localGemma4ProgressText(context, localGemma4Status)?.let { progressText ->
+                        Text(
+                            text = progressText,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (localGemma4Status is SpeakerLocalLlmStatus.Downloading) {
+                        val progress = localLlmProgress(localGemma4Status)
+                        if (progress != null) {
+                            LinearProgressIndicator(
+                                progress = progress,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { launchLocalGemma4Download() },
+                            enabled = !isDownloading &&
+                                !isLocalGemma4DownloadRunning &&
+                                localGemma4Status == SpeakerLocalLlmStatus.Downloadable
+                        ) {
+                            Text(stringResource(R.string.speaker_local_gemma4_download))
+                        }
+                        Button(
+                            onClick = { refreshLocalGemma4Status() },
+                            enabled = !isDownloading && !isLocalGemma4DownloadRunning
+                        ) {
+                            Text(stringResource(R.string.speaker_local_gemma4_refresh))
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))

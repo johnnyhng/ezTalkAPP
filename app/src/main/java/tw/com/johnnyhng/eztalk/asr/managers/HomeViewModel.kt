@@ -503,6 +503,12 @@ class HomeViewModel @JvmOverloads constructor(
     fun updatePreferCommunicationDeviceRouting(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(preferCommunicationDeviceRouting = v))
     }
+    fun updateGemma4Url(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(gemma4Url = v))
+    }
+    fun updateGemma4Token(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(gemma4Token = v))
+    }
     fun reportAudioInputRoutingState(message: String?, activeInputLabel: String? = null) {
         _audioRoutingLastApplyMessage.value = message
         if (activeInputLabel != null) {

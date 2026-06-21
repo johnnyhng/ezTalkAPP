@@ -37,6 +37,8 @@ private val preferredAudioOutputDeviceIdKey = intPreferencesKey("preferred_audio
 private val allowAppAudioCaptureKey = booleanPreferencesKey("allow_app_audio_capture")
 private val preferCommunicationDeviceRoutingKey =
     booleanPreferencesKey("prefer_communication_device_routing")
+private val gemma4UrlKey = stringPreferencesKey("gemma4_url")
+private val gemma4TokenKey = stringPreferencesKey("gemma4_token")
 private val defaultUserSettings = UserSettings()
 
 internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
@@ -73,7 +75,9 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         allowAppAudioCapture = preferences[allowAppAudioCaptureKey]
             ?: defaultUserSettings.allowAppAudioCapture,
         preferCommunicationDeviceRouting = preferences[preferCommunicationDeviceRoutingKey]
-            ?: defaultUserSettings.preferCommunicationDeviceRouting
+            ?: defaultUserSettings.preferCommunicationDeviceRouting,
+        gemma4Url = preferences[gemma4UrlKey] ?: defaultUserSettings.gemma4Url,
+        gemma4Token = preferences[gemma4TokenKey] ?: defaultUserSettings.gemma4Token
     )
 }
 
@@ -111,6 +115,8 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     }
     preferences[allowAppAudioCaptureKey] = settings.allowAppAudioCapture
     preferences[preferCommunicationDeviceRoutingKey] = settings.preferCommunicationDeviceRouting
+    preferences[gemma4UrlKey] = settings.gemma4Url
+    preferences[gemma4TokenKey] = settings.gemma4Token
 }
 
 class SettingsManager(context: Context) {
