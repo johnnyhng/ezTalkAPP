@@ -16,7 +16,7 @@ data class UserSettings(
     val mobileModelSha256: String = "",
     val entryScreenRoute: String = "home",
     val geminiModel: String = "gemini-2.5-flash",
-    val speakerLlmExecutionMode: String = "cloud",
+    val speakerLlmExecutionMode: String = "local_gemma_litertlm",
     val useTseDetection: Boolean = false,
     val selectedTseModelName: String = "",
     val autoplay: Boolean = false,
