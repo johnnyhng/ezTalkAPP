@@ -95,6 +95,9 @@
     <string name="speaker_local_gemma4_import_success">模型匯入成功。</string>
     <string name="speaker_local_gemma4_import_failed">模型匯入失敗。</string>
     <string name="speaker_local_gemma4_import_error">匯入錯誤：%1$s</string>
+    <string name="speaker_local_gemma4_delete">刪除 Gemma 4 E2B</string>
+    <string name="speaker_local_gemma4_delete_success">模型刪除成功。</string>
+    <string name="speaker_local_gemma4_delete_failed">模型刪除失敗。</string>
     <string name="allow_insecure_tls">允許不安全的 TLS</string>
     <string name="allow_insecure_tls_summary">略過後端憑證驗證，只建議短期應急使用。</string>
     <string name="delay">延遲: %1$d 毫秒</string>

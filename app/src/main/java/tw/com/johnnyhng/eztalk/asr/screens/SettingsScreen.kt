@@ -304,6 +304,7 @@ fun SettingsScreen(
     lateinit var launchLocalLlmDownload: () -> Unit
     lateinit var launchLocalGemmaDownload: () -> Unit
     lateinit var launchLocalGemma4Download: () -> Unit
+    lateinit var launchLocalGemma4Delete: () -> Unit
 
     val geminiConsentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -521,6 +522,24 @@ fun SettingsScreen(
                 else -> Unit
             }
         }
+    }
+
+    launchLocalGemma4Delete = {
+        val success = localGemma4ModelManager.deleteModel()
+        if (success) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.speaker_local_gemma4_delete_success),
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            Toast.makeText(
+                context,
+                context.getString(R.string.speaker_local_gemma4_delete_failed),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        refreshLocalGemma4Status()
     }
 
     LaunchedEffect(signInManager, context, userSettings.userId) {
@@ -1254,11 +1273,23 @@ fun SettingsScreen(
                         ) {
                             Text(stringResource(R.string.speaker_local_gemma4_refresh))
                         }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Button(
                             onClick = { gemma4FilePickerLauncher.launch("*/*") },
                             enabled = !isDownloading && !isLocalGemma4DownloadRunning
                         ) {
                             Text(stringResource(R.string.speaker_local_gemma4_import))
+                        }
+                        Button(
+                            onClick = { launchLocalGemma4Delete() },
+                            enabled = !isDownloading && !isLocalGemma4DownloadRunning && localGemma4Status == SpeakerLocalLlmStatus.Available
+                        ) {
+                            Text(stringResource(R.string.speaker_local_gemma4_delete))
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))

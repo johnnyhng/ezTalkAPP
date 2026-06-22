@@ -100,6 +100,9 @@
     <string name="speaker_local_gemma4_import_success">Model imported successfully.</string>
     <string name="speaker_local_gemma4_import_failed">Failed to import model.</string>
     <string name="speaker_local_gemma4_import_error">Import error: %1$s</string>
+    <string name="speaker_local_gemma4_delete">Delete Gemma 4 E2B</string>
+    <string name="speaker_local_gemma4_delete_success">Model deleted successfully.</string>
+    <string name="speaker_local_gemma4_delete_failed">Failed to delete model.</string>
     <string name="allow_insecure_tls">Allow insecure TLS</string>
     <string name="allow_insecure_tls_summary">Bypass certificate validation for backend requests. Short-term use only.</string>
     <string name="delay">Delay: %1$d ms</string>

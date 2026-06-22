@@ -148,4 +148,20 @@ internal class LocalGemma4ModelManager(
             false
         }
     }
+
+    fun deleteModel(): Boolean {
+        return try {
+            if (modelFile.exists()) {
+                modelFile.delete()
+            }
+            if (tempFile.exists()) {
+                tempFile.delete()
+            }
+            Log.i(TAG, "Gemma 4 E2B model deleted successfully.")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting Gemma 4 E2B model", e)
+            false
+        }
+    }
 }
