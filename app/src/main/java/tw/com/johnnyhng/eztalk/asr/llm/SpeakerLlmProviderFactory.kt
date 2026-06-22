@@ -1,6 +1,8 @@
 package tw.com.johnnyhng.eztalk.asr.llm
 
 import android.content.Context
+import android.util.Log
+import tw.com.johnnyhng.eztalk.asr.TAG
 
 internal data class SpeakerLlmRuntimeSelection(
     val provider: LlmProvider?,
@@ -51,9 +53,13 @@ internal class SpeakerLlmProviderFactory(
                 } else {
                     SpeakerLocalLlmStatus.Downloadable
                 }
+                Log.i(TAG, "SpeakerLlmProviderFactory: LOCAL_GEMMA_LITERT_LM check: modelName='$modelName', status=$gemmaStatus")
                 val gemmaProvider = if (gemmaStatus is SpeakerLocalLlmStatus.Available && modelName.isNotBlank()) {
-                    LocalGemmaLitertLmLlmProvider(appContext, modelManager.getModelFile(modelName).absolutePath)
+                    val path = modelManager.getModelFile(modelName).absolutePath
+                    Log.i(TAG, "SpeakerLlmProviderFactory: Instantiating LocalGemmaLitertLmLlmProvider with model path: $path")
+                    LocalGemmaLitertLmLlmProvider(appContext, path)
                 } else {
+                    Log.w(TAG, "SpeakerLlmProviderFactory: Local model not available. Fallback to Cloud LLM.")
                     null
                 }
                 SpeakerLlmRuntimeSelection(

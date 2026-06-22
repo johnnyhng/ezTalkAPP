@@ -42,6 +42,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -59,7 +61,11 @@ import tw.com.johnnyhng.eztalk.asr.experiment.stripPrefix
 import tw.com.johnnyhng.eztalk.asr.experiment.traditionalChineseEmotions
 import tw.com.johnnyhng.eztalk.asr.experiment.traditionalChineseInitialPhrases
 import tw.com.johnnyhng.eztalk.asr.experiment.zhuyinSingleRowKeyGroups
-import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
+import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmProviderFactory
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmRuntimeSelection
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmStatus
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -71,17 +77,43 @@ fun ExperimentScreen(
     val userSettings by homeViewModel.userSettings.collectAsState()
     val appContext = context.applicationContext
     val geminiModel = userSettings.geminiModel
-    val viewModelFactory = remember(appContext, geminiModel) {
-        val provider = TranscriptCorrectionProviderFactory(appContext).create(geminiModel)
+    val speakerLlmExecutionMode = userSettings.speakerLlmExecutionMode
+    val selectedLocalGemmaModelName = userSettings.selectedLocalGemmaModelName
+
+    var llmProvider by remember { mutableStateOf<LlmProvider?>(null) }
+    var hasLoadedProvider by remember { mutableStateOf(false) }
+
+    LaunchedEffect(geminiModel, speakerLlmExecutionMode, selectedLocalGemmaModelName) {
+        val factory = SpeakerLlmProviderFactory(appContext)
+        val selection = factory.create(
+            geminiModel = geminiModel.takeUnless { it.equals("none", ignoreCase = true) },
+            executionMode = SpeakerLlmExecutionMode.fromStorageValue(speakerLlmExecutionMode),
+            selectedLocalGemmaModelName = selectedLocalGemmaModelName
+        )
+        llmProvider = selection.provider
+        hasLoadedProvider = true
+    }
+
+    if (!hasLoadedProvider) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    val viewModelFactory = remember(appContext, geminiModel, llmProvider) {
         ExperimentViewModelFactory(
             ZhuyinSuggestionModule(
-                llmProvider = provider,
+                llmProvider = llmProvider,
                 llmModel = geminiModel
             )
         )
     }
     val experimentViewModel: ExperimentViewModel = viewModel(
-        key = "experiment-$geminiModel",
+        key = "experiment-$geminiModel-${llmProvider.hashCode()}",
         factory = viewModelFactory
     )
     val uiState by experimentViewModel.uiState.collectAsState()

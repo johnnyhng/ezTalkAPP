@@ -52,7 +52,10 @@ import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
-import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmProviderFactory
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmRuntimeSelection
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmStatus
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.TseModelManager
 import tw.com.johnnyhng.eztalk.asr.data.classes.TseModel
@@ -149,16 +152,38 @@ fun TranslateScreen(
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
     val utteranceVariantBuffer = remember { AsrUtteranceVariantBuffer() }
-    val correctionProviderFactory = remember(appContext) {
-        TranscriptCorrectionProviderFactory(appContext)
+    val llmProviderFactory = remember(appContext) { SpeakerLlmProviderFactory(appContext) }
+    val geminiModel = userSettings.geminiModel.takeUnless { it.equals("none", ignoreCase = true) }
+    var llmRuntimeSelection by remember {
+        mutableStateOf(
+            SpeakerLlmRuntimeSelection(
+                provider = null,
+                sourceLabel = "none",
+                localStatus = SpeakerLocalLlmStatus.Checking,
+                executionMode = SpeakerLlmExecutionMode.AUTO_LOCAL
+            )
+        )
     }
-    val correctionProvider = remember(userSettings.geminiModel, correctionProviderFactory) {
-        correctionProviderFactory.create(userSettings.geminiModel)
+
+    LaunchedEffect(userSettings.geminiModel, userSettings.speakerLlmExecutionMode, userSettings.selectedLocalGemmaModelName) {
+        val executionMode = SpeakerLlmExecutionMode.fromStorageValue(
+            userSettings.speakerLlmExecutionMode
+        )
+        llmRuntimeSelection = llmProviderFactory.create(
+            geminiModel = geminiModel,
+            executionMode = executionMode,
+            selectedLocalGemmaModelName = userSettings.selectedLocalGemmaModelName
+        )
+        Log.i(
+            TAG,
+            "Translate LLM runtime mode=${llmRuntimeSelection.executionMode.storageValue} source=${llmRuntimeSelection.sourceLabel} localStatus=${llmRuntimeSelection.localStatus}"
+        )
     }
-    val transcriptCorrectionModule = remember(correctionProvider, userSettings.geminiModel) {
+
+    val transcriptCorrectionModule = remember(llmRuntimeSelection.provider, geminiModel) {
         TranscriptCorrectionModule(
-            llmProvider = correctionProvider,
-            llmModel = userSettings.geminiModel
+            llmProvider = llmRuntimeSelection.provider,
+            llmModel = geminiModel ?: "gemini-2.5-flash"
         )
     }
 
