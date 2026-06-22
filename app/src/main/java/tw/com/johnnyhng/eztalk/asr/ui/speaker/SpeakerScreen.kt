@@ -203,13 +203,14 @@ fun SpeakerScreen(
         speakerAsrController.start(userSettings)
     }
 
-    LaunchedEffect(userSettings.geminiModel, userSettings.speakerLlmExecutionMode) {
+    LaunchedEffect(userSettings.geminiModel, userSettings.speakerLlmExecutionMode, userSettings.selectedLocalGemmaModelName) {
         val executionMode = SpeakerLlmExecutionMode.fromStorageValue(
             userSettings.speakerLlmExecutionMode
         )
         llmRuntimeSelection = llmProviderFactory.create(
             geminiModel = geminiModel,
-            executionMode = executionMode
+            executionMode = executionMode,
+            selectedLocalGemmaModelName = userSettings.selectedLocalGemmaModelName
         )
         Log.i(
             TAG,

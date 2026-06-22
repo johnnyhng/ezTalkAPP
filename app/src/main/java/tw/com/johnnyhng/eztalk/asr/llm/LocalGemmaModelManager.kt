@@ -11,19 +11,59 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
+internal data class LocalGemmaModel(
+    val name: String,
+    val path: String
+)
+
 internal class LocalGemmaModelManager(
     private val context: Context
 ) {
-    private val modelDir = File(context.filesDir, "models/gemma2_2b")
-    val modelFile = File(modelDir, "model.bin")
-    private val tempFile = File(modelDir, "model.bin.tmp")
+    private val baseDir = File(context.filesDir, "models/local_gemma")
 
     companion object {
-        const val DEFAULT_GEMMA_URL = "https://huggingface.co/google/gemma-2-2b-it-cpu-int4/resolve/main/gemma-2-2b-it-cpu-int4.bin"
+        const val DEFAULT_LOCAL_GEMMA_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-litert-lm.litertlm"
     }
 
-    fun check(): SpeakerLocalLlmStatus {
-        return if (modelFile.exists() && modelFile.length() > 100 * 1024 * 1024) {
+    fun listModels(): List<LocalGemmaModel> {
+        if (!baseDir.exists()) {
+            baseDir.mkdirs()
+        }
+        val list = mutableListOf<LocalGemmaModel>()
+
+        // 1. Scan new layout directories
+        val dirs = baseDir.listFiles()?.filter { it.isDirectory } ?: emptyList()
+        dirs.forEach { modelDir ->
+            val modelFile = File(modelDir, "model.litertlm")
+            if (modelFile.exists() && modelFile.length() > 1024 * 1024) {
+                list.add(LocalGemmaModel(modelDir.name, modelFile.absolutePath))
+            }
+        }
+
+        // 2. Legacy fallback
+        val legacyDir = File(context.filesDir, "models/gemma4_e2b")
+        val legacyFile = File(legacyDir, "model.litertlm")
+        if (legacyFile.exists() && legacyFile.length() > 1024 * 1024) {
+            if (list.none { it.name == "gemma4_e2b" }) {
+                list.add(LocalGemmaModel("gemma4_e2b", legacyFile.absolutePath))
+            }
+        }
+
+        return list.sortedBy { it.name }
+    }
+
+    fun getModelFile(modelName: String): File {
+        if (modelName == "gemma4_e2b") {
+            val legacyDir = File(context.filesDir, "models/gemma4_e2b")
+            return File(legacyDir, "model.litertlm")
+        }
+        val modelDir = File(baseDir, modelName)
+        return File(modelDir, "model.litertlm")
+    }
+
+    fun check(modelName: String): SpeakerLocalLlmStatus {
+        val modelFile = getModelFile(modelName)
+        return if (modelFile.exists() && modelFile.length() > 1024 * 1024) {
             SpeakerLocalLlmStatus.Available
         } else {
             SpeakerLocalLlmStatus.Downloadable
@@ -31,22 +71,41 @@ internal class LocalGemmaModelManager(
     }
 
     suspend fun download(
-        urlStr: String = DEFAULT_GEMMA_URL,
+        urlStr: String = DEFAULT_LOCAL_GEMMA_URL,
+        token: String = "",
         onStatus: (SpeakerLocalLlmStatus) -> Unit = {}
     ): SpeakerLocalLlmStatus = withContext(Dispatchers.IO) {
+        var tempFile: File? = null
         try {
+            // Extract model name from URL
+            val uri = android.net.Uri.parse(urlStr)
+            var fileName = uri.lastPathSegment
+            if (fileName.isNullOrBlank() || !fileName.endsWith(".litertlm")) {
+                fileName = "downloaded_model.litertlm"
+            }
+            val modelName = fileName.removeSuffix(".litertlm")
+            val modelDir = File(baseDir, modelName)
             if (!modelDir.exists()) {
                 modelDir.mkdirs()
             }
+            val modelFile = File(modelDir, "model.litertlm")
+            tempFile = File(modelDir, "model.litertlm.tmp")
+
             if (tempFile.exists()) {
                 tempFile.delete()
             }
 
-            Log.i(TAG, "Starting Gemma 2 2B download from: $urlStr")
+            Log.i(TAG, "Starting Local Gemma download from: $urlStr")
             val url = URL(urlStr)
             val connection = url.openConnection() as HttpURLConnection
             connection.connectTimeout = 15000
             connection.readTimeout = 15000
+            
+            // Set Hugging Face authorization header if token is provided
+            if (token.isNotBlank()) {
+                connection.setRequestProperty("Authorization", "Bearer $token")
+            }
+            
             connection.connect()
 
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
@@ -54,7 +113,7 @@ internal class LocalGemmaModelManager(
             }
 
             val fileLength = connection.contentLengthLong
-            Log.i(TAG, "Gemma 2 2B file length: $fileLength bytes")
+            Log.i(TAG, "Local Gemma file length: $fileLength bytes")
 
             BufferedInputStream(connection.inputStream).use { input ->
                 FileOutputStream(tempFile).use { output ->
@@ -95,17 +154,77 @@ internal class LocalGemmaModelManager(
                     modelFile.delete()
                 }
                 tempFile.renameTo(modelFile)
-                Log.i(TAG, "Gemma 2 2B download completed successfully.")
+                Log.i(TAG, "Local Gemma download completed successfully: $modelName")
                 SpeakerLocalLlmStatus.Available
             } else {
                 SpeakerLocalLlmStatus.Error("Downloaded file is empty")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error downloading Gemma 2 2B model", e)
-            if (tempFile.exists()) {
+            Log.e(TAG, "Error downloading Local Gemma model", e)
+            if (tempFile?.exists() == true) {
                 tempFile.delete()
             }
             SpeakerLocalLlmStatus.Error(e.message ?: "Unknown download error")
+        }
+    }
+
+    suspend fun importModel(inputStream: java.io.InputStream, displayName: String): Boolean = withContext(Dispatchers.IO) {
+        var tempFile: File? = null
+        try {
+            var fileName = displayName
+            if (fileName.isBlank() || !fileName.endsWith(".litertlm")) {
+                fileName = "imported_model.litertlm"
+            }
+            val modelName = fileName.removeSuffix(".litertlm")
+            val modelDir = File(baseDir, modelName)
+            if (!modelDir.exists()) {
+                modelDir.mkdirs()
+            }
+            val modelFile = File(modelDir, "model.litertlm")
+            tempFile = File(modelDir, "model.litertlm.tmp")
+
+            if (tempFile.exists()) {
+                tempFile.delete()
+            }
+            inputStream.use { input ->
+                FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            if (tempFile.exists() && tempFile.length() > 0) {
+                if (modelFile.exists()) {
+                    modelFile.delete()
+                }
+                tempFile.renameTo(modelFile)
+                Log.i(TAG, "Local Gemma model imported successfully: $modelName")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error importing Local Gemma model", e)
+            if (tempFile?.exists() == true) {
+                tempFile.delete()
+            }
+            false
+        }
+    }
+
+    fun deleteModel(modelName: String): Boolean {
+        return try {
+            val modelDir = if (modelName == "gemma4_e2b") {
+                File(context.filesDir, "models/gemma4_e2b")
+            } else {
+                File(baseDir, modelName)
+            }
+            if (modelDir.exists()) {
+                modelDir.deleteRecursively()
+            }
+            Log.i(TAG, "Local Gemma model deleted successfully: $modelName")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting Local Gemma model: $modelName", e)
+            false
         }
     }
 }

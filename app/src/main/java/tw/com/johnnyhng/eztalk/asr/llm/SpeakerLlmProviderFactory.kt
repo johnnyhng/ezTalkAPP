@@ -16,7 +16,8 @@ internal class SpeakerLlmProviderFactory(
 
     suspend fun create(
         geminiModel: String?,
-        executionMode: SpeakerLlmExecutionMode
+        executionMode: SpeakerLlmExecutionMode,
+        selectedLocalGemmaModelName: String
     ): SpeakerLlmRuntimeSelection {
         val localStatus = SpeakerLocalLlmAvailabilityChecker(appContext).check()
         val cloudProvider = geminiModel?.let {
@@ -40,10 +41,18 @@ internal class SpeakerLlmProviderFactory(
                 )
             }
 
-            SpeakerLlmExecutionMode.LOCAL_GEMMA -> {
-                val gemmaStatus = LocalGemmaModelManager(appContext).check()
-                val gemmaProvider = if (gemmaStatus is SpeakerLocalLlmStatus.Available) {
-                    LocalGemmaMediapipeLlmProvider(appContext)
+            SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM -> {
+                val modelManager = LocalGemmaModelManager(appContext)
+                val modelName = selectedLocalGemmaModelName.takeIf { it.isNotBlank() }
+                    ?: modelManager.listModels().firstOrNull()?.name
+                    ?: ""
+                val gemmaStatus = if (modelName.isNotBlank()) {
+                    modelManager.check(modelName)
+                } else {
+                    SpeakerLocalLlmStatus.Downloadable
+                }
+                val gemmaProvider = if (gemmaStatus is SpeakerLocalLlmStatus.Available && modelName.isNotBlank()) {
+                    LocalGemmaLitertLmLlmProvider(appContext, modelManager.getModelFile(modelName).absolutePath)
                 } else {
                     null
                 }
@@ -51,21 +60,6 @@ internal class SpeakerLlmProviderFactory(
                     provider = gemmaProvider ?: cloudProvider,
                     sourceLabel = if (gemmaProvider != null) "local_gemma" else "cloud",
                     localStatus = gemmaStatus,
-                    executionMode = executionMode
-                )
-            }
-
-            SpeakerLlmExecutionMode.LOCAL_GEMMA4 -> {
-                val gemma4Status = LocalGemma4ModelManager(appContext).check()
-                val gemma4Provider = if (gemma4Status is SpeakerLocalLlmStatus.Available) {
-                    LocalGemma4LitertLmLlmProvider(appContext)
-                } else {
-                    null
-                }
-                SpeakerLlmRuntimeSelection(
-                    provider = gemma4Provider ?: cloudProvider,
-                    sourceLabel = if (gemma4Provider != null) "local_gemma4" else "cloud",
-                    localStatus = gemma4Status,
                     executionMode = executionMode
                 )
             }

@@ -2,40 +2,33 @@ package tw.com.johnnyhng.eztalk.asr.llm
 
 import android.content.Context
 import android.util.Log
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.TAG
-import java.io.File
 
-internal class LocalGemmaMediapipeLlmProvider(
-    private val context: Context
+internal class LocalGemmaLitertLmLlmProvider(
+    private val context: Context,
+    private val modelPath: String
 ) : LlmProvider {
-    override val providerName: String = "gemma_mediapipe_local"
-
-    private val modelPath = File(context.filesDir, "models/gemma2_2b/model.bin").absolutePath
+    override val providerName: String = "local_gemma_litertlm"
 
     @Volatile
-    private var llmInference: LlmInference? = null
+    private var engine: Engine? = null
 
-    private fun getOrInitInference(): LlmInference {
-        llmInference?.let { return it }
+    private fun getOrInitEngine(): Engine {
+        engine?.let { return it }
         synchronized(this) {
-            llmInference?.let { return it }
-            Log.i(TAG, "Initializing MediaPipe LlmInference. Model path: $modelPath")
-            
-            // Log target execution environment
-            Log.i(TAG, "Attempting GPU execution with fallback to CPU. Engine details will be logged by MediaPipe GenAI runtime.")
-            
-            val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(modelPath)
-                .setMaxTokens(1024)
-                .build()
-            
-            val inference = LlmInference.createFromOptions(context, options)
-            llmInference = inference
-            Log.i(TAG, "MediaPipe LlmInference created successfully.")
-            return inference
+            engine?.let { return it }
+            Log.i(TAG, "Initializing LiteRT-LM Engine. Model path: $modelPath")
+            val config = EngineConfig(modelPath = modelPath)
+            val initializedEngine = Engine(config)
+            initializedEngine.initialize()
+            engine = initializedEngine
+            Log.i(TAG, "LiteRT-LM Engine initialized successfully.")
+            return initializedEngine
         }
     }
 
@@ -52,9 +45,24 @@ internal class LocalGemmaMediapipeLlmProvider(
                 val promptText = buildPromptText(request)
                 Log.d(TAG, "Formatted local Gemma prompt:\n$promptText")
 
-                val inference = getOrInitInference()
-                val rawText = inference.generateResponse(promptText).trim()
+                val engineInstance = getOrInitEngine()
+                val conversation = engineInstance.createConversation()
+                val responseBuilder = StringBuilder()
+                
+                try {
+                    val responseFlow = conversation.sendMessageAsync(promptText)
+                    responseFlow.collect { token ->
+                        responseBuilder.append(token)
+                    }
+                } finally {
+                    try {
+                        conversation.close()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error closing conversation", e)
+                    }
+                }
 
+                val rawText = responseBuilder.toString().trim()
                 if (rawText.isBlank()) {
                     throw IllegalArgumentException("Local Gemma returned an empty response")
                 }

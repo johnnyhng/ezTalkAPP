@@ -57,11 +57,11 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.audio.AudioRouteDeviceUi
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
+import android.net.Uri
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
 import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
 import tw.com.johnnyhng.eztalk.asr.llm.GoogleAuthGeminiAccessTokenProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaModelManager
-import tw.com.johnnyhng.eztalk.asr.llm.LocalGemma4ModelManager
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmAvailabilityChecker
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmStatus
@@ -184,40 +184,7 @@ private fun localGemmaProgressText(
     }
 }
 
-private fun localGemma4StatusText(
-    context: android.content.Context,
-    status: SpeakerLocalLlmStatus
-): String {
-    return when (status) {
-        SpeakerLocalLlmStatus.Checking -> context.getString(R.string.speaker_local_llm_status_checking)
-        SpeakerLocalLlmStatus.Available -> context.getString(R.string.speaker_local_llm_status_available)
-        SpeakerLocalLlmStatus.Downloadable -> context.getString(R.string.speaker_local_llm_status_downloadable)
-        is SpeakerLocalLlmStatus.Downloading -> context.getString(R.string.speaker_local_llm_status_downloading)
-        SpeakerLocalLlmStatus.Unavailable -> context.getString(R.string.speaker_local_llm_status_unavailable)
-        is SpeakerLocalLlmStatus.Error -> context.getString(
-            R.string.speaker_local_llm_status_error,
-            status.message
-        )
-    }
-}
 
-private fun localGemma4ProgressText(
-    context: android.content.Context,
-    status: SpeakerLocalLlmStatus
-): String? {
-    status as? SpeakerLocalLlmStatus.Downloading ?: return null
-    val downloadedBytes = status.downloadedBytes ?: return null
-    val totalBytes = status.totalBytes
-    return if (totalBytes != null && totalBytes > 0L) {
-        context.getString(
-            R.string.speaker_local_gemma4_download_progress,
-            downloadedBytes,
-            totalBytes
-        )
-    } else {
-        null
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -241,8 +208,8 @@ fun SettingsScreen(
     var audioOutputMenuExpanded by remember { mutableStateOf(false) }
     var advancedSettingsExpanded by rememberSaveable { mutableStateOf(false) }
     var backendUrl by remember(userSettings.backendUrl) { mutableStateOf(userSettings.backendUrl) }
-    var gemma4Url by remember(userSettings.gemma4Url) { mutableStateOf(userSettings.gemma4Url) }
-    var gemma4Token by remember(userSettings.gemma4Token) { mutableStateOf(userSettings.gemma4Token) }
+    var localGemmaUrl by remember(userSettings.localGemmaUrl) { mutableStateOf(userSettings.localGemmaUrl) }
+    var localGemmaToken by remember(userSettings.localGemmaToken) { mutableStateOf(userSettings.localGemmaToken) }
     val geminiModelOptions = listOf(
         "none" to context.getString(R.string.gemini_model_option_none),
         "gemini-2.5-flash" to context.getString(R.string.gemini_model_option_flash_default)
@@ -253,8 +220,7 @@ fun SettingsScreen(
         ?: userSettings.geminiModel
     val speakerLlmExecutionModeOptions = listOf(
         SpeakerLlmExecutionMode.AUTO_LOCAL.storageValue to context.getString(R.string.speaker_llm_execution_mode_auto_local),
-        SpeakerLlmExecutionMode.LOCAL_GEMMA.storageValue to context.getString(R.string.speaker_llm_execution_mode_local_gemma),
-        SpeakerLlmExecutionMode.LOCAL_GEMMA4.storageValue to context.getString(R.string.speaker_llm_execution_mode_local_gemma4),
+        SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM.storageValue to context.getString(R.string.speaker_llm_execution_mode_local_gemma),
         SpeakerLlmExecutionMode.CLOUD.storageValue to context.getString(R.string.speaker_llm_execution_mode_cloud)
     )
     val selectedSpeakerLlmExecutionModeLabel = speakerLlmExecutionModeOptions
@@ -269,6 +235,7 @@ fun SettingsScreen(
     val tseModels = homeViewModel.tseModels
     val selectedTseModel = homeViewModel.selectedTseModel
     var tseModelMenuExpanded by remember { mutableStateOf(false) }
+    var localGemmaMenuExpanded by remember { mutableStateOf(false) }
     val isDownloadingTse by homeViewModel.isDownloadingTseFlow.collectAsState()
     val downloadTseProgress by homeViewModel.downloadTseProgressFlow.collectAsState()
     val canDeleteTseModel = homeViewModel.canDeleteTseModel
@@ -288,23 +255,18 @@ fun SettingsScreen(
     val tokenProvider = remember(appContext) { GoogleAuthGeminiAccessTokenProvider(appContext) }
     val localLlmAvailabilityChecker = remember(appContext) { SpeakerLocalLlmAvailabilityChecker(appContext) }
     val localGemmaModelManager = remember(appContext) { LocalGemmaModelManager(appContext) }
-    val localGemma4ModelManager = remember(appContext) { LocalGemma4ModelManager(appContext) }
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
     var geminiAuthStatus by remember { mutableStateOf<GeminiAuthStatus>(GeminiAuthStatus.NotSignedIn) }
     var localLlmStatus by remember { mutableStateOf<SpeakerLocalLlmStatus>(SpeakerLocalLlmStatus.Checking) }
     var localGemmaStatus by remember { mutableStateOf<SpeakerLocalLlmStatus>(SpeakerLocalLlmStatus.Checking) }
-    var localGemma4Status by remember { mutableStateOf<SpeakerLocalLlmStatus>(SpeakerLocalLlmStatus.Checking) }
     var isLocalLlmDownloadRunning by remember { mutableStateOf(false) }
     var isLocalGemmaDownloadRunning by remember { mutableStateOf(false) }
-    var isLocalGemma4DownloadRunning by remember { mutableStateOf(false) }
     lateinit var refreshGeminiAuthStatus: (GoogleAccountSession?) -> Unit
     lateinit var refreshLocalLlmStatus: () -> Unit
     lateinit var refreshLocalGemmaStatus: () -> Unit
-    lateinit var refreshLocalGemma4Status: () -> Unit
     lateinit var launchLocalLlmDownload: () -> Unit
     lateinit var launchLocalGemmaDownload: () -> Unit
-    lateinit var launchLocalGemma4Download: () -> Unit
-    lateinit var launchLocalGemma4Delete: () -> Unit
+    lateinit var launchLocalGemmaDelete: (String) -> Unit
 
     val geminiConsentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -318,39 +280,66 @@ fun SettingsScreen(
         }
     }
 
-    val gemma4FilePickerLauncher = rememberLauncherForActivityResult(
+    fun getFileName(uri: Uri): String? {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            try {
+                if (cursor != null && cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0) {
+                        result = cursor.getString(index)
+                    }
+                }
+            } finally {
+                cursor?.close()
+            }
+        }
+        if (result == null) {
+            val path = uri.path
+            if (path != null) {
+                val cut = path.lastIndexOf('/')
+                result = if (cut != -1) path.substring(cut + 1) else path
+            }
+        }
+        return result
+    }
+
+    val localGemmaFilePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 try {
+                    val displayName = getFileName(uri) ?: "imported_model.litertlm"
                     context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        val success = localGemma4ModelManager.importModel(inputStream)
+                        val success = localGemmaModelManager.importModel(inputStream, displayName)
                         withContext(Dispatchers.Main) {
                             if (success) {
                                 Toast.makeText(
                                     context,
-                                    context.getString(R.string.speaker_local_gemma4_import_success),
+                                    context.getString(R.string.speaker_local_gemma_import_success),
                                     Toast.LENGTH_SHORT
                                 ).show()
+                                homeViewModel.refreshLocalGemmaModels()
                             } else {
                                 Toast.makeText(
                                     context,
-                                    context.getString(R.string.speaker_local_gemma4_import_failed),
+                                    context.getString(R.string.speaker_local_gemma_import_failed),
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
-                            refreshLocalGemma4Status()
+                            refreshLocalGemmaStatus()
                         }
                     }
                 } catch (e: java.lang.Exception) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(
                             context,
-                            context.getString(R.string.speaker_local_gemma4_import_error, e.message),
+                            context.getString(R.string.speaker_local_gemma_import_error, e.message),
                             Toast.LENGTH_SHORT
                         ).show()
-                        refreshLocalGemma4Status()
+                        refreshLocalGemmaStatus()
                     }
                 }
             }
@@ -438,9 +427,11 @@ fun SettingsScreen(
     }
 
     refreshLocalGemmaStatus = refresh@{
+        val currentModelName = userSettings.selectedLocalGemmaModelName.takeIf { it.isNotBlank() }
+            ?: "gemma-4-E2B-it-litert-lm"
         localGemmaStatus = SpeakerLocalLlmStatus.Checking
         scope.launch {
-            localGemmaStatus = localGemmaModelManager.check()
+            localGemmaStatus = localGemmaModelManager.check(currentModelName)
         }
     }
 
@@ -449,7 +440,10 @@ fun SettingsScreen(
         isLocalGemmaDownloadRunning = true
         scope.launch {
             localGemmaStatus = SpeakerLocalLlmStatus.Downloading()
-            val finalStatus = localGemmaModelManager.download { status ->
+            val finalStatus = localGemmaModelManager.download(
+                urlStr = localGemmaUrl,
+                token = localGemmaToken
+            ) { status ->
                 localGemmaStatus = status
             }
             localGemmaStatus = finalStatus
@@ -461,6 +455,7 @@ fun SettingsScreen(
                         context.getString(R.string.speaker_local_gemma_download_complete),
                         Toast.LENGTH_SHORT
                     ).show()
+                    homeViewModel.refreshLocalGemmaModels()
                 }
 
                 is SpeakerLocalLlmStatus.Error -> {
@@ -479,67 +474,23 @@ fun SettingsScreen(
         }
     }
 
-    refreshLocalGemma4Status = refresh@{
-        localGemma4Status = SpeakerLocalLlmStatus.Checking
-        scope.launch {
-            localGemma4Status = localGemma4ModelManager.check()
-        }
-    }
-
-    launchLocalGemma4Download = launch@{
-        if (isLocalGemma4DownloadRunning) return@launch
-        isLocalGemma4DownloadRunning = true
-        scope.launch {
-            localGemma4Status = SpeakerLocalLlmStatus.Downloading()
-            val finalStatus = localGemma4ModelManager.download(
-                urlStr = gemma4Url,
-                token = gemma4Token
-            ) { status ->
-                localGemma4Status = status
-            }
-            localGemma4Status = finalStatus
-            isLocalGemma4DownloadRunning = false
-            when (finalStatus) {
-                SpeakerLocalLlmStatus.Available -> {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.speaker_local_gemma4_download_complete),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-
-                is SpeakerLocalLlmStatus.Error -> {
-                    Toast.makeText(
-                        context,
-                        context.getString(
-                            R.string.speaker_local_gemma4_download_failed,
-                            finalStatus.message
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-
-                else -> Unit
-            }
-        }
-    }
-
-    launchLocalGemma4Delete = {
-        val success = localGemma4ModelManager.deleteModel()
+    launchLocalGemmaDelete = { modelName ->
+        val success = localGemmaModelManager.deleteModel(modelName)
         if (success) {
             Toast.makeText(
                 context,
-                context.getString(R.string.speaker_local_gemma4_delete_success),
+                context.getString(R.string.speaker_local_gemma_delete_success),
                 Toast.LENGTH_SHORT
             ).show()
+            homeViewModel.refreshLocalGemmaModels()
         } else {
             Toast.makeText(
                 context,
-                context.getString(R.string.speaker_local_gemma4_delete_failed),
+                context.getString(R.string.speaker_local_gemma_delete_failed),
                 Toast.LENGTH_SHORT
             ).show()
         }
-        refreshLocalGemma4Status()
+        refreshLocalGemmaStatus()
     }
 
     LaunchedEffect(signInManager, context, userSettings.userId) {
@@ -554,7 +505,6 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         refreshLocalLlmStatus()
         refreshLocalGemmaStatus()
-        refreshLocalGemma4Status()
     }
 
     LaunchedEffect(Unit) {
@@ -833,6 +783,54 @@ fun SettingsScreen(
                 LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
             } else {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+
+        // Local Gemma Model Selection
+        val localGemmaModels = homeViewModel.localGemmaModels
+        if (localGemmaModels.isNotEmpty()) {
+            Column(modifier = Modifier.padding(vertical = 16.dp)) {
+                Text(stringResource(R.string.local_gemma_model), style = MaterialTheme.typography.titleMedium)
+                ExposedDropdownMenuBox(
+                    expanded = localGemmaMenuExpanded,
+                    onExpandedChange = {
+                        if (!isDownloading) {
+                            localGemmaMenuExpanded = !localGemmaMenuExpanded
+                        }
+                    },
+                ) {
+                    OutlinedTextField(
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        readOnly = true,
+                        value = userSettings.selectedLocalGemmaModelName.takeIf { it.isNotBlank() } ?: stringResource(R.string.no_local_gemma_model_selected),
+                        onValueChange = {},
+                        label = { Text(stringResource(R.string.local_gemma_model)) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = localGemmaMenuExpanded) },
+                        enabled = !isDownloading
+                    )
+                    ExposedDropdownMenu(
+                        expanded = localGemmaMenuExpanded,
+                        onDismissRequest = { localGemmaMenuExpanded = false },
+                        modifier = Modifier.exposedDropdownSize()
+                    ) {
+                        localGemmaModels.forEach { model ->
+                            DropdownMenuItem(
+                                text = { Text(model.name) },
+                                onClick = {
+                                    homeViewModel.updateSelectedLocalGemmaModelName(model.name)
+                                    localGemmaMenuExpanded = false
+                                    refreshLocalGemmaStatus()
+                                },
+                                leadingIcon = {
+                                    RadioButton(
+                                        selected = userSettings.selectedLocalGemmaModelName == model.name,
+                                        onClick = null
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -1164,6 +1162,28 @@ fun SettingsScreen(
                             Text(stringResource(R.string.speaker_local_llm_refresh))
                         }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = localGemmaUrl,
+                        onValueChange = {
+                            localGemmaUrl = it
+                            homeViewModel.updateLocalGemmaUrl(it)
+                        },
+                        label = { Text(stringResource(R.string.speaker_local_gemma_url_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isDownloading && !isLocalGemmaDownloadRunning
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = localGemmaToken,
+                        onValueChange = {
+                            localGemmaToken = it
+                            homeViewModel.updateLocalGemmaToken(it)
+                        },
+                        label = { Text(stringResource(R.string.speaker_local_gemma_token_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isDownloading && !isLocalGemmaDownloadRunning
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = stringResource(
@@ -1189,6 +1209,7 @@ fun SettingsScreen(
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1208,88 +1229,26 @@ fun SettingsScreen(
                             Text(stringResource(R.string.speaker_local_gemma_refresh))
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = gemma4Url,
-                        onValueChange = {
-                            gemma4Url = it
-                            homeViewModel.updateGemma4Url(it)
-                        },
-                        label = { Text(stringResource(R.string.speaker_local_gemma4_url_label)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isDownloading && !isLocalGemma4DownloadRunning
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = gemma4Token,
-                        onValueChange = {
-                            gemma4Token = it
-                            homeViewModel.updateGemma4Token(it)
-                        },
-                        label = { Text(stringResource(R.string.speaker_local_gemma4_token_label)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isDownloading && !isLocalGemma4DownloadRunning
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(
-                            R.string.speaker_local_gemma4_status_label,
-                            localGemma4StatusText(context, localGemma4Status)
-                        ),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    localGemma4ProgressText(context, localGemma4Status)?.let { progressText ->
-                        Text(
-                            text = progressText,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (localGemma4Status is SpeakerLocalLlmStatus.Downloading) {
-                        val progress = localLlmProgress(localGemma4Status)
-                        if (progress != null) {
-                            LinearProgressIndicator(
-                                progress = progress,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        } else {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { launchLocalGemma4Download() },
-                            enabled = !isDownloading &&
-                                !isLocalGemma4DownloadRunning &&
-                                localGemma4Status == SpeakerLocalLlmStatus.Downloadable
-                        ) {
-                            Text(stringResource(R.string.speaker_local_gemma4_download))
-                        }
-                        Button(
-                            onClick = { refreshLocalGemma4Status() },
-                            enabled = !isDownloading && !isLocalGemma4DownloadRunning
-                        ) {
-                            Text(stringResource(R.string.speaker_local_gemma4_refresh))
-                        }
-                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { gemma4FilePickerLauncher.launch("*/*") },
-                            enabled = !isDownloading && !isLocalGemma4DownloadRunning
+                            onClick = { localGemmaFilePickerLauncher.launch("*/*") },
+                            enabled = !isDownloading && !isLocalGemmaDownloadRunning
                         ) {
-                            Text(stringResource(R.string.speaker_local_gemma4_import))
+                            Text(stringResource(R.string.speaker_local_gemma_import))
                         }
                         Button(
-                            onClick = { launchLocalGemma4Delete() },
-                            enabled = !isDownloading && !isLocalGemma4DownloadRunning && localGemma4Status == SpeakerLocalLlmStatus.Available
+                            onClick = {
+                                val currentModelName = userSettings.selectedLocalGemmaModelName.takeIf { it.isNotBlank() }
+                                    ?: "gemma-4-E2B-it-litert-lm"
+                                launchLocalGemmaDelete(currentModelName)
+                            },
+                            enabled = !isDownloading && !isLocalGemmaDownloadRunning && localGemmaStatus == SpeakerLocalLlmStatus.Available
                         ) {
-                            Text(stringResource(R.string.speaker_local_gemma4_delete))
+                            Text(stringResource(R.string.speaker_local_gemma_delete))
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))

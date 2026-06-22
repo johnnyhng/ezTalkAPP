@@ -28,8 +28,9 @@ data class UserSettings(
     val preferredAudioOutputDeviceId: Int? = null,
     val allowAppAudioCapture: Boolean = false,
     val preferCommunicationDeviceRouting: Boolean = true,
-    val gemma4Url: String = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-litert-lm.litertlm",
-    val gemma4Token: String = ""
+    val localGemmaUrl: String = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-litert-lm.litertlm",
+    val localGemmaToken: String = "",
+    val selectedLocalGemmaModelName: String = ""
 ) {
     val effectiveRecognitionUrl: String
         get() = BackendEndpoints.processAudio(backendUrl)

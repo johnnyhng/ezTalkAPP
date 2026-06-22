@@ -26,6 +26,8 @@ import tw.com.johnnyhng.eztalk.asr.managers.RemoteTseModelRepository
 import tw.com.johnnyhng.eztalk.asr.managers.DirectUrlRemoteTseModelRepository
 import tw.com.johnnyhng.eztalk.asr.utils.checkModelUpdate
 import tw.com.johnnyhng.eztalk.asr.utils.sha256
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaModel
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaModelManager
 import java.io.File
 
 sealed class DownloadUiEvent {
@@ -106,6 +108,10 @@ class HomeViewModel @JvmOverloads constructor(
     val remoteTseModels: List<RemoteModelDescriptor> get() = _remoteTseModels
     var isFetchingRemoteTseModels by mutableStateOf(false)
     var remoteTseModelsErrorMessage by mutableStateOf<String?>(null)
+    // Local Gemma Model Management
+    private val localGemmaModelManager = LocalGemmaModelManager(application)
+    private val _localGemmaModels = mutableStateListOf<LocalGemmaModel>()
+    internal val localGemmaModels: List<LocalGemmaModel> get() = _localGemmaModels
 
     // Recognition Manager integration
     private val recognitionManager = RecognitionManager(application)
@@ -132,6 +138,7 @@ class HomeViewModel @JvmOverloads constructor(
     init {
         loadModels()
         loadTseModels()
+        loadLocalGemmaModels()
         
         recognitionManager.onPartialResult = { text ->
             viewModelScope.launch { _partialText.emit(text) }
@@ -291,6 +298,41 @@ class HomeViewModel @JvmOverloads constructor(
     fun deleteTseModel(tseModel: TseModel) {
         if (TseModelManager.deleteModel(getApplication(), userSettings.value.userId, tseModel.name)) {
             loadTseModels()
+        }
+    }
+
+    private fun loadLocalGemmaModels() {
+        viewModelScope.launch {
+            refreshLocalGemmaModels()
+        }
+    }
+
+    fun refreshLocalGemmaModels() {
+        _localGemmaModels.clear()
+        _localGemmaModels.addAll(localGemmaModelManager.listModels())
+    }
+
+    fun updateLocalGemmaUrl(url: String) {
+        viewModelScope.launch {
+            settingsManager.updateSettings(userSettings.value.copy(localGemmaUrl = url))
+        }
+    }
+
+    fun updateLocalGemmaToken(token: String) {
+        viewModelScope.launch {
+            settingsManager.updateSettings(userSettings.value.copy(localGemmaToken = token))
+        }
+    }
+
+    fun updateSelectedLocalGemmaModelName(modelName: String) {
+        viewModelScope.launch {
+            settingsManager.updateSettings(userSettings.value.copy(selectedLocalGemmaModelName = modelName))
+        }
+    }
+
+    fun deleteLocalGemmaModel(modelName: String) {
+        if (localGemmaModelManager.deleteModel(modelName)) {
+            refreshLocalGemmaModels()
         }
     }
 
@@ -502,12 +544,6 @@ class HomeViewModel @JvmOverloads constructor(
     }
     fun updatePreferCommunicationDeviceRouting(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(preferCommunicationDeviceRouting = v))
-    }
-    fun updateGemma4Url(v: String) = viewModelScope.launch {
-        settingsManager.updateSettings(userSettings.value.copy(gemma4Url = v))
-    }
-    fun updateGemma4Token(v: String) = viewModelScope.launch {
-        settingsManager.updateSettings(userSettings.value.copy(gemma4Token = v))
     }
     fun reportAudioInputRoutingState(message: String?, activeInputLabel: String? = null) {
         _audioRoutingLastApplyMessage.value = message

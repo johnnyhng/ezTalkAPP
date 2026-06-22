@@ -37,8 +37,9 @@ private val preferredAudioOutputDeviceIdKey = intPreferencesKey("preferred_audio
 private val allowAppAudioCaptureKey = booleanPreferencesKey("allow_app_audio_capture")
 private val preferCommunicationDeviceRoutingKey =
     booleanPreferencesKey("prefer_communication_device_routing")
-private val gemma4UrlKey = stringPreferencesKey("gemma4_url")
-private val gemma4TokenKey = stringPreferencesKey("gemma4_token")
+private val localGemmaUrlKey = stringPreferencesKey("local_gemma_url")
+private val localGemmaTokenKey = stringPreferencesKey("local_gemma_token")
+private val selectedLocalGemmaModelNameKey = stringPreferencesKey("selected_local_gemma_model_name")
 private val defaultUserSettings = UserSettings()
 
 internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
@@ -76,8 +77,9 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
             ?: defaultUserSettings.allowAppAudioCapture,
         preferCommunicationDeviceRouting = preferences[preferCommunicationDeviceRoutingKey]
             ?: defaultUserSettings.preferCommunicationDeviceRouting,
-        gemma4Url = preferences[gemma4UrlKey] ?: defaultUserSettings.gemma4Url,
-        gemma4Token = preferences[gemma4TokenKey] ?: defaultUserSettings.gemma4Token
+        localGemmaUrl = preferences[localGemmaUrlKey] ?: defaultUserSettings.localGemmaUrl,
+        localGemmaToken = preferences[localGemmaTokenKey] ?: defaultUserSettings.localGemmaToken,
+        selectedLocalGemmaModelName = preferences[selectedLocalGemmaModelNameKey] ?: defaultUserSettings.selectedLocalGemmaModelName
     )
 }
 
@@ -115,8 +117,9 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     }
     preferences[allowAppAudioCaptureKey] = settings.allowAppAudioCapture
     preferences[preferCommunicationDeviceRoutingKey] = settings.preferCommunicationDeviceRouting
-    preferences[gemma4UrlKey] = settings.gemma4Url
-    preferences[gemma4TokenKey] = settings.gemma4Token
+    preferences[localGemmaUrlKey] = settings.localGemmaUrl
+    preferences[localGemmaTokenKey] = settings.localGemmaToken
+    preferences[selectedLocalGemmaModelNameKey] = settings.selectedLocalGemmaModelName
 }
 
 class SettingsManager(context: Context) {

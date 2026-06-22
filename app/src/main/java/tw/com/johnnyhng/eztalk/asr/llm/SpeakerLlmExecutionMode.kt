@@ -4,8 +4,7 @@ internal enum class SpeakerLlmExecutionMode(
     val storageValue: String
 ) {
     AUTO_LOCAL("auto_local"),
-    LOCAL_GEMMA("local_gemma"),
-    LOCAL_GEMMA4("local_gemma4"),
+    LOCAL_GEMMA_LITERT_LM("local_gemma_litertlm"),
     CLOUD("cloud");
 
     companion object {
