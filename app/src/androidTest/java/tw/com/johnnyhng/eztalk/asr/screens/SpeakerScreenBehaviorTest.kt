@@ -1,7 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import android.app.Application
-import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
@@ -27,7 +26,7 @@ import java.io.File
 
 class SpeakerScreenBehaviorTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComposeTestActivity>()
 
     private val application = ApplicationProvider.getApplicationContext<Application>()
     private val context
@@ -52,11 +51,11 @@ class SpeakerScreenBehaviorTest {
 
         composeRule.onNodeWithText("alpha").assertIsDisplayed()
         composeRule.onNodeWithText("beta").assertIsDisplayed()
-        composeRule.onAllNodesWithText("first.txt").assertCountEquals(0)
-        composeRule.onAllNodesWithText("second.txt").assertCountEquals(0)
-        composeRule.onNodeWithText(
-            context.getString(R.string.speaker_no_document_selected)
-        ).assertIsDisplayed()
+        composeRule.onAllNodesWithText("first").assertCountEquals(0)
+        composeRule.onAllNodesWithText("second").assertCountEquals(0)
+        composeRule.onAllNodesWithText(
+            context.getString(R.string.speaker_content_title)
+        ).assertCountEquals(0)
     }
 
     @Test
@@ -77,11 +76,11 @@ class SpeakerScreenBehaviorTest {
         }
 
         composeRule.onNodeWithText("alpha").performClick()
-        composeRule.onNodeWithText("first.txt").assertIsDisplayed()
+        composeRule.onNodeWithText("first").assertIsDisplayed()
 
         composeRule.onNodeWithText("beta").performClick()
-        composeRule.onNodeWithText("second.txt").assertIsDisplayed()
-        composeRule.onAllNodesWithText("first.txt").assertCountEquals(0)
+        composeRule.onNodeWithText("second").assertIsDisplayed()
+        composeRule.onAllNodesWithText("first").assertCountEquals(0)
     }
 
     @Test
@@ -101,7 +100,7 @@ class SpeakerScreenBehaviorTest {
         }
 
         composeRule.onNodeWithText("alpha").performClick()
-        composeRule.onNodeWithText("draft.txt").performClick()
+        composeRule.onNodeWithText("draft").performClick()
         composeRule.onNodeWithText("original body").assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.edit)).performClick()
@@ -110,7 +109,8 @@ class SpeakerScreenBehaviorTest {
         editor.performTextClearance()
         editor.performTextInput("edited body")
 
-        composeRule.onNodeWithText(context.getString(R.string.cancel_edit)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.cancel_edit))
+            .performClick()
 
         composeRule.onNodeWithText("original body").assertIsDisplayed()
         composeRule.onAllNodesWithText("edited body").assertCountEquals(0)
@@ -134,7 +134,7 @@ class SpeakerScreenBehaviorTest {
         }
 
         composeRule.onNodeWithText("alpha").performClick()
-        composeRule.onNodeWithText("draft.txt").performClick()
+        composeRule.onNodeWithText("draft").performClick()
         composeRule.onNodeWithContentDescription(context.getString(R.string.edit)).performClick()
 
         val editor = composeRule.onNode(hasSetTextAction())
@@ -169,7 +169,7 @@ class SpeakerScreenBehaviorTest {
 
         composeRule.onAllNodesWithText(context.getString(R.string.speaker_content_title)).assertCountEquals(0)
         composeRule.onNodeWithText("alpha").performClick()
-        composeRule.onNodeWithText("draft.txt").performClick()
+        composeRule.onNodeWithText("draft").performClick()
 
         composeRule.onNodeWithText(context.getString(R.string.speaker_content_title)).assertIsDisplayed()
         composeRule.onNodeWithText("original body").assertIsDisplayed()
@@ -192,7 +192,7 @@ class SpeakerScreenBehaviorTest {
         }
 
         composeRule.onNodeWithText("alpha").performClick()
-        composeRule.onNodeWithText("draft.txt").performClick()
+        composeRule.onNodeWithText("draft").performClick()
         composeRule.onNodeWithText("original body").assertIsDisplayed()
 
         composeRule.onNodeWithText(context.getString(R.string.speaker_explorer_pane_title)).performClick()

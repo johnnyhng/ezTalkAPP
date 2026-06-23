@@ -1,7 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import android.app.Application
-import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -20,7 +19,7 @@ import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 
 class TranslateScreenBehaviorTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComposeTestActivity>()
 
     private val application = ApplicationProvider.getApplicationContext<Application>()
     private val context

@@ -1,6 +1,5 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
-import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasAnySibling
@@ -21,7 +20,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 
 class DataCollectWidgetBehaviorTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComposeTestActivity>()
 
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext

@@ -5,8 +5,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -24,7 +27,7 @@ import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
 
 class SettingsScreenBehaviorTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComposeTestActivity>()
 
     private val application = ApplicationProvider.getApplicationContext<Application>()
     private val context
@@ -73,10 +76,10 @@ class SettingsScreenBehaviorTest {
 
         composeRule.onNodeWithText(context.getString(R.string.inline_edit)).performScrollTo()
         composeRule.onNodeWithText(context.getString(R.string.enable_tts_feedback)).performScrollTo()
-        composeRule.onAllNodes(isToggleable()).assertCountEquals(3)
+        composeRule.onAllNodes(isToggleable()).assertCountEquals(4)
 
         val inlineEditSwitch = composeRule.onAllNodes(isToggleable())[1]
-        val ttsFeedbackSwitch = composeRule.onAllNodes(isToggleable())[2]
+        val ttsFeedbackSwitch = composeRule.onAllNodes(isToggleable())[3]
 
         inlineEditSwitch.assertIsOn()
         ttsFeedbackSwitch.assertIsOff()
@@ -104,7 +107,8 @@ class SettingsScreenBehaviorTest {
             SettingsScreen(homeViewModel = viewModel)
         }
 
-        composeRule.onNodeWithText(context.getString(R.string.asr_model)).assertIsDisplayed()
+        composeRule.onAllNodesWithText(context.getString(R.string.asr_model))[0]
+            .assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.backend_url))
             .performScrollTo()
             .assertIsDisplayed()
@@ -112,12 +116,6 @@ class SettingsScreenBehaviorTest {
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNodeWithText(context.getString(R.string.enable_tts_feedback))
-            .performScrollTo()
-            .assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.sign_in_with_google))
-            .performScrollTo()
-            .assertIsDisplayed()
-        composeRule.onNodeWithText(context.getString(R.string.sign_out))
             .performScrollTo()
             .assertIsDisplayed()
     }
@@ -138,7 +136,7 @@ class SettingsScreenBehaviorTest {
 
         composeRule.onNodeWithText(context.getString(R.string.save_vad_segments)).performScrollTo()
         composeRule.onNodeWithText(context.getString(R.string.save_full_audio)).performScrollTo()
-        composeRule.onAllNodes(isToggleable()).assertCountEquals(3)
+        composeRule.onAllNodes(isToggleable()).assertCountEquals(4)
 
         val saveModeSwitch = composeRule.onAllNodes(isToggleable())[0]
         saveModeSwitch.assertIsOn()
@@ -192,7 +190,9 @@ class SettingsScreenBehaviorTest {
             SettingsScreen(homeViewModel = viewModel)
         }
 
-        composeRule.onNodeWithText(context.getString(R.string.entry_screen))
+        composeRule.onNode(
+            hasText(context.getString(R.string.entry_screen)) and hasClickAction()
+        )
             .performScrollTo()
             .performClick()
 

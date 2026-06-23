@@ -1,12 +1,9 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
-import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -16,14 +13,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import tw.com.johnnyhng.eztalk.asr.R
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDirectoryUi
+import tw.com.johnnyhng.eztalk.asr.speaker.SpeakerDocumentUi
 import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerContentScreen
-import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerDirectoryUi
-import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeakerDocumentUi
 import tw.com.johnnyhng.eztalk.asr.ui.speaker.SpeechFileExplorer
 
 class SpeakerComponentsBehaviorTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComposeTestActivity>()
 
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -154,22 +151,29 @@ class SpeakerComponentsBehaviorTest {
                 selectedDocumentId = null,
                 isLoading = false,
                 isImportEnabled = true,
+                isCloudSyncVisible = false,
+                isCloudSyncEnabled = false,
+                cloudStatusText = "",
+                isDirectoryRenameEnabled = true,
                 isDirectoryDeleteEnabled = true,
                 isDocumentDeleteEnabled = false,
                 onCreateFolder = {},
-                onGoogleDriveImport = {},
+                onFilePickerImport = {},
+                onCloudImport = {},
+                onUploadDirectoryToCloud = {},
+                onRenameDirectory = {},
                 onToggleExpand = {},
                 onRefresh = {},
                 onImportIntoDirectory = {},
                 onRemoveDirectory = {},
+                onRenameDocument = {},
                 onRemoveDocument = {},
                 onDocumentSelected = {}
             )
         }
 
         composeRule.onNode(
-            hasContentDescription(context.getString(R.string.delete)) and
-                hasAnySibling(hasText("demo.txt"))
+            hasContentDescription(context.getString(R.string.delete))
         ).assertIsNotEnabled()
     }
 
@@ -188,22 +192,29 @@ class SpeakerComponentsBehaviorTest {
                 selectedDocumentId = null,
                 isLoading = false,
                 isImportEnabled = true,
+                isCloudSyncVisible = false,
+                isCloudSyncEnabled = false,
+                cloudStatusText = "",
+                isDirectoryRenameEnabled = true,
                 isDirectoryDeleteEnabled = false,
                 isDocumentDeleteEnabled = true,
                 onCreateFolder = {},
-                onGoogleDriveImport = {},
+                onFilePickerImport = {},
+                onCloudImport = {},
+                onUploadDirectoryToCloud = {},
+                onRenameDirectory = {},
                 onToggleExpand = {},
                 onRefresh = {},
                 onImportIntoDirectory = {},
                 onRemoveDirectory = {},
+                onRenameDocument = {},
                 onRemoveDocument = {},
                 onDocumentSelected = {}
             )
         }
 
         composeRule.onNode(
-            hasContentDescription(context.getString(R.string.speaker_remove_folder)) and
-                hasAnySibling(hasText("alpha"))
+            hasContentDescription(context.getString(R.string.speaker_remove_folder))
         ).assertIsNotEnabled()
     }
 }

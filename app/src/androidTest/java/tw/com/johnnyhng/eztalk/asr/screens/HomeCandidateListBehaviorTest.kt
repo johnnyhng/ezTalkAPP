@@ -1,6 +1,5 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
-import androidx.activity.ComponentActivity
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,7 +22,7 @@ import tw.com.johnnyhng.eztalk.asr.widgets.CandidateList
 
 class HomeCandidateListBehaviorTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComposeTestActivity>()
 
     private val context
         get() = InstrumentationRegistry.getInstrumentation().targetContext

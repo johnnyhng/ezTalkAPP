@@ -1,7 +1,6 @@
 package tw.com.johnnyhng.eztalk.asr.screens
 
 import android.app.Application
-import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnySibling
@@ -28,7 +27,7 @@ import java.io.File
 
 class FileManagerBehaviorTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<ComponentActivity>()
+    val composeRule = createAndroidComposeRule<ComposeTestActivity>()
 
     private val application = ApplicationProvider.getApplicationContext<Application>()
     private val context
