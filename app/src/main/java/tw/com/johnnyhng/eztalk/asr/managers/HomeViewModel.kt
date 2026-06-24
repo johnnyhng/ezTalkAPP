@@ -330,6 +330,12 @@ class HomeViewModel @JvmOverloads constructor(
         }
     }
 
+    fun updateLocalGemmaBackend(backend: String) {
+        viewModelScope.launch {
+            settingsManager.updateSettings(userSettings.value.copy(localGemmaBackend = backend))
+        }
+    }
+
     fun deleteLocalGemmaModel(modelName: String) {
         if (localGemmaModelManager.deleteModel(modelName)) {
             refreshLocalGemmaModels()

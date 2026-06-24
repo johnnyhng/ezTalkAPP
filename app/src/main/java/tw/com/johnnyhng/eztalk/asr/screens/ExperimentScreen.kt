@@ -79,16 +79,18 @@ fun ExperimentScreen(
     val geminiModel = userSettings.geminiModel
     val speakerLlmExecutionMode = userSettings.speakerLlmExecutionMode
     val selectedLocalGemmaModelName = userSettings.selectedLocalGemmaModelName
+    val localGemmaBackend = userSettings.localGemmaBackend
 
     var llmProvider by remember { mutableStateOf<LlmProvider?>(null) }
     var hasLoadedProvider by remember { mutableStateOf(false) }
 
-    LaunchedEffect(geminiModel, speakerLlmExecutionMode, selectedLocalGemmaModelName) {
+    LaunchedEffect(geminiModel, speakerLlmExecutionMode, selectedLocalGemmaModelName, localGemmaBackend) {
         val factory = SpeakerLlmProviderFactory(appContext)
         val selection = factory.create(
             geminiModel = geminiModel.takeUnless { it.equals("none", ignoreCase = true) },
             executionMode = SpeakerLlmExecutionMode.fromStorageValue(speakerLlmExecutionMode),
-            selectedLocalGemmaModelName = selectedLocalGemmaModelName
+            selectedLocalGemmaModelName = selectedLocalGemmaModelName,
+            localGemmaBackend = localGemmaBackend
         )
         llmProvider = selection.provider
         hasLoadedProvider = true

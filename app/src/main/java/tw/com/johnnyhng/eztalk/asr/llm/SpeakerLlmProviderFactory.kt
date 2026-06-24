@@ -19,7 +19,8 @@ internal class SpeakerLlmProviderFactory(
     suspend fun create(
         geminiModel: String?,
         executionMode: SpeakerLlmExecutionMode,
-        selectedLocalGemmaModelName: String
+        selectedLocalGemmaModelName: String,
+        localGemmaBackend: String = "npu_gpu_cpu"
     ): SpeakerLlmRuntimeSelection {
         val localStatus = SpeakerLocalLlmAvailabilityChecker(appContext).check()
         val cloudProvider = geminiModel?.let {
@@ -56,8 +57,8 @@ internal class SpeakerLlmProviderFactory(
                 Log.i(TAG, "SpeakerLlmProviderFactory: LOCAL_GEMMA_LITERT_LM check: modelName='$modelName', status=$gemmaStatus")
                 val gemmaProvider = if (gemmaStatus is SpeakerLocalLlmStatus.Available && modelName.isNotBlank()) {
                     val path = modelManager.getModelFile(modelName).absolutePath
-                    Log.i(TAG, "SpeakerLlmProviderFactory: Instantiating LocalGemmaLitertLmLlmProvider with model path: $path")
-                    LocalGemmaLitertLmLlmProvider(appContext, path)
+                    Log.i(TAG, "SpeakerLlmProviderFactory: Instantiating LocalGemmaLitertLmLlmProvider with model path: $path, backend: $localGemmaBackend")
+                    LocalGemmaLitertLmLlmProvider(appContext, path, localGemmaBackend)
                 } else {
                     Log.w(TAG, "SpeakerLlmProviderFactory: Local model not available. Fallback to Cloud LLM.")
                     null

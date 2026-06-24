@@ -1184,6 +1184,62 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !isDownloading && !isLocalGemmaDownloadRunning
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    var localGemmaBackendMenuExpanded by remember { mutableStateOf(false) }
+                    val localGemmaBackendOptions = listOf(
+                        "npu_gpu_cpu" to stringResource(R.string.local_gemma_backend_option_npu_gpu_cpu),
+                        "gpu_cpu" to stringResource(R.string.local_gemma_backend_option_gpu_cpu),
+                        "npu" to stringResource(R.string.local_gemma_backend_option_npu),
+                        "gpu" to stringResource(R.string.local_gemma_backend_option_gpu),
+                        "cpu" to stringResource(R.string.local_gemma_backend_option_cpu)
+                    )
+                    val selectedLocalGemmaBackendLabel = localGemmaBackendOptions
+                        .firstOrNull { it.first == userSettings.localGemmaBackend }
+                        ?.second
+                        ?: userSettings.localGemmaBackend
+
+                    ExposedDropdownMenuBox(
+                        expanded = localGemmaBackendMenuExpanded,
+                        onExpandedChange = {
+                            if (!isDownloading && !isLocalGemmaDownloadRunning) {
+                                localGemmaBackendMenuExpanded = !localGemmaBackendMenuExpanded
+                            }
+                        }
+                    ) {
+                        OutlinedTextField(
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            readOnly = true,
+                            value = selectedLocalGemmaBackendLabel,
+                            onValueChange = {},
+                            label = { Text(stringResource(R.string.local_gemma_backend_label)) },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = localGemmaBackendMenuExpanded)
+                            },
+                            enabled = !isDownloading && !isLocalGemmaDownloadRunning
+                        )
+                        ExposedDropdownMenu(
+                            expanded = localGemmaBackendMenuExpanded,
+                            onDismissRequest = { localGemmaBackendMenuExpanded = false },
+                            modifier = Modifier.exposedDropdownSize()
+                        ) {
+                            localGemmaBackendOptions.forEach { (value, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        homeViewModel.updateLocalGemmaBackend(value)
+                                        localGemmaBackendMenuExpanded = false
+                                        refreshLocalGemmaStatus()
+                                    },
+                                    leadingIcon = {
+                                        RadioButton(
+                                            selected = value == userSettings.localGemmaBackend,
+                                            onClick = null
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = stringResource(

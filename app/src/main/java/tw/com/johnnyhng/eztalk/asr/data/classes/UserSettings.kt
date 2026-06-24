@@ -30,7 +30,8 @@ data class UserSettings(
     val preferCommunicationDeviceRouting: Boolean = true,
     val localGemmaUrl: String = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-litert-lm.litertlm",
     val localGemmaToken: String = "",
-    val selectedLocalGemmaModelName: String = ""
+    val selectedLocalGemmaModelName: String = "",
+    val localGemmaBackend: String = "npu_gpu_cpu"
 ) {
     val effectiveRecognitionUrl: String
         get() = BackendEndpoints.processAudio(backendUrl)

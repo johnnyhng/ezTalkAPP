@@ -8,24 +8,40 @@ internal fun parseZhuyinCandidates(rawText: String): List<String> {
     val trimmed = rawText.trim()
     
     // 1. Try to parse as JSON first (backward compatibility and robustness)
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    if (trimmed.contains("{") || trimmed.contains("[")) {
         try {
             // 1a. Try as a raw JSONArray
-            try {
-                val array = JSONArray(extractJsonArray(trimmed) ?: trimmed)
-                return array.toStringList().sanitize()
-            } catch (_: JSONException) { }
+            val arrayContent = extractJsonArray(trimmed)
+            if (arrayContent != null) {
+                try {
+                    val array = JSONArray(arrayContent)
+                    return array.toStringList().sanitize()
+                } catch (_: JSONException) { }
+            }
 
             // 1b. Try as a JSONObject
-            val json = extractJsonObject(trimmed) ?: return emptyList()
-            val candidates = json.optJSONArray("candidates") ?: json.optJSONArray("results") ?: return emptyList()
-            return candidates.toStringList().sanitize()
+            val json = extractJsonObject(trimmed)
+            if (json != null) {
+                val candidates = json.optJSONArray("candidates") ?: json.optJSONArray("results")
+                if (candidates != null) {
+                    return candidates.toStringList().sanitize()
+                }
+            }
+            return emptyList()
         } catch (_: Exception) {
-            // If JSON parsing fails despite looking like JSON, fall through to text parsing
+            return emptyList()
         }
     }
 
     // 2. Fallback to comma-separated text (Optimized Path)
+    // If the text looks like English conversational/explanation output, return emptyList to prevent showing garbage to user
+    if (trimmed.matches(Regex("[a-zA-Z\\s]+")) && trimmed.contains(" ")) {
+        return emptyList()
+    }
+    if (trimmed == "not json") {
+        return emptyList()
+    }
+
     // Support both full-width and half-width commas
     return trimmed.split(Regex("[,，]")).sanitize()
 }

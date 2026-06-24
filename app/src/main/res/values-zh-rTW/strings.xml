@@ -98,6 +98,14 @@
     <string name="speaker_local_gemma4_delete">刪除 Gemma 4 E2B</string>
     <string name="speaker_local_gemma4_delete_success">模型刪除成功。</string>
     <string name="speaker_local_gemma4_delete_failed">模型刪除失敗。</string>
+    <string name="no_local_gemma_model_selected">未選取 Local Gemma 模型</string>
+    <string name="local_gemma_model">Local Gemma 模型</string>
+    <string name="local_gemma_backend_label">Local Gemma 後端運行模式</string>
+    <string name="local_gemma_backend_option_npu_gpu_cpu">自動 (NPU -> GPU -> CPU)</string>
+    <string name="local_gemma_backend_option_gpu_cpu">GPU -> CPU (跳過 NPU)</string>
+    <string name="local_gemma_backend_option_npu">僅使用 NPU</string>
+    <string name="local_gemma_backend_option_gpu">僅使用 GPU</string>
+    <string name="local_gemma_backend_option_cpu">僅使用 CPU</string>
     <string name="allow_insecure_tls">允許不安全的 TLS</string>
     <string name="allow_insecure_tls_summary">略過後端憑證驗證，只建議短期應急使用。</string>
     <string name="delay">延遲: %1$d 毫秒</string>

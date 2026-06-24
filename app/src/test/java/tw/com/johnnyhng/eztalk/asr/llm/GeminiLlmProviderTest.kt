@@ -112,7 +112,7 @@ class GeminiLlmProviderTest {
                     Result.success(
                         GeminiApiResult(
                             responseCode = HttpURLConnection.HTTP_OK,
-                            responseBody = """{"candidates":[{"content":{"parts":[]}}]}"""
+                            responseBody = "{invalid_json"
                         )
                     )
                 )

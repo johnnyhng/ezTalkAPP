@@ -97,6 +97,12 @@
     <string name="speaker_local_gemma_delete_failed">Failed to delete model.</string>
     <string name="no_local_gemma_model_selected">No Local Gemma Model Selected</string>
     <string name="local_gemma_model">Local Gemma Model</string>
+    <string name="local_gemma_backend_label">Local Gemma Backend</string>
+    <string name="local_gemma_backend_option_npu_gpu_cpu">Auto (NPU -> GPU -> CPU)</string>
+    <string name="local_gemma_backend_option_gpu_cpu">GPU -> CPU (Skip NPU)</string>
+    <string name="local_gemma_backend_option_npu">NPU Only</string>
+    <string name="local_gemma_backend_option_gpu">GPU Only</string>
+    <string name="local_gemma_backend_option_cpu">CPU Only</string>
     <string name="allow_insecure_tls">Allow insecure TLS</string>
     <string name="allow_insecure_tls_summary">Bypass certificate validation for backend requests. Short-term use only.</string>
     <string name="delay">Delay: %1$d ms</string>

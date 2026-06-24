@@ -16,7 +16,7 @@ class TLSExpireResolverTest {
         }
 
         assertEquals(
-            "TLS certificate expired",
+            "Secure connection failed: server TLS certificate expired",
             TLSExpireResolver.resolveMessage(error, "fallback")
         )
         assertTrue(TLSExpireResolver.isCertificateExpired(error))
@@ -27,7 +27,7 @@ class TLSExpireResolverTest {
         val error = SSLHandshakeException("Handshake failed")
 
         assertEquals(
-            "TLS handshake failed",
+            "Secure connection failed during TLS handshake",
             TLSExpireResolver.resolveMessage(error, "fallback")
         )
         assertFalse(TLSExpireResolver.isCertificateExpired(error))

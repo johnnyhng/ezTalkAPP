@@ -24,9 +24,9 @@ class ZhuyinSuggestionModuleTest {
 
         assertEquals(listOf("想", "休息"), result.getOrThrow())
         assertEquals("gemini-2.5-flash", provider.requests.single().model)
-        assertEquals(LlmOutputFormat.JSON, provider.requests.single().outputFormat)
+        assertEquals(LlmOutputFormat.TEXT, provider.requests.single().outputFormat)
         assertTrue(provider.requests.single().userPrompt.contains("目前輸入：我想ㄒ"))
-        assertTrue(provider.requests.single().userPrompt.contains("候選字詞"))
+        assertTrue(provider.requests.single().userPrompt.contains("字詞"))
     }
 
     @Test

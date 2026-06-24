@@ -40,6 +40,7 @@ private val preferCommunicationDeviceRoutingKey =
 private val localGemmaUrlKey = stringPreferencesKey("local_gemma_url")
 private val localGemmaTokenKey = stringPreferencesKey("local_gemma_token")
 private val selectedLocalGemmaModelNameKey = stringPreferencesKey("selected_local_gemma_model_name")
+private val localGemmaBackendKey = stringPreferencesKey("local_gemma_backend")
 private val defaultUserSettings = UserSettings()
 
 internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
@@ -79,7 +80,8 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
             ?: defaultUserSettings.preferCommunicationDeviceRouting,
         localGemmaUrl = preferences[localGemmaUrlKey] ?: defaultUserSettings.localGemmaUrl,
         localGemmaToken = preferences[localGemmaTokenKey] ?: defaultUserSettings.localGemmaToken,
-        selectedLocalGemmaModelName = preferences[selectedLocalGemmaModelNameKey] ?: defaultUserSettings.selectedLocalGemmaModelName
+        selectedLocalGemmaModelName = preferences[selectedLocalGemmaModelNameKey] ?: defaultUserSettings.selectedLocalGemmaModelName,
+        localGemmaBackend = preferences[localGemmaBackendKey] ?: defaultUserSettings.localGemmaBackend
     )
 }
 
@@ -120,6 +122,7 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[localGemmaUrlKey] = settings.localGemmaUrl
     preferences[localGemmaTokenKey] = settings.localGemmaToken
     preferences[selectedLocalGemmaModelNameKey] = settings.selectedLocalGemmaModelName
+    preferences[localGemmaBackendKey] = settings.localGemmaBackend
 }
 
 class SettingsManager(context: Context) {

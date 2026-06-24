@@ -55,7 +55,8 @@ class SettingsManagerTest {
             intPreferencesKey("preferred_audio_input_device_id") to 101,
             intPreferencesKey("preferred_audio_output_device_id") to 202,
             booleanPreferencesKey("allow_app_audio_capture") to true,
-            booleanPreferencesKey("prefer_communication_device_routing") to false
+            booleanPreferencesKey("prefer_communication_device_routing") to false,
+            stringPreferencesKey("local_gemma_backend") to "gpu_cpu"
         )
 
         val settings = preferencesToUserSettings(preferences)
@@ -73,6 +74,7 @@ class SettingsManagerTest {
         assertEquals(202, settings.preferredAudioOutputDeviceId)
         assertTrue(settings.allowAppAudioCapture)
         assertFalse(settings.preferCommunicationDeviceRouting)
+        assertEquals("gpu_cpu", settings.localGemmaBackend)
     }
 
     @Test
@@ -91,7 +93,8 @@ class SettingsManagerTest {
             preferredAudioInputDeviceId = 303,
             preferredAudioOutputDeviceId = 404,
             allowAppAudioCapture = true,
-            preferCommunicationDeviceRouting = false
+            preferCommunicationDeviceRouting = false,
+            localGemmaBackend = "gpu_cpu"
         )
 
         writeUserSettings(preferences, settings)
@@ -109,6 +112,7 @@ class SettingsManagerTest {
         assertEquals(404, preferences[intPreferencesKey("preferred_audio_output_device_id")])
         assertEquals(true, preferences[booleanPreferencesKey("allow_app_audio_capture")])
         assertEquals(false, preferences[booleanPreferencesKey("prefer_communication_device_routing")])
+        assertEquals("gpu_cpu", preferences[stringPreferencesKey("local_gemma_backend")])
     }
 
     @Test
