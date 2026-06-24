@@ -6,7 +6,10 @@ import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.TAG
 
@@ -30,6 +33,8 @@ internal class LocalGemmaLitertLmLlmProvider(
 
     @Volatile
     private var engine: Engine? = null
+
+    private val generationMutex = Mutex()
 
     private fun getOrInitEngine(): Engine {
         engine?.let { return it }
@@ -123,46 +128,52 @@ internal class LocalGemmaLitertLmLlmProvider(
         )
 
         return withContext(Dispatchers.Default) {
-            runCatching {
-                val promptText = buildPromptText(request)
-                Log.d(TAG, "Formatted local Gemma prompt:\n$promptText")
+            generationMutex.withLock {
+                // LiteRT-LM's Flow cancellation does not cancel the native inference. Keep the
+                // conversation alive until its native callback finishes, then close it safely.
+                withContext(NonCancellable) {
+                    runCatching {
+                        val promptText = buildPromptText(request)
+                        Log.d(TAG, "Formatted local Gemma prompt:\n$promptText")
 
-                val engineInstance = getOrInitEngine()
-                val conversation = engineInstance.createConversation()
-                val responseBuilder = StringBuilder()
-                
-                try {
-                    val responseFlow = conversation.sendMessageAsync(promptText)
-                    responseFlow.collect { token ->
-                        responseBuilder.append(token)
-                    }
-                } finally {
-                    try {
-                        conversation.close()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error closing conversation", e)
-                    }
-                }
+                        val engineInstance = getOrInitEngine()
+                        val conversation = engineInstance.createConversation()
+                        val responseBuilder = StringBuilder()
 
-                val rawText = responseBuilder.toString().trim()
-                if (rawText.isBlank()) {
-                    throw IllegalArgumentException("Local Gemma returned an empty response")
-                }
+                        try {
+                            val responseFlow = conversation.sendMessageAsync(promptText)
+                            responseFlow.collect { token ->
+                                responseBuilder.append(token)
+                            }
+                        } finally {
+                            try {
+                                conversation.close()
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Error closing conversation", e)
+                            }
+                        }
 
-                Log.d(TAG, "Local Gemma generated response:\n$rawText")
-                LlmResponse(rawText = rawText)
-            }.fold(
-                onSuccess = { Result.success(it) },
-                onFailure = { error ->
-                    Log.w(TAG, "Local Gemma generate failed", error)
-                    Result.failure(
-                        LlmError.ProviderFailure(
-                            detail = error.message ?: "Local Gemma request failed",
-                            original = error
-                        )
+                        val rawText = responseBuilder.toString().trim()
+                        if (rawText.isBlank()) {
+                            throw IllegalArgumentException("Local Gemma returned an empty response")
+                        }
+
+                        Log.d(TAG, "Local Gemma generated response:\n$rawText")
+                        LlmResponse(rawText = rawText)
+                    }.fold(
+                        onSuccess = { Result.success(it) },
+                        onFailure = { error ->
+                            Log.w(TAG, "Local Gemma generate failed", error)
+                            Result.failure(
+                                LlmError.ProviderFailure(
+                                    detail = error.message ?: "Local Gemma request failed",
+                                    original = error
+                                )
+                            )
+                        }
                     )
                 }
-            )
+            }
         }
     }
 

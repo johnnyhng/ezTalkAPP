@@ -3,7 +3,7 @@
 ## Scope
 
 This document records the Android NPU initialization failure investigated on
-2026-06-22 through 2026-06-24.
+2026-06-22 through 2026-06-25.
 
 - Device: Pixel 10 Pro XL (`mustang`)
 - OS: Android 16 / API 36
@@ -14,7 +14,7 @@ This document records the Android NPU initialization failure investigated on
 
 ## Symptoms and root causes
 
-The failure occurred in two distinct stages.
+The failure occurred in three distinct stages.
 
 ### Stage 1: no LiteRT Dispatch implementation
 
@@ -95,6 +95,49 @@ The fix is:
 It remains optional so installation and non-NPU execution can still work on
 devices that do not publish this Pixel-specific library.
 
+### Stage 3: concurrent generation callback crash
+
+After the dispatch and SouthBound fixes, the NPU engine initialized
+successfully:
+
+```text
+SouthBound context created.
+LiteRT-LM Engine initialized successfully with NPU backend.
+```
+
+The app then started its word and sentence prediction requests at nearly the
+same time. Two conversations reached `sendMessageAsync`, followed by a native
+callback-thread crash:
+
+```text
+Creating Gemma4DataProcessor
+Creating Gemma4DataProcessor
+Fatal signal 11 (SIGSEGV) ... callback_thread
+```
+
+LiteRT-LM 0.13.1 implements its Kotlin Flow adapter with `callbackFlow` and an
+empty `awaitClose` handler. Cancelling Flow collection therefore does not
+cancel the native inference. The provider previously closed the conversation
+in `finally`, which could release its native handle while a callback was still
+running. Concurrent conversations also increased the likelihood of exposing
+this lifetime race.
+
+The provider now applies two safeguards around the complete generation
+lifecycle:
+
+- A per-provider `Mutex` permits only one active conversation at a time.
+- `NonCancellable` keeps an in-flight collection alive until the native
+  callback finishes, after which the conversation can be closed safely.
+
+Requests cancelled while waiting for the mutex still stop normally; only a
+request that has already entered native inference is allowed to finish.
+
+The device also reported SouthBound version `0.14` while the dispatch library
+requires `>=0.18` for `edgetpu_performance_mode`. LiteRT skipped that optional
+performance hint and continued initialization. If a serialized generation
+still crashes, dispatch/SouthBound version alignment is the next issue to
+investigate.
+
 ## Build, install, and verification
 
 Build and confirm both native artifacts:
@@ -147,9 +190,9 @@ usesLibraryFiles:
   a failed NPU initialization is not reliable.
 - The initial `NativeLibraryLoader.nativeCheckLoaded()` lookup error is not the
   root cause when the following log confirms `liblitertlm_jni.so` loaded.
-- Two prediction requests currently arrive together. Engine construction is
-  synchronized, but generation should be serialized if the runtime does not
-  support concurrent conversations or device memory is constrained.
+- Word and sentence prediction requests can arrive together. The provider
+  serializes their complete native generation lifecycle; do not remove this
+  guard unless the runtime's cancellation and concurrency behavior is verified.
 
 ## Troubleshooting commands
 
