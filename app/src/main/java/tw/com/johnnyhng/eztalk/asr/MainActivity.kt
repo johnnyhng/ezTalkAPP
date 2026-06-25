@@ -13,11 +13,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +56,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -73,6 +78,11 @@ import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
 import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
+import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaModelManager
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaRuntimeManager
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLocalLlmStatus
 import tw.com.johnnyhng.eztalk.asr.utils.TLSExpireResolver
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
@@ -91,6 +101,14 @@ import java.util.Locale
 
 const val TAG = "eztalk"
 private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
+
+private sealed interface LocalGemmaStartupUiState {
+    data object Checking : LocalGemmaStartupUiState
+    data object NotRequired : LocalGemmaStartupUiState
+    data object Loading : LocalGemmaStartupUiState
+    data object Ready : LocalGemmaStartupUiState
+    data class Error(val message: String) : LocalGemmaStartupUiState
+}
 
 @Suppress("DEPRECATION")
 class MainActivity : ComponentActivity() {
@@ -167,12 +185,30 @@ fun MainScreen(
     val navController = rememberNavController()
     val homeViewModel: HomeViewModel = viewModel()
     val scope = rememberCoroutineScope()
+    val userSettings by homeViewModel.userSettings.collectAsState()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
     val signInManager = remember { GoogleSignInManager() }
     val googleSignInClient = remember { signInManager.getSignInClient(context) }
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
+    var localGemmaStartupState by remember { mutableStateOf<LocalGemmaStartupUiState>(LocalGemmaStartupUiState.Checking) }
+    var localGemmaStartupRetryNonce by remember { mutableStateOf(0) }
+    var bypassLocalGemmaStartupError by remember { mutableStateOf(false) }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: initialEntryRoute
+
+    LaunchedEffect(
+        context,
+        userSettings.speakerLlmExecutionMode,
+        userSettings.selectedLocalGemmaModelName,
+        userSettings.localGemmaBackend,
+        localGemmaStartupRetryNonce
+    ) {
+        bypassLocalGemmaStartupError = false
+        localGemmaStartupState = prepareLocalGemmaAtStartup(
+            context = context.applicationContext,
+            userSettings = userSettings
+        )
+    }
 
     LaunchedEffect(context, currentRoute) {
         val activity = context as? Activity ?: return@LaunchedEffect
@@ -268,6 +304,31 @@ fun MainScreen(
             },
             confirmButton = {}
         )
+    }
+
+    when (val startupState = localGemmaStartupState) {
+        LocalGemmaStartupUiState.Checking,
+        LocalGemmaStartupUiState.Loading -> {
+            LocalGemmaLoadingScreen(
+                title = "正在載入 Local Gemma",
+                message = "正在初始化本機模型，完成後會進入主畫面。"
+            )
+            return
+        }
+
+        is LocalGemmaStartupUiState.Error -> {
+            if (!bypassLocalGemmaStartupError) {
+                LocalGemmaLoadingErrorScreen(
+                    message = startupState.message,
+                    onRetry = { localGemmaStartupRetryNonce += 1 },
+                    onContinue = { bypassLocalGemmaStartupError = true }
+                )
+                return
+            }
+        }
+
+        LocalGemmaStartupUiState.NotRequired,
+        LocalGemmaStartupUiState.Ready -> Unit
     }
 
     Scaffold(
@@ -400,6 +461,109 @@ private suspend fun loadCachedGoogleProfilePhoto(
         val detail = TLSExpireResolver.resolveMessage(error, "Profile photo download failed")
         Log.w(TAG, "Failed to load Google profile photo: $detail", error)
     }.getOrNull()
+}
+
+private suspend fun prepareLocalGemmaAtStartup(
+    context: android.content.Context,
+    userSettings: UserSettings
+): LocalGemmaStartupUiState = withContext(Dispatchers.Default) {
+    if (SpeakerLlmExecutionMode.fromStorageValue(userSettings.speakerLlmExecutionMode) !=
+        SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM
+    ) {
+        return@withContext LocalGemmaStartupUiState.NotRequired
+    }
+
+    val modelManager = LocalGemmaModelManager(context.applicationContext)
+    val modelName = userSettings.selectedLocalGemmaModelName.takeIf { it.isNotBlank() }
+        ?: modelManager.listModels().firstOrNull()?.name
+        ?: return@withContext LocalGemmaStartupUiState.NotRequired
+
+    val status = modelManager.check(modelName)
+    if (status !is SpeakerLocalLlmStatus.Available) {
+        Log.w(TAG, "Local Gemma startup warm-up skipped; model=$modelName status=$status")
+        return@withContext LocalGemmaStartupUiState.NotRequired
+    }
+
+    val modelPath = modelManager.getModelFile(modelName).absolutePath
+    LocalGemmaRuntimeManager.warmUp(
+        context = context.applicationContext,
+        modelName = modelName,
+        modelPath = modelPath,
+        backend = userSettings.localGemmaBackend
+    ).fold(
+        onSuccess = { LocalGemmaStartupUiState.Ready },
+        onFailure = { error ->
+            LocalGemmaStartupUiState.Error(
+                error.message ?: "Local Gemma 初始化失敗"
+            )
+        }
+    )
+}
+
+@Composable
+private fun LocalGemmaLoadingScreen(
+    title: String,
+    message: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator()
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun LocalGemmaLoadingErrorScreen(
+    message: String,
+    onRetry: () -> Unit,
+    onContinue: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Local Gemma 載入失敗",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Button(onClick = onRetry) {
+                Text("重試")
+            }
+            Button(onClick = onContinue) {
+                Text("先進入 App")
+            }
+        }
+    }
 }
 
 @Composable

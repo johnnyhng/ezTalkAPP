@@ -36,6 +36,26 @@ internal class LocalGemmaLitertLmLlmProvider(
 
     private val generationMutex = Mutex()
 
+    internal suspend fun warmUp(): Result<Unit> {
+        return withContext(Dispatchers.Default) {
+            runCatching {
+                getOrInitEngine()
+                Unit
+            }.fold(
+                onSuccess = { Result.success(Unit) },
+                onFailure = { error ->
+                    Log.w(TAG, "Local Gemma warm-up failed", error)
+                    Result.failure(
+                        LlmError.ProviderFailure(
+                            detail = error.message ?: "Local Gemma warm-up failed",
+                            original = error
+                        )
+                    )
+                }
+            )
+        }
+    }
+
     private fun getOrInitEngine(): Engine {
         engine?.let { return it }
         synchronized(this) {

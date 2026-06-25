@@ -57,8 +57,8 @@ internal class SpeakerLlmProviderFactory(
                 Log.i(TAG, "SpeakerLlmProviderFactory: LOCAL_GEMMA_LITERT_LM check: modelName='$modelName', status=$gemmaStatus")
                 val gemmaProvider = if (gemmaStatus is SpeakerLocalLlmStatus.Available && modelName.isNotBlank()) {
                     val path = modelManager.getModelFile(modelName).absolutePath
-                    Log.i(TAG, "SpeakerLlmProviderFactory: Instantiating LocalGemmaLitertLmLlmProvider with model path: $path, backend: $localGemmaBackend")
-                    LocalGemmaLitertLmLlmProvider(appContext, path, localGemmaBackend)
+                    Log.i(TAG, "SpeakerLlmProviderFactory: Resolving shared LocalGemmaLitertLmLlmProvider with model path: $path, backend: $localGemmaBackend")
+                    LocalGemmaRuntimeManager.getOrCreateProvider(appContext, path, localGemmaBackend)
                 } else {
                     Log.w(TAG, "SpeakerLlmProviderFactory: Local model not available. Fallback to Cloud LLM.")
                     null
