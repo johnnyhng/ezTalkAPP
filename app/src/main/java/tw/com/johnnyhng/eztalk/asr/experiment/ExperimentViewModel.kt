@@ -145,7 +145,6 @@ internal class ExperimentViewModel(
                 withTimeoutOrNull(10000L) {
                     suggestionProvider.suggestWords(
                         context.copy(
-                            stopSequences = listOf("\n"),
                             maxOutputTokens = 1024,
                             temperature = 0.1f
                         )
@@ -157,7 +156,6 @@ internal class ExperimentViewModel(
                 withTimeoutOrNull(10000L) {
                     suggestionProvider.suggestSentences(
                         context.copy(
-                            stopSequences = listOf("\n"),
                             maxOutputTokens = 2048, // 增加額度以容納大量 Thinking Tokens
                             temperature = 0.2f
                         )

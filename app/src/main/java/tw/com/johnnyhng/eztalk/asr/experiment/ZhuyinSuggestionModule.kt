@@ -1,5 +1,7 @@
 package tw.com.johnnyhng.eztalk.asr.experiment
 
+import android.util.Log
+import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.llm.LlmOutputFormat
 import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LlmRequest
@@ -63,7 +65,20 @@ internal class ZhuyinSuggestionModule(
         )
 
         return provider.generate(request).map { response ->
-            parseZhuyinCandidates(response.rawText)
+            val candidates = parseZhuyinCandidates(response.rawText)
+            logZhuyinCandidates(candidates.size, response.rawText)
+            candidates
+        }
+    }
+
+    private fun logZhuyinCandidates(count: Int, rawText: String) {
+        try {
+            Log.i(
+                TAG,
+                "Zhuyin candidates parsed count=$count rawPreview=${rawText.take(200)}"
+            )
+        } catch (_: RuntimeException) {
+            // android.util.Log is not mocked in local JVM unit tests.
         }
     }
 }
