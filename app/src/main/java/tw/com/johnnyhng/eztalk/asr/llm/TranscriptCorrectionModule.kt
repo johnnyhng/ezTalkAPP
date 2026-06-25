@@ -21,13 +21,22 @@ internal class TranscriptCorrectionModule(
         utteranceVariants: List<String>,
         contextLines: List<String>
     ): Result<TranscriptCorrectionResult?> {
-        val provider = llmProvider ?: return Result.success(null)
+        val provider = llmProvider ?: run {
+            Log.w(TAG, "Transcript correction skipped: LLM provider is not ready")
+            return Result.success(null)
+        }
         val sanitizedVariants = utteranceVariants
             .map(String::trim)
             .filter(String::isNotBlank)
             .distinct()
-        if (sanitizedVariants.isEmpty()) return Result.success(null)
-        if (llmModel.isBlank() || llmModel == "none") return Result.success(null)
+        if (sanitizedVariants.isEmpty()) {
+            Log.i(TAG, "Transcript correction skipped: no utterance variants")
+            return Result.success(null)
+        }
+        if (llmModel.isBlank() || llmModel == "none") {
+            Log.i(TAG, "Transcript correction skipped: llmModel=$llmModel")
+            return Result.success(null)
+        }
 
         val prompt = promptBuilder.build(
             utteranceVariants = sanitizedVariants,

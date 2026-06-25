@@ -200,7 +200,9 @@ fun TranslateScreen(
     // Fetch candidates when a new transcript is available
     LaunchedEffect(
         uiState.transcript?.wavFilePath,
-        userSettings.includeRemoteCandidatesInUtteranceVariants
+        userSettings.includeRemoteCandidatesInUtteranceVariants,
+        userSettings.enableTranslateLlmCorrection,
+        llmRuntimeSelection.provider
     ) {
         fetchJob = coroutineContext[Job] // Capture the job of this effect
         val transcript = uiState.transcript

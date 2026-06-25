@@ -681,7 +681,8 @@ fun HomeScreen(
         userSettings.enableHomeLlmCorrection,
         userSettings.enableHomeEnglishTranslation,
         userSettings.effectiveRecognitionUrl,
-        userSettings.userId
+        userSettings.userId,
+        llmRuntimeSelection.provider
     ) {
         homeViewModel.finalTranscript.collect { transcript ->
             if (transcript.modifiedText.isNotBlank()) {
