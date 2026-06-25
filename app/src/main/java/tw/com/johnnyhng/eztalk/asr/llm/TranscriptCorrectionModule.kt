@@ -55,7 +55,7 @@ internal class TranscriptCorrectionModule(
             "Transcript correction request built model=$llmModel variants=${sanitizedVariants.size}:$sanitizedVariants contextLines=${contextLines.size}"
         )
 
-        return provider.generate(request).map { response ->
+        return provider.generateLogged(request, source = "transcript_correction").map { response ->
             parseResponse(response)
         }
     }

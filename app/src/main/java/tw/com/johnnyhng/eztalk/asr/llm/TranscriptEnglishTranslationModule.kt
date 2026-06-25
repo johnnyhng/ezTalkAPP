@@ -34,7 +34,7 @@ internal class TranscriptEnglishTranslationModule(
             "Transcript English translation request built model=$llmModel sourceLength=${sanitizedText.length}"
         )
 
-        return provider.generate(request).map { response ->
+        return provider.generateLogged(request, source = "transcript_english_translation").map { response ->
             parseResponse(response)
         }
     }
