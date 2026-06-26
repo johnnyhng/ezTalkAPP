@@ -51,6 +51,7 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import tw.com.johnnyhng.eztalk.asr.llm.LLM_LOG_TAG
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
@@ -208,6 +209,15 @@ fun TranslateScreen(
                     }
                 )
                 val variantsChanged = loaded.transcript.utteranceVariants != transcript.utteranceVariants
+                Log.i(
+                    LLM_LOG_TAG,
+                    "Translate backend candidates merge file=${File(transcript.wavFilePath).name} " +
+                        "includeRemoteCandidatesInUtteranceVariants=${userSettings.includeRemoteCandidatesInUtteranceVariants} " +
+                        "remoteCandidates=${loaded.remoteCandidates.size}:${loaded.remoteCandidates} " +
+                        "beforeVariants=${transcript.utteranceVariants.size}:${transcript.utteranceVariants} " +
+                        "mergedVariants=${loaded.transcript.utteranceVariants.size}:${loaded.transcript.utteranceVariants} " +
+                        "variantsChanged=$variantsChanged"
+                )
                 val correctedTranscript = if (
                     userSettings.enableTranslateLlmCorrection &&
                     variantsChanged &&
@@ -215,6 +225,11 @@ fun TranslateScreen(
                     uiState.textInput == transcript.modifiedText
                 ) {
                     val correction = withContext(IO) {
+                        Log.i(
+                            LLM_LOG_TAG,
+                            "Translate correction launched reason=backend_candidates file=${File(transcript.wavFilePath).name} " +
+                                "expectedModifiedText=${transcript.modifiedText} variants=${loaded.transcript.utteranceVariants.size}:${loaded.transcript.utteranceVariants}"
+                        )
                         transcriptCorrectionModule.correct(
                             utteranceVariants = loaded.transcript.utteranceVariants.ifEmpty {
                                 listOf(loaded.transcript.recognizedText)
@@ -230,11 +245,29 @@ fun TranslateScreen(
                             TAG,
                             "Translate LLM correction applied after utterance variants update confidence=${correction.confidence} reason=${correction.reasoning.orEmpty()}"
                         )
+                        Log.i(
+                            LLM_LOG_TAG,
+                            "Translate correction applied reason=backend_candidates file=${File(transcript.wavFilePath).name} " +
+                                "before=${loaded.transcript.modifiedText} after=${correction.correctedText} " +
+                                "confidence=${correction.confidence} reasoning=${correction.reasoning.orEmpty()}"
+                        )
                         loaded.transcript.copy(modifiedText = correction.correctedText)
                     } else {
+                        Log.i(
+                            LLM_LOG_TAG,
+                            "Translate correction not applied reason=backend_candidates file=${File(transcript.wavFilePath).name} " +
+                                "cause=${if (correction == null) "no_high_confidence_correction" else "same_text"} " +
+                                "currentModifiedText=${loaded.transcript.modifiedText}"
+                        )
                         loaded.transcript
                     }
                 } else {
+                    Log.i(
+                        LLM_LOG_TAG,
+                        "Translate correction skipped reason=backend_candidates file=${File(transcript.wavFilePath).name} " +
+                            "enabled=${userSettings.enableTranslateLlmCorrection} variantsChanged=$variantsChanged " +
+                            "mutable=${loaded.transcript.mutable} textUnchanged=${uiState.textInput == transcript.modifiedText}"
+                    )
                     loaded.transcript
                 }
 
@@ -536,6 +569,11 @@ fun TranslateScreen(
                                         utteranceVariants = utteranceBundle?.variants ?: listOf(result.text)
                                     )
                                     val correctedTranscript = if (userSettings.enableTranslateLlmCorrection) {
+                                        Log.i(
+                                            LLM_LOG_TAG,
+                                            "Translate correction launched reason=local_final file=${File(baseTranscript.wavFilePath).name} " +
+                                                "expectedModifiedText=${baseTranscript.modifiedText} variants=${baseTranscript.utteranceVariants.size}:${baseTranscript.utteranceVariants}"
+                                        )
                                         val correction = transcriptCorrectionModule.correct(
                                             utteranceVariants = baseTranscript.utteranceVariants.ifEmpty {
                                                 listOf(baseTranscript.recognizedText)
@@ -550,11 +588,27 @@ fun TranslateScreen(
                                                 TAG,
                                                 "Translate LLM correction applied confidence=${correction.confidence} reason=${correction.reasoning.orEmpty()}"
                                             )
+                                            Log.i(
+                                                LLM_LOG_TAG,
+                                                "Translate correction applied reason=local_final file=${File(baseTranscript.wavFilePath).name} " +
+                                                    "before=${baseTranscript.modifiedText} after=${correction.correctedText} " +
+                                                    "confidence=${correction.confidence} reasoning=${correction.reasoning.orEmpty()}"
+                                            )
                                             baseTranscript.copy(modifiedText = correction.correctedText)
                                         } else {
+                                            Log.i(
+                                                LLM_LOG_TAG,
+                                                "Translate correction not applied reason=local_final file=${File(baseTranscript.wavFilePath).name} " +
+                                                    "cause=${if (correction == null) "no_high_confidence_correction" else "same_text"} " +
+                                                    "currentModifiedText=${baseTranscript.modifiedText}"
+                                            )
                                             baseTranscript
                                         }
                                     } else {
+                                        Log.i(
+                                            LLM_LOG_TAG,
+                                            "Translate correction skipped reason=local_final file=${File(baseTranscript.wavFilePath).name} enabled=false"
+                                        )
                                         baseTranscript
                                     }
 

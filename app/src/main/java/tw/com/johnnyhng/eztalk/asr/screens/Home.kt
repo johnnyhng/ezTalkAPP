@@ -28,6 +28,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import tw.com.johnnyhng.eztalk.asr.llm.LLM_LOG_TAG
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptEnglishTranslationModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
@@ -340,13 +341,24 @@ fun HomeScreen(
         processAutoplayQueue()
     }
 
-    fun launchBackgroundCorrection(transcript: Transcript) {
+    fun launchBackgroundCorrection(transcript: Transcript, reason: String) {
         val wavPath = transcript.wavFilePath
-        if (!userSettings.enableHomeLlmCorrection || wavPath.isBlank()) return
+        if (!userSettings.enableHomeLlmCorrection || wavPath.isBlank()) {
+            Log.i(
+                LLM_LOG_TAG,
+                "Home correction skipped before launch reason=$reason enabled=${userSettings.enableHomeLlmCorrection} file=${File(wavPath).name} wavBlank=${wavPath.isBlank()}"
+            )
+            return
+        }
 
         clearCorrectionState(wavPath)
         correctionRunning[wavPath] = true
         val expectedModifiedText = transcript.modifiedText
+        Log.i(
+            LLM_LOG_TAG,
+            "Home correction launched reason=$reason file=${File(wavPath).name} " +
+                "expectedModifiedText=$expectedModifiedText variants=${transcript.utteranceVariants.size}:${transcript.utteranceVariants}"
+        )
 
         val job = coroutineScope.launch {
             try {
@@ -370,12 +382,28 @@ fun HomeScreen(
                 val autoplayPayload = withContext(Dispatchers.Main) {
                     val index = resultList.indexOfFirst { it.wavFilePath == wavPath }
                     if (index == -1) {
+                        Log.i(
+                            LLM_LOG_TAG,
+                            "Home correction skipped reason=$reason file=${File(wavPath).name} cause=transcript_not_found"
+                        )
                         null
                     } else {
                         val current = resultList[index]
                         if (!current.mutable || current.modifiedText != expectedModifiedText) {
+                            Log.i(
+                                LLM_LOG_TAG,
+                                "Home correction skipped reason=$reason file=${File(wavPath).name} " +
+                                    "cause=stale_or_immutable mutable=${current.mutable} " +
+                                    "expectedModifiedText=$expectedModifiedText currentModifiedText=${current.modifiedText}"
+                            )
                             null
                         } else if (correction == null || correction.correctedText == current.modifiedText) {
+                            Log.i(
+                                LLM_LOG_TAG,
+                                "Home correction not applied reason=$reason file=${File(wavPath).name} " +
+                                    "cause=${if (correction == null) "no_high_confidence_correction" else "same_text"} " +
+                                    "currentModifiedText=${current.modifiedText}"
+                            )
                             if (
                                 shouldAutoplayHome() &&
                                 !current.checked &&
@@ -390,6 +418,12 @@ fun HomeScreen(
                                 null
                             }
                         } else {
+                            Log.i(
+                                LLM_LOG_TAG,
+                                "Home correction applied reason=$reason file=${File(wavPath).name} " +
+                                    "before=${current.modifiedText} after=${correction.correctedText} " +
+                                    "confidence=${correction.confidence} reasoning=${correction.reasoning.orEmpty()}"
+                            )
                             current.copy(
                                 modifiedText = correction.correctedText,
                                 englishTranslation = ""
@@ -486,6 +520,14 @@ fun HomeScreen(
                                     TAG,
                                     "Home remote candidates merged into variants: file=${File(wavPath).name}, enabled=${userSettings.includeRemoteCandidatesInUtteranceVariants}, remote=${sentences.size}, beforeVariants=${current.utteranceVariants.size}, afterVariants=${mergedVariants.size}, utteranceVariants=$mergedVariants"
                                 )
+                                Log.i(
+                                    LLM_LOG_TAG,
+                                    "Home backend candidates merge file=${File(wavPath).name} " +
+                                        "includeRemoteCandidatesInUtteranceVariants=${userSettings.includeRemoteCandidatesInUtteranceVariants} " +
+                                        "remoteCandidates=${sentences.size}:$sentences " +
+                                        "beforeVariants=${current.utteranceVariants.size}:${current.utteranceVariants} " +
+                                        "mergedVariants=${mergedVariants.size}:$mergedVariants"
+                                )
                                 val updated = current.copy(
                                     remoteCandidates = sentences,
                                     utteranceVariants = mergedVariants
@@ -500,7 +542,7 @@ fun HomeScreen(
                                         TAG,
                                         "Home LLM correction queued after utterance variants update: file=${File(wavPath).name}"
                                     )
-                                    launchBackgroundCorrection(updated)
+                                    launchBackgroundCorrection(updated, reason = "backend_candidates")
                                 }
                             }
                         }
@@ -669,7 +711,7 @@ fun HomeScreen(
                 if (userSettings.effectiveRecognitionUrl.isNotBlank()) {
                     recognitionQueue.trySend(transcript.wavFilePath)
                 }
-                launchBackgroundCorrection(transcript)
+                launchBackgroundCorrection(transcript, reason = "local_final")
                 launchBackgroundEnglishTranslation(transcript)
 
                 val wasRecordingAtFinal = isStarted
