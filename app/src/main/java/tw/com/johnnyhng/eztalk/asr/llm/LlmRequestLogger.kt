@@ -25,6 +25,36 @@ internal object LlmRequestLogger {
         }
     }
 
+    fun logCompletion(
+        source: String,
+        provider: LlmProvider,
+        request: LlmRequest,
+        durationMs: Long,
+        result: Result<LlmResponse>
+    ) {
+        result.fold(
+            onSuccess = { response ->
+                safeInfo(
+                    "LLM response source=$source provider=${provider.providerName} " +
+                        "model=${request.model.ifBlank { "(default/provider)" }} " +
+                        "durationMs=$durationMs success=true rawLength=${response.rawText.length} " +
+                        "finishReason=${response.finishReason ?: "none"} " +
+                        "inputTokens=${response.usage?.inputTokens ?: "unknown"} " +
+                        "outputTokens=${response.usage?.outputTokens ?: "unknown"} " +
+                        "totalTokens=${response.usage?.totalTokens ?: "unknown"}"
+                )
+            },
+            onFailure = { error ->
+                safeInfo(
+                    "LLM response source=$source provider=${provider.providerName} " +
+                        "model=${request.model.ifBlank { "(default/provider)" }} " +
+                        "durationMs=$durationMs success=false errorType=${error.javaClass.simpleName} " +
+                        "error=${error.message ?: "unknown"}"
+                )
+            }
+        )
+    }
+
     private fun logField(source: String, field: String, value: String) {
         val text = value.trim()
         if (text.isBlank()) {
@@ -58,5 +88,14 @@ internal suspend fun LlmProvider.generateLogged(
         provider = this,
         request = request
     )
-    return generate(request)
+    val startTime = System.currentTimeMillis()
+    val result = generate(request)
+    LlmRequestLogger.logCompletion(
+        source = source,
+        provider = this,
+        request = request,
+        durationMs = System.currentTimeMillis() - startTime,
+        result = result
+    )
+    return result
 }

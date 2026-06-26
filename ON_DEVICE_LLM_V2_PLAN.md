@@ -9,7 +9,7 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
 3. Settings page for LLM mode and Local Gemma management: done.
 4. Local Gemma LiteRT-LM manual runtime: done.
 5. App-level shared runtime + loading UX: in progress / current implementation.
-6. Feature integration and A/B validation: pending.
+6. Feature integration and A/B validation: in progress / current implementation.
 
 ## Phase 4 LiteRT-LM solution
 
@@ -41,6 +41,13 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
 - Error UX:
   - Missing model or runtime initialization failure is surfaced through an app-level dialog.
   - The user can continue or jump to Settings.
+
+## Phase 6 validation hooks
+
+- `LlmRequestLogger.generateLogged` records request and response metrics for every LLM request.
+- Completion metrics include provider, model, source, duration, success/failure, raw response length, finish reason, and token usage when available.
+- Provider selection logs include execution mode, chosen provider, Gemini model, Local Gemma model, and Local Gemma backend.
+- See `ON_DEVICE_LLM_VALIDATION.md` for the manual A/B checklist.
 
 ## Known constraints
 
