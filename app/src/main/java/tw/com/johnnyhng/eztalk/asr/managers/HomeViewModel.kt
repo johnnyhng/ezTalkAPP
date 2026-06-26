@@ -24,6 +24,8 @@ import tw.com.johnnyhng.eztalk.asr.data.classes.UserSettings
 import tw.com.johnnyhng.eztalk.asr.managers.TseModelManager
 import tw.com.johnnyhng.eztalk.asr.managers.RemoteTseModelRepository
 import tw.com.johnnyhng.eztalk.asr.managers.DirectUrlRemoteTseModelRepository
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaModel
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaModelManager
 import tw.com.johnnyhng.eztalk.asr.utils.checkModelUpdate
 import tw.com.johnnyhng.eztalk.asr.utils.sha256
 import java.io.File
@@ -107,6 +109,10 @@ class HomeViewModel @JvmOverloads constructor(
     var isFetchingRemoteTseModels by mutableStateOf(false)
     var remoteTseModelsErrorMessage by mutableStateOf<String?>(null)
 
+    private val localGemmaModelManager = LocalGemmaModelManager(application)
+    private val _localGemmaModels = mutableStateListOf<LocalGemmaModel>()
+    internal val localGemmaModels: List<LocalGemmaModel> get() = _localGemmaModels
+
     // Recognition Manager integration
     private val recognitionManager = RecognitionManager(application)
     private val recognizerInitMutex = Mutex()
@@ -132,6 +138,7 @@ class HomeViewModel @JvmOverloads constructor(
     init {
         loadModels()
         loadTseModels()
+        refreshLocalGemmaModels()
         
         recognitionManager.onPartialResult = { text ->
             viewModelScope.launch { _partialText.emit(text) }
@@ -483,6 +490,10 @@ class HomeViewModel @JvmOverloads constructor(
     }
     fun updateLocalGemmaModelAccessToken(v: String) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(localGemmaModelAccessToken = v))
+    }
+    fun refreshLocalGemmaModels() {
+        _localGemmaModels.clear()
+        _localGemmaModels.addAll(localGemmaModelManager.listModels())
     }
     fun updateUseTseDetection(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(useTseDetection = v))
