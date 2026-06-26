@@ -1,0 +1,38 @@
+# On-device LLM v2 plan
+
+Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally unchanged in this branch until validation says otherwise.
+
+## Phase status
+
+1. v3.0 baseline + LLM diagnostic logs: done.
+2. Shared Gemini provider abstraction + centralized request logging: done.
+3. Settings page for LLM mode and Local Gemma management: done.
+4. Local Gemma LiteRT-LM manual runtime: in progress / current implementation.
+5. App-level shared runtime + loading UX: pending.
+6. Feature integration and A/B validation: pending.
+
+## Phase 4 LiteRT-LM solution
+
+- Runtime provider: `LocalGemmaLitertLmLlmProvider`.
+- Model layout: app-private files under `models/local_gemma/<modelName>/model.litertlm`.
+- Legacy model layout still resolves `models/gemma4_e2b/model.litertlm`.
+- Backend selection:
+  - `auto`: try NPU, then GPU, then CPU.
+  - `npu`: requires `libLiteRtDispatch_GoogleTensor.so` in `nativeLibraryDir`.
+  - `gpu` / `cpu`: use LiteRT-LM GPU / CPU backend directly.
+- Native dispatch library:
+  - `app/src/main/jniLibs/arm64-v8a/libLiteRtDispatch_GoogleTensor.so`
+  - Required for Pixel Tensor NPU dispatch.
+- Provider selection:
+  - Cloud mode: Gemini only.
+  - Local Gemma mode: Local Gemma only; if the model file is missing, the provider is unavailable and logs the reason.
+  - Auto mode: Local Gemma if the selected model exists; otherwise Gemini fallback.
+- Loading behavior:
+  - Phase 4 loads LiteRT-LM lazily on first request.
+  - No app-level standby runtime or loading screen is implemented yet. That is Phase 5.
+
+## Known constraints
+
+- Tensor-compiled models such as `*_Google_Tensor_G5` should run on NPU. GPU/CPU fallback generally needs a non-Tensor LiteRT-LM model.
+- First local request may be slow because engine initialization happens on demand in Phase 4.
+- The current prompt formatting follows the previous Local Gemma implementation and does not change the transcript correction prompt text.

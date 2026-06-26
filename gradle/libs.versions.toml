@@ -14,6 +14,7 @@ appcompat = "1.7.1"
 googleServices = "4.4.3"
 firebaseAuth = "23.1.0"
 firebaseFirestore = "25.1.4"
+litertlmAndroid = "0.13.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,6 +37,7 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version = "1.8.1" }
+litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlmAndroid" }
 
 
 [plugins]

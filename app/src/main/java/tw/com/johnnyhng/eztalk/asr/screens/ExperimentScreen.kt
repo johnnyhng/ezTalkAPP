@@ -71,8 +71,14 @@ fun ExperimentScreen(
     val userSettings by homeViewModel.userSettings.collectAsState()
     val appContext = context.applicationContext
     val geminiModel = userSettings.geminiModel
-    val viewModelFactory = remember(appContext, geminiModel) {
-        val provider = LlmProviderFactory(appContext).createGeminiProvider(geminiModel)
+    val viewModelFactory = remember(
+        appContext,
+        geminiModel,
+        userSettings.speakerLlmExecutionMode,
+        userSettings.selectedLocalGemmaModelName,
+        userSettings.localGemmaBackend
+    ) {
+        val provider = LlmProviderFactory(appContext).createProvider(userSettings)
         ExperimentViewModelFactory(
             ZhuyinSuggestionModule(
                 llmProvider = provider,

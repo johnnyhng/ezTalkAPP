@@ -16,7 +16,9 @@ internal class SpeakerLlmProviderFactory(
 
     suspend fun create(
         geminiModel: String?,
-        executionMode: SpeakerLlmExecutionMode
+        executionMode: SpeakerLlmExecutionMode,
+        localGemmaModelName: String = "",
+        localGemmaBackend: String = LocalGemmaBackend.AUTO.storageValue
     ): SpeakerLlmRuntimeSelection {
         val localStatus = SpeakerLocalLlmAvailabilityChecker(appContext).check()
         val cloudProvider = geminiModel?.let {
@@ -24,6 +26,10 @@ internal class SpeakerLlmProviderFactory(
                 accessTokenProvider = GoogleAuthGeminiAccessTokenProvider(appContext)
             )
         }
+        val localGemmaProvider = createLocalGemmaProvider(
+            modelName = localGemmaModelName,
+            backendValue = localGemmaBackend
+        )
 
         return when (executionMode) {
             SpeakerLlmExecutionMode.AUTO_LOCAL -> {
@@ -33,8 +39,12 @@ internal class SpeakerLlmProviderFactory(
                     null
                 }
                 SpeakerLlmRuntimeSelection(
-                    provider = localProvider ?: cloudProvider,
-                    sourceLabel = if (localProvider != null) "local" else "cloud",
+                    provider = localGemmaProvider ?: localProvider ?: cloudProvider,
+                    sourceLabel = when {
+                        localGemmaProvider != null -> "local_gemma_litertlm"
+                        localProvider != null -> "local_gemini_nano"
+                        else -> "cloud"
+                    },
                     localStatus = localStatus,
                     executionMode = executionMode
                 )
@@ -42,8 +52,12 @@ internal class SpeakerLlmProviderFactory(
 
             SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM -> {
                 SpeakerLlmRuntimeSelection(
-                    provider = null,
-                    sourceLabel = "local_gemma_pending",
+                    provider = localGemmaProvider,
+                    sourceLabel = if (localGemmaProvider != null) {
+                        "local_gemma_litertlm"
+                    } else {
+                        "local_gemma_unavailable"
+                    },
                     localStatus = localStatus,
                     executionMode = executionMode
                 )
@@ -58,5 +72,22 @@ internal class SpeakerLlmProviderFactory(
                 )
             }
         }
+    }
+
+    private fun createLocalGemmaProvider(
+        modelName: String,
+        backendValue: String
+    ): LlmProvider? {
+        val model = LocalGemmaModelManager(appContext).resolveModel(modelName)
+        if (model == null) {
+            safeLogWarning(LLM_LOG_TAG, "Speaker Local Gemma unavailable model=$modelName")
+            return null
+        }
+        val backend = LocalGemmaBackend.fromStorageValue(backendValue)
+        return LocalGemmaLitertLmLlmProvider(
+            context = appContext,
+            modelPath = model.path,
+            backend = backend
+        )
     }
 }

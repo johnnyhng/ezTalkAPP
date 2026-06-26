@@ -153,8 +153,14 @@ fun TranslateScreen(
     val llmProviderFactory = remember(appContext) {
         LlmProviderFactory(appContext)
     }
-    val correctionProvider = remember(userSettings.geminiModel, llmProviderFactory) {
-        llmProviderFactory.createGeminiProvider(userSettings.geminiModel)
+    val correctionProvider = remember(
+        userSettings.geminiModel,
+        userSettings.speakerLlmExecutionMode,
+        userSettings.selectedLocalGemmaModelName,
+        userSettings.localGemmaBackend,
+        llmProviderFactory
+    ) {
+        llmProviderFactory.createProvider(userSettings)
     }
     val transcriptCorrectionModule = remember(correctionProvider, userSettings.geminiModel) {
         TranscriptCorrectionModule(
