@@ -60,7 +60,7 @@ internal class TranscriptCorrectionModule(
                 "variants=${sanitizedVariants.size}:$sanitizedVariants contextLines=${contextLines.size}:$contextLines"
         )
 
-        return provider.generate(request).map { response ->
+        return provider.generateLogged(request, source = "transcript_correction").map { response ->
             Log.d(
                 LLM_LOG_TAG,
                 "Transcript correction raw response preview=${response.rawText.take(500)}"

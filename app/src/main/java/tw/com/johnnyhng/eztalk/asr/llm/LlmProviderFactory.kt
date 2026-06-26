@@ -2,10 +2,12 @@ package tw.com.johnnyhng.eztalk.asr.llm
 
 import android.content.Context
 
-internal class TranscriptCorrectionProviderFactory(
-    private val appContext: Context
+internal class LlmProviderFactory(
+    context: Context
 ) {
-    fun create(model: String): LlmProvider? {
+    private val appContext = context.applicationContext
+
+    fun createGeminiProvider(model: String): LlmProvider? {
         if (model.isBlank() || model == "none") return null
         return GeminiLlmProvider(
             config = GeminiProviderConfig(model = model),

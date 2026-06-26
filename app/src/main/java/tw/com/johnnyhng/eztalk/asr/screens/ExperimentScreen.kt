@@ -59,7 +59,7 @@ import tw.com.johnnyhng.eztalk.asr.experiment.stripPrefix
 import tw.com.johnnyhng.eztalk.asr.experiment.traditionalChineseEmotions
 import tw.com.johnnyhng.eztalk.asr.experiment.traditionalChineseInitialPhrases
 import tw.com.johnnyhng.eztalk.asr.experiment.zhuyinSingleRowKeyGroups
-import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
+import tw.com.johnnyhng.eztalk.asr.llm.LlmProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -72,7 +72,7 @@ fun ExperimentScreen(
     val appContext = context.applicationContext
     val geminiModel = userSettings.geminiModel
     val viewModelFactory = remember(appContext, geminiModel) {
-        val provider = TranscriptCorrectionProviderFactory(appContext).create(geminiModel)
+        val provider = LlmProviderFactory(appContext).createGeminiProvider(geminiModel)
         ExperimentViewModelFactory(
             ZhuyinSuggestionModule(
                 llmProvider = provider,

@@ -7,6 +7,7 @@ import tw.com.johnnyhng.eztalk.asr.TAG
 import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LlmRequest
 import tw.com.johnnyhng.eztalk.asr.llm.LlmResponse
+import tw.com.johnnyhng.eztalk.asr.llm.generateLogged
 import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerCommandPromptLine
 import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerCommandResolutionPromptBuilder
 import tw.com.johnnyhng.eztalk.asr.prompt.SpeakerSemanticPromptBuilder
@@ -230,7 +231,7 @@ internal class SpeakerSemanticModule(
             IllegalStateException("LLM provider is not configured")
         )
 
-        return provider.generate(request).map { response ->
+        return provider.generateLogged(request, source = "speaker_semantic").map { response ->
             parseLlmResponse(
                 response = response,
                 rankedResults = rankedResults,

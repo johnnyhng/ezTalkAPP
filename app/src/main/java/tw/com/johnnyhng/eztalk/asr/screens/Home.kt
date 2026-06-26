@@ -29,9 +29,9 @@ import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.llm.LLM_LOG_TAG
+import tw.com.johnnyhng.eztalk.asr.llm.LlmProviderFactory
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptEnglishTranslationModule
-import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.utils.*
 import tw.com.johnnyhng.eztalk.asr.workflow.reduceTranscriptAfterConfirmation
@@ -113,11 +113,11 @@ fun HomeScreen(
     val isEnglishTtsSpeaking = englishSpeechState.isSpeaking
     val isAnyTtsSpeaking = isTtsSpeaking || isEnglishTtsSpeaking
     val recognitionQueue = remember { Channel<String>(Channel.UNLIMITED) }
-    val correctionProviderFactory = remember(appContext) {
-        TranscriptCorrectionProviderFactory(appContext)
+    val llmProviderFactory = remember(appContext) {
+        LlmProviderFactory(appContext)
     }
-    val correctionProvider = remember(userSettings.geminiModel, correctionProviderFactory) {
-        correctionProviderFactory.create(userSettings.geminiModel)
+    val correctionProvider = remember(userSettings.geminiModel, llmProviderFactory) {
+        llmProviderFactory.createGeminiProvider(userSettings.geminiModel)
     }
     val transcriptCorrectionModule = remember(correctionProvider, userSettings.geminiModel) {
         TranscriptCorrectionModule(

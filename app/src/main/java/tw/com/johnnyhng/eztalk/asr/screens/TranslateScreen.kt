@@ -52,8 +52,8 @@ import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
 import tw.com.johnnyhng.eztalk.asr.llm.LLM_LOG_TAG
+import tw.com.johnnyhng.eztalk.asr.llm.LlmProviderFactory
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
-import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionProviderFactory
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.TseModelManager
 import tw.com.johnnyhng.eztalk.asr.data.classes.TseModel
@@ -150,11 +150,11 @@ fun TranslateScreen(
     // Channel to signal the audio processor to flush remaining buffers
     val flushChannel = remember { Channel<Unit>(Channel.CONFLATED) }
     val utteranceVariantBuffer = remember { AsrUtteranceVariantBuffer() }
-    val correctionProviderFactory = remember(appContext) {
-        TranscriptCorrectionProviderFactory(appContext)
+    val llmProviderFactory = remember(appContext) {
+        LlmProviderFactory(appContext)
     }
-    val correctionProvider = remember(userSettings.geminiModel, correctionProviderFactory) {
-        correctionProviderFactory.create(userSettings.geminiModel)
+    val correctionProvider = remember(userSettings.geminiModel, llmProviderFactory) {
+        llmProviderFactory.createGeminiProvider(userSettings.geminiModel)
     }
     val transcriptCorrectionModule = remember(correctionProvider, userSettings.geminiModel) {
         TranscriptCorrectionModule(

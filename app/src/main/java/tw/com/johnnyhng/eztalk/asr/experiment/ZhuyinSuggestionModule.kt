@@ -3,6 +3,7 @@ package tw.com.johnnyhng.eztalk.asr.experiment
 import tw.com.johnnyhng.eztalk.asr.llm.LlmOutputFormat
 import tw.com.johnnyhng.eztalk.asr.llm.LlmProvider
 import tw.com.johnnyhng.eztalk.asr.llm.LlmRequest
+import tw.com.johnnyhng.eztalk.asr.llm.generateLogged
 
 internal interface ZhuyinSuggestionProvider {
     suspend fun suggestWords(context: ZhuyinPromptContext): Result<List<String>>
@@ -40,7 +41,7 @@ internal class ZhuyinSuggestionModule(
             temperature = context.temperature
         )
 
-        return provider.generate(request).map { it.rawText.trim() }
+        return provider.generateLogged(request, source = "zhuyin_refinement").map { it.rawText.trim() }
     }
 
 
@@ -62,7 +63,7 @@ internal class ZhuyinSuggestionModule(
             temperature = context.temperature
         )
 
-        return provider.generate(request).map { response ->
+        return provider.generateLogged(request, source = "zhuyin_candidates").map { response ->
             parseZhuyinCandidates(response.rawText)
         }
     }
