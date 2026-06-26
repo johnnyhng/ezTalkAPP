@@ -84,7 +84,7 @@ internal class SpeakerLlmProviderFactory(
             return null
         }
         val backend = LocalGemmaBackend.fromStorageValue(backendValue)
-        return LocalGemmaLitertLmLlmProvider(
+        return LocalGemmaRuntimeManager.getOrCreateProvider(
             context = appContext,
             modelPath = model.path,
             backend = backend

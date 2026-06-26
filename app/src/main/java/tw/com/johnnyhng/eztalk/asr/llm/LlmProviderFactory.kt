@@ -42,7 +42,7 @@ internal class LlmProviderFactory(
             LLM_LOG_TAG,
             "Local Gemma provider selected model=${model.name} path=${model.path} backend=${backend.storageValue}"
         )
-        return LocalGemmaLitertLmLlmProvider(
+        return LocalGemmaRuntimeManager.getOrCreateProvider(
             context = appContext,
             modelPath = model.path,
             backend = backend

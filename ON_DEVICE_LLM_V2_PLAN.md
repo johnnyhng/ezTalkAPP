@@ -7,8 +7,8 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
 1. v3.0 baseline + LLM diagnostic logs: done.
 2. Shared Gemini provider abstraction + centralized request logging: done.
 3. Settings page for LLM mode and Local Gemma management: done.
-4. Local Gemma LiteRT-LM manual runtime: in progress / current implementation.
-5. App-level shared runtime + loading UX: pending.
+4. Local Gemma LiteRT-LM manual runtime: done.
+5. App-level shared runtime + loading UX: in progress / current implementation.
 6. Feature integration and A/B validation: pending.
 
 ## Phase 4 LiteRT-LM solution
@@ -28,8 +28,19 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
   - Local Gemma mode: Local Gemma only; if the model file is missing, the provider is unavailable and logs the reason.
   - Auto mode: Local Gemma if the selected model exists; otherwise Gemini fallback.
 - Loading behavior:
-  - Phase 4 loads LiteRT-LM lazily on first request.
-  - No app-level standby runtime or loading screen is implemented yet. That is Phase 5.
+  - Phase 4 loaded LiteRT-LM lazily on first request.
+
+## Phase 5 shared runtime solution
+
+- Runtime singleton: `LocalGemmaRuntimeManager`.
+- Provider factory and Speaker provider factory reuse the same Local Gemma provider for the same model path and backend.
+- App startup warm-up:
+  - Cloud mode: skip Local Gemma.
+  - Local Gemma mode: warm up the selected local model and show a loading dialog while initialization runs.
+  - Auto mode: warm up Local Gemma only if the selected local model exists; otherwise keep Gemini fallback without blocking startup.
+- Error UX:
+  - Missing model or runtime initialization failure is surfaced through an app-level dialog.
+  - The user can continue or jump to Settings.
 
 ## Known constraints
 

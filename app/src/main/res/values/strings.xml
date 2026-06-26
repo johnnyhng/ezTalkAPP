@@ -6,6 +6,7 @@
     <string name="stop">Stop</string>
     <string name="copy">Copy</string>
     <string name="clear">Clear</string>
+    <string name="continue_action">Continue</string>
     <string name="language">Language</string>
     <string name="current_user_id">Current User ID: %1$s</string>
     <string name="google_account_status">Google account: %1$s</string>
@@ -48,9 +49,9 @@
     <string name="speaker_llm_execution_mode_auto_local">Auto</string>
     <string name="speaker_llm_execution_mode_cloud">Cloud LLM</string>
     <string name="speaker_llm_execution_mode_local_gemma">Local Gemma LiteRT-LM</string>
-    <string name="speaker_llm_execution_mode_summary">Cloud LLM remains the default. Local Gemma LiteRT-LM settings are staged here; runtime loading will be enabled in later phases.</string>
+    <string name="speaker_llm_execution_mode_summary">Cloud LLM remains the default. Local Gemma LiteRT-LM loads a shared on-device runtime when selected or when Auto finds a local model.</string>
     <string name="local_gemma_settings_title">Local Gemma LiteRT-LM</string>
-    <string name="local_gemma_settings_summary">Configure the future on-device model. This phase only persists settings and does not load LiteRT-LM yet.</string>
+    <string name="local_gemma_settings_summary">Configure the shared on-device model runtime. The app warms it up when Local Gemma is selected, or when Auto finds this local model.</string>
     <string name="local_gemma_model_name_label">Local Gemma model name</string>
     <string name="local_gemma_backend_label">Local Gemma backend</string>
     <string name="local_gemma_backend_auto">Auto</string>
@@ -59,9 +60,13 @@
     <string name="local_gemma_backend_cpu">CPU</string>
     <string name="local_gemma_model_url_label">Local Gemma model URL</string>
     <string name="local_gemma_model_token_label">Local Gemma access token</string>
-    <string name="local_gemma_status_settings_only">Status: settings only. Model import/delete and runtime standby will be implemented in later phases.</string>
+    <string name="local_gemma_status_settings_only">Status: app-level runtime warm-up is enabled. Model import/delete will be implemented in a later phase.</string>
     <string name="local_gemma_import_model">Import model</string>
     <string name="local_gemma_delete_model">Delete local model</string>
+    <string name="local_gemma_loading_title">Loading Local Gemma</string>
+    <string name="local_gemma_loading_message">Warming up %1$s on %2$s. This may take a while on first launch.</string>
+    <string name="local_gemma_error_title">Local Gemma unavailable</string>
+    <string name="local_gemma_error_message">Model: %1$s\nBackend: %2$s\n%3$s</string>
     <string name="speech_detection_mode_label">Speech detection mode</string>
     <string name="speech_detection_mode_vad">VAD (default)</string>
     <string name="speech_detection_mode_tse">TSE (user voice detection)</string>

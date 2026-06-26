@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
@@ -73,6 +75,8 @@ import kotlinx.coroutines.withContext
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleAccountSession
 import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
 import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaRuntimeManager
+import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaRuntimeState
 import tw.com.johnnyhng.eztalk.asr.utils.TLSExpireResolver
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
@@ -166,11 +170,14 @@ fun MainScreen(
     val context = LocalContext.current
     val navController = rememberNavController()
     val homeViewModel: HomeViewModel = viewModel()
+    val userSettings by homeViewModel.userSettings.collectAsState()
     val scope = rememberCoroutineScope()
     val isAsrModelLoading by homeViewModel.isAsrModelLoading.collectAsState()
+    val localGemmaRuntimeState by LocalGemmaRuntimeManager.state.collectAsState()
     val signInManager = remember { GoogleSignInManager() }
     val googleSignInClient = remember { signInManager.getSignInClient(context) }
     var googleSession by remember { mutableStateOf<GoogleAccountSession?>(null) }
+    var dismissedLocalGemmaErrorKey by remember { mutableStateOf<String?>(null) }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: initialEntryRoute
 
@@ -181,6 +188,18 @@ fun MainScreen(
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
+    }
+
+    LaunchedEffect(
+        context,
+        userSettings.speakerLlmExecutionMode,
+        userSettings.selectedLocalGemmaModelName,
+        userSettings.localGemmaBackend
+    ) {
+        LocalGemmaRuntimeManager.warmUpIfConfigured(
+            context = context.applicationContext,
+            settings = userSettings
+        )
     }
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
@@ -269,6 +288,13 @@ fun MainScreen(
             confirmButton = {}
         )
     }
+
+    LocalGemmaRuntimeDialog(
+        state = localGemmaRuntimeState,
+        dismissedErrorKey = dismissedLocalGemmaErrorKey,
+        onOpenSettings = { navController.navigateSingleTopTo(NavRoutes.Settings.route) },
+        onDismissError = { dismissedLocalGemmaErrorKey = it }
+    )
 
     Scaffold(
         topBar = {
@@ -376,6 +402,83 @@ fun MainScreen(
             }
         }
     )
+}
+
+@Composable
+private fun LocalGemmaRuntimeDialog(
+    state: LocalGemmaRuntimeState,
+    dismissedErrorKey: String?,
+    onOpenSettings: () -> Unit,
+    onDismissError: (String) -> Unit
+) {
+    when (state) {
+        LocalGemmaRuntimeState.Idle,
+        is LocalGemmaRuntimeState.Ready -> Unit
+
+        is LocalGemmaRuntimeState.Loading -> {
+            AlertDialog(
+                onDismissRequest = { },
+                title = {
+                    Text(text = stringResource(R.string.local_gemma_loading_title))
+                },
+                text = {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = stringResource(
+                                R.string.local_gemma_loading_message,
+                                state.modelName,
+                                state.backend.storageValue
+                            )
+                        )
+                    }
+                },
+                confirmButton = {}
+            )
+        }
+
+        is LocalGemmaRuntimeState.Error -> {
+            val errorKey = "${state.modelName}:${state.backend.storageValue}:${state.message}"
+            if (dismissedErrorKey == errorKey) return
+
+            AlertDialog(
+                onDismissRequest = { onDismissError(errorKey) },
+                title = {
+                    Text(text = stringResource(R.string.local_gemma_error_title))
+                },
+                text = {
+                    Text(
+                        text = stringResource(
+                            R.string.local_gemma_error_message,
+                            state.modelName,
+                            state.backend.storageValue,
+                            state.message
+                        )
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = {
+                            onDismissError(errorKey)
+                            onOpenSettings()
+                        }
+                    ) {
+                        Text(stringResource(R.string.settings))
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { onDismissError(errorKey) }
+                    ) {
+                        Text(stringResource(R.string.continue_action))
+                    }
+                }
+            )
+        }
+    }
 }
 
 private suspend fun loadCachedGoogleProfilePhoto(
