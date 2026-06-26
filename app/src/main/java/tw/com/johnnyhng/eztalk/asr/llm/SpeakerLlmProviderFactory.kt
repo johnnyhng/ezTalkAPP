@@ -40,6 +40,15 @@ internal class SpeakerLlmProviderFactory(
                 )
             }
 
+            SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM -> {
+                SpeakerLlmRuntimeSelection(
+                    provider = null,
+                    sourceLabel = "local_gemma_pending",
+                    localStatus = localStatus,
+                    executionMode = executionMode
+                )
+            }
+
             SpeakerLlmExecutionMode.CLOUD -> {
                 SpeakerLlmRuntimeSelection(
                     provider = cloudProvider,

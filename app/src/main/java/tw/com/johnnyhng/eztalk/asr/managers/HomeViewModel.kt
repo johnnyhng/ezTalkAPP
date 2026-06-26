@@ -472,6 +472,18 @@ class HomeViewModel @JvmOverloads constructor(
     fun updateSpeakerLlmExecutionMode(v: String) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(speakerLlmExecutionMode = v))
     }
+    fun updateLocalGemmaBackend(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(localGemmaBackend = v))
+    }
+    fun updateSelectedLocalGemmaModelName(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(selectedLocalGemmaModelName = v))
+    }
+    fun updateLocalGemmaModelUrl(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(localGemmaModelUrl = v))
+    }
+    fun updateLocalGemmaModelAccessToken(v: String) = viewModelScope.launch {
+        settingsManager.updateSettings(userSettings.value.copy(localGemmaModelAccessToken = v))
+    }
     fun updateUseTseDetection(v: Boolean) = viewModelScope.launch {
         settingsManager.updateSettings(userSettings.value.copy(useTseDetection = v))
     }

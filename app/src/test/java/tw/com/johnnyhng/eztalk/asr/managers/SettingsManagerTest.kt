@@ -26,6 +26,11 @@ class SettingsManagerTest {
         assertTrue(settings.enableTtsFeedback)
         assertEquals("", settings.selectedModelName)
         assertEquals("", settings.mobileModelSha256)
+        assertEquals("cloud", settings.speakerLlmExecutionMode)
+        assertEquals("auto", settings.localGemmaBackend)
+        assertEquals("gemma-4-E2B-it_Google_Tensor_G5", settings.selectedLocalGemmaModelName)
+        assertEquals("", settings.localGemmaModelUrl)
+        assertEquals("", settings.localGemmaModelAccessToken)
         assertEquals(null, settings.preferredAudioInputDeviceId)
         assertEquals(null, settings.preferredAudioOutputDeviceId)
         assertFalse(settings.allowAppAudioCapture)
@@ -52,6 +57,11 @@ class SettingsManagerTest {
             booleanPreferencesKey("enable_tts_feedback") to true,
             stringPreferencesKey("selected_model_name") to "demo-model",
             stringPreferencesKey("mobile_model_sha256") to "abc123",
+            stringPreferencesKey("speaker_llm_execution_mode") to "local_gemma_litert_lm",
+            stringPreferencesKey("local_gemma_backend") to "npu",
+            stringPreferencesKey("selected_local_gemma_model_name") to "gemma-test",
+            stringPreferencesKey("local_gemma_model_url") to "https://example.com/model.litertlm",
+            stringPreferencesKey("local_gemma_model_access_token") to "token-123",
             intPreferencesKey("preferred_audio_input_device_id") to 101,
             intPreferencesKey("preferred_audio_output_device_id") to 202,
             booleanPreferencesKey("allow_app_audio_capture") to true,
@@ -69,6 +79,11 @@ class SettingsManagerTest {
         assertTrue(settings.enableTtsFeedback)
         assertEquals("demo-model", settings.selectedModelName)
         assertEquals("abc123", settings.mobileModelSha256)
+        assertEquals("local_gemma_litert_lm", settings.speakerLlmExecutionMode)
+        assertEquals("npu", settings.localGemmaBackend)
+        assertEquals("gemma-test", settings.selectedLocalGemmaModelName)
+        assertEquals("https://example.com/model.litertlm", settings.localGemmaModelUrl)
+        assertEquals("token-123", settings.localGemmaModelAccessToken)
         assertEquals(101, settings.preferredAudioInputDeviceId)
         assertEquals(202, settings.preferredAudioOutputDeviceId)
         assertTrue(settings.allowAppAudioCapture)
@@ -88,6 +103,11 @@ class SettingsManagerTest {
             enableTtsFeedback = true,
             selectedModelName = "model-a",
             mobileModelSha256 = "deadbeef",
+            speakerLlmExecutionMode = "local_gemma_litert_lm",
+            localGemmaBackend = "gpu",
+            selectedLocalGemmaModelName = "gemma-writer",
+            localGemmaModelUrl = "https://example.com/gemma.litertlm",
+            localGemmaModelAccessToken = "secret",
             preferredAudioInputDeviceId = 303,
             preferredAudioOutputDeviceId = 404,
             allowAppAudioCapture = true,
@@ -105,6 +125,11 @@ class SettingsManagerTest {
         assertEquals(true, preferences[booleanPreferencesKey("enable_tts_feedback")])
         assertEquals("model-a", preferences[stringPreferencesKey("selected_model_name")])
         assertEquals("deadbeef", preferences[stringPreferencesKey("mobile_model_sha256")])
+        assertEquals("local_gemma_litert_lm", preferences[stringPreferencesKey("speaker_llm_execution_mode")])
+        assertEquals("gpu", preferences[stringPreferencesKey("local_gemma_backend")])
+        assertEquals("gemma-writer", preferences[stringPreferencesKey("selected_local_gemma_model_name")])
+        assertEquals("https://example.com/gemma.litertlm", preferences[stringPreferencesKey("local_gemma_model_url")])
+        assertEquals("secret", preferences[stringPreferencesKey("local_gemma_model_access_token")])
         assertEquals(303, preferences[intPreferencesKey("preferred_audio_input_device_id")])
         assertEquals(404, preferences[intPreferencesKey("preferred_audio_output_device_id")])
         assertEquals(true, preferences[booleanPreferencesKey("allow_app_audio_capture")])

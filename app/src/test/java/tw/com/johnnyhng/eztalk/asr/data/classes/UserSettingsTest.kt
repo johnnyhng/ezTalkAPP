@@ -18,6 +18,11 @@ class UserSettingsTest {
         assertEquals("", settings.selectedModelName)
         assertEquals("", settings.selectedTseModelName)
         assertEquals("", settings.mobileModelSha256)
+        assertEquals("cloud", settings.speakerLlmExecutionMode)
+        assertEquals("auto", settings.localGemmaBackend)
+        assertEquals("gemma-4-E2B-it_Google_Tensor_G5", settings.selectedLocalGemmaModelName)
+        assertEquals("", settings.localGemmaModelUrl)
+        assertEquals("", settings.localGemmaModelAccessToken)
     }
 
     @Test

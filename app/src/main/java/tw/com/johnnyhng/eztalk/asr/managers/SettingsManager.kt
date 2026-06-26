@@ -24,6 +24,10 @@ private val mobileModelSha256Key = stringPreferencesKey("mobile_model_sha256")
 private val entryScreenRouteKey = stringPreferencesKey("entry_screen_route")
 private val geminiModelKey = stringPreferencesKey("gemini_model")
 private val speakerLlmExecutionModeKey = stringPreferencesKey("speaker_llm_execution_mode")
+private val localGemmaBackendKey = stringPreferencesKey("local_gemma_backend")
+private val selectedLocalGemmaModelNameKey = stringPreferencesKey("selected_local_gemma_model_name")
+private val localGemmaModelUrlKey = stringPreferencesKey("local_gemma_model_url")
+private val localGemmaModelAccessTokenKey = stringPreferencesKey("local_gemma_model_access_token")
 private val useTseDetectionKey = booleanPreferencesKey("use_tse_detection")
 private val selectedTseModelNameKey = stringPreferencesKey("selected_tse_model_name")
 private val autoplayKey = booleanPreferencesKey("autoplay")
@@ -57,6 +61,12 @@ internal fun preferencesToUserSettings(preferences: Preferences): UserSettings {
         geminiModel = preferences[geminiModelKey] ?: defaultUserSettings.geminiModel,
         speakerLlmExecutionMode = preferences[speakerLlmExecutionModeKey]
             ?: defaultUserSettings.speakerLlmExecutionMode,
+        localGemmaBackend = preferences[localGemmaBackendKey] ?: defaultUserSettings.localGemmaBackend,
+        selectedLocalGemmaModelName = preferences[selectedLocalGemmaModelNameKey]
+            ?: defaultUserSettings.selectedLocalGemmaModelName,
+        localGemmaModelUrl = preferences[localGemmaModelUrlKey] ?: defaultUserSettings.localGemmaModelUrl,
+        localGemmaModelAccessToken = preferences[localGemmaModelAccessTokenKey]
+            ?: defaultUserSettings.localGemmaModelAccessToken,
         useTseDetection = preferences[useTseDetectionKey] ?: defaultUserSettings.useTseDetection,
         selectedTseModelName = preferences[selectedTseModelNameKey] ?: defaultUserSettings.selectedTseModelName,
         autoplay = preferences[autoplayKey] ?: defaultUserSettings.autoplay,
@@ -91,6 +101,10 @@ internal fun writeUserSettings(preferences: MutablePreferences, settings: UserSe
     preferences[entryScreenRouteKey] = sanitizeEntryScreenRoute(settings.entryScreenRoute)
     preferences[geminiModelKey] = settings.geminiModel
     preferences[speakerLlmExecutionModeKey] = settings.speakerLlmExecutionMode
+    preferences[localGemmaBackendKey] = settings.localGemmaBackend
+    preferences[selectedLocalGemmaModelNameKey] = settings.selectedLocalGemmaModelName
+    preferences[localGemmaModelUrlKey] = settings.localGemmaModelUrl
+    preferences[localGemmaModelAccessTokenKey] = settings.localGemmaModelAccessToken
     preferences[useTseDetectionKey] = settings.useTseDetection
     preferences[selectedTseModelNameKey] = settings.selectedTseModelName
     preferences[autoplayKey] = settings.autoplay
