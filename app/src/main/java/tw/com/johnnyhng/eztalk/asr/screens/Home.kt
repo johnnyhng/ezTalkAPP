@@ -28,6 +28,7 @@ import tw.com.johnnyhng.eztalk.asr.R
 import tw.com.johnnyhng.eztalk.asr.SimulateStreamingAsr
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import tw.com.johnnyhng.eztalk.asr.llm.LLM_LOG_TAG
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptEnglishTranslationModule
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmProviderFactory
@@ -511,6 +512,14 @@ fun HomeScreen(
                                 Log.d(
                                     TAG,
                                     "Home remote candidates merged into variants: file=${File(wavPath).name}, enabled=${userSettings.includeRemoteCandidatesInUtteranceVariants}, remote=${sentences.size}, beforeVariants=${current.utteranceVariants.size}, afterVariants=${mergedVariants.size}, utteranceVariants=$mergedVariants"
+                                )
+                                Log.i(
+                                    LLM_LOG_TAG,
+                                    "Home backend candidates merge file=${File(wavPath).name} " +
+                                        "includeRemoteCandidatesInUtteranceVariants=${userSettings.includeRemoteCandidatesInUtteranceVariants} " +
+                                        "remoteCandidates=${sentences.size}:$sentences " +
+                                        "beforeVariants=${current.utteranceVariants.size}:${current.utteranceVariants} " +
+                                        "mergedVariants=${mergedVariants.size}:$mergedVariants"
                                 )
                                 val updated = current.copy(
                                     remoteCandidates = sentences,

@@ -1,7 +1,8 @@
 package tw.com.johnnyhng.eztalk.asr.llm
 
 import android.util.Log
-import tw.com.johnnyhng.eztalk.asr.TAG
+
+internal const val LLM_LOG_TAG = "ezTalk-LLM"
 
 internal object LlmRequestLogger {
     private const val LOG_CHUNK_SIZE = 3000
@@ -12,7 +13,7 @@ internal object LlmRequestLogger {
         request: LlmRequest
     ) {
         safeInfo(
-            TAG,
+            LLM_LOG_TAG,
             "LLM request source=$source provider=${provider.providerName} " +
                 "model=${request.model.ifBlank { "(default/provider)" }} " +
                 "outputFormat=${request.outputFormat} systemLength=${request.systemInstruction?.length ?: 0} " +
@@ -32,14 +33,14 @@ internal object LlmRequestLogger {
     private fun logField(source: String, field: String, value: String) {
         val text = value.trim()
         if (text.isBlank()) {
-            safeDebug(TAG, "LLM request prompt source=$source field=$field chunk=0/0: (blank)")
+            safeDebug(LLM_LOG_TAG, "LLM request prompt source=$source field=$field chunk=0/0: (blank)")
             return
         }
 
         val chunks = text.chunked(LOG_CHUNK_SIZE)
         chunks.forEachIndexed { index, chunk ->
             safeDebug(
-                TAG,
+                LLM_LOG_TAG,
                 "LLM request prompt source=$source field=$field chunk=${index + 1}/${chunks.size}:\n$chunk"
             )
         }

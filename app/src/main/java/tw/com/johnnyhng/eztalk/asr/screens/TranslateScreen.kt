@@ -51,6 +51,7 @@ import tw.com.johnnyhng.eztalk.asr.audio.AudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.NoopAudioInputRoutingSession
 import tw.com.johnnyhng.eztalk.asr.audio.rememberSpeechOutputController
 import tw.com.johnnyhng.eztalk.asr.data.classes.Transcript
+import tw.com.johnnyhng.eztalk.asr.llm.LLM_LOG_TAG
 import tw.com.johnnyhng.eztalk.asr.llm.TranscriptCorrectionModule
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmProviderFactory
 import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
@@ -236,6 +237,15 @@ fun TranslateScreen(
                     }
                 )
                 val variantsChanged = loaded.transcript.utteranceVariants != transcript.utteranceVariants
+                Log.i(
+                    LLM_LOG_TAG,
+                    "Translate backend candidates merge file=${File(transcript.wavFilePath).name} " +
+                        "includeRemoteCandidatesInUtteranceVariants=${userSettings.includeRemoteCandidatesInUtteranceVariants} " +
+                        "remoteCandidates=${loaded.remoteCandidates.size}:${loaded.remoteCandidates} " +
+                        "beforeVariants=${transcript.utteranceVariants.size}:${transcript.utteranceVariants} " +
+                        "mergedVariants=${loaded.transcript.utteranceVariants.size}:${loaded.transcript.utteranceVariants} " +
+                        "variantsChanged=$variantsChanged"
+                )
                 val correctedTranscript = if (
                     userSettings.enableTranslateLlmCorrection &&
                     variantsChanged &&

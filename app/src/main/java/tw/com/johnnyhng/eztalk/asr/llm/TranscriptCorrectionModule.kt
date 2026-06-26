@@ -54,6 +54,11 @@ internal class TranscriptCorrectionModule(
             TAG,
             "Transcript correction request built model=$llmModel variants=${sanitizedVariants.size}:$sanitizedVariants contextLines=${contextLines.size}"
         )
+        Log.i(
+            LLM_LOG_TAG,
+            "Transcript correction variants entering LLM request model=$llmModel " +
+                "variants=${sanitizedVariants.size}:$sanitizedVariants contextLines=${contextLines.size}"
+        )
 
         return provider.generateLogged(request, source = "transcript_correction").map { response ->
             parseResponse(response)
