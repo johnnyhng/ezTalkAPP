@@ -61,14 +61,13 @@
     <string name="local_gemma_status_settings_only">狀態：app-level runtime warm-up 已啟用。模型匯入/刪除會在後續 phase 實作。</string>
     <string name="local_gemma_import_model">匯入模型</string>
     <string name="local_gemma_delete_model">刪除本地模型</string>
-    <string name="speaker_local_gemma_status_label">Local Gemma：%1$s</string>
     <string name="speaker_local_gemma_download">下載 Local Gemma</string>
-    <string name="speaker_local_gemma_refresh">重新整理 Local Gemma 狀態</string>
     <string name="speaker_local_gemma_download_complete">Local Gemma 下載完成</string>
     <string name="speaker_local_gemma_download_failed">Local Gemma 下載失敗：%1$s</string>
     <string name="speaker_local_gemma_download_progress">Local Gemma：已下載 %1$d / %2$d 位元組</string>
     <string name="speaker_local_gemma_download_progress_indeterminate">Local Gemma：已下載 %1$d 位元組</string>
     <string name="speaker_local_gemma_import">匯入本機 .litertlm 檔案</string>
+    <string name="speaker_local_gemma_importing_title">正在匯入 Local Gemma</string>
     <string name="speaker_local_gemma_import_success">模型匯入成功。</string>
     <string name="speaker_local_gemma_import_failed">模型匯入失敗。</string>
     <string name="speaker_local_gemma_delete">刪除 Local Gemma</string>
