@@ -19,6 +19,9 @@ Branch: `on-device-llm-v2`
 
 Recent commits:
 
+- `11d097de Move Local Gemma backend before autoplay`
+- `470a2198 Reset Local Gemma selection after delete`
+- `cf179aee Refine Local Gemma settings controls`
 - `c731e182 Use empty Local Gemma model as cloud fallback`
 - `89177eed Add cloud fallback action to Gemma loading`
 
@@ -31,8 +34,27 @@ Current Local Gemma model selection behavior:
 - If the selected Local Gemma model is empty:
   - app startup warm-up is skipped;
   - Local Gemma mode uses Cloud LLM fallback;
-  - Auto mode uses Cloud LLM fallback unless another local model is selected;
-  - Settings status shows Cloud LLM fallback.
+  - Auto mode uses Cloud LLM fallback unless another local model is selected.
+- Deleting a selected Local Gemma model resets `selectedLocalGemmaModelName` back to empty and refreshes the model list.
+
+Current Local Gemma Settings UI:
+
+- Local Gemma model management follows the ASR/TSE model management layout:
+  - model dropdown first;
+  - right-aligned icon buttons below it.
+- Icon buttons:
+  - Cloud icon opens the network download dialog;
+  - Folder icon imports a local `.litertlm` file;
+  - Delete icon removes the selected local model.
+- The previous Local Gemma status text and manual refresh button are removed.
+- Network download uses a popup dialog with:
+  - URL field;
+  - optional access token field;
+  - progress bar/progress text during download;
+  - inline error text on failure.
+- Local import shows an indeterminate progress dialog while copying the selected `.litertlm` file.
+- Local Gemma backend selection is in Advanced Settings before Autoplay.
+- Advanced Settings no longer keeps persistent Local Gemma URL/token fields; those fields live in the download dialog.
 
 Current loading UX:
 

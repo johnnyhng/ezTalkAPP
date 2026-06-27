@@ -78,8 +78,12 @@ Compare these fields for A/B:
 4. Auto mode with selected local model missing.
 5. Local Gemma mode with empty model selected: should skip local warm-up and use Cloud LLM.
 6. Local Gemma loading dialog: press Continue with Cloud LLM; UI should leave loading state and Settings should show Cloud mode.
-7. Translate LLM correction.
-8. Experiment Zhuyin suggestions.
-9. Speaker semantic fallback.
+7. Settings Local Gemma delete: delete a selected local model; selected model should reset to `(empty) Cloud LLM fallback` and list should refresh.
+8. Settings Local Gemma download: Cloud icon should open URL/token dialog and show progress during download.
+9. Settings Local Gemma import: Folder icon should open file picker and show import progress dialog.
+10. Settings Advanced section: Local Gemma backend should appear before Autoplay.
+11. Translate LLM correction.
+12. Experiment Zhuyin suggestions.
+13. Speaker semantic fallback.
 
 Prompt text should remain unchanged across Cloud and Local Gemma runs unless explicitly changed in a later prompt-tuning phase.
