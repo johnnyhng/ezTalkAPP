@@ -20,6 +20,7 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
   - `auto`: try NPU, then GPU, then CPU.
   - `npu`: requires `libLiteRtDispatch_GoogleTensor.so` in `nativeLibraryDir`.
   - `gpu` / `cpu`: use LiteRT-LM GPU / CPU backend directly.
+  - Tensor/G5 compiled models are restricted to NPU. Auto does not fallback to GPU/CPU for those models because LiteRT GPU/OpenGL cannot run the Tensor-compiled graph.
 - Native dispatch library:
   - `app/src/main/jniLibs/arm64-v8a/libLiteRtDispatch_GoogleTensor.so`
   - Required for Pixel Tensor NPU dispatch.

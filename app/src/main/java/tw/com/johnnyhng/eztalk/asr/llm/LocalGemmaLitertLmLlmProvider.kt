@@ -152,7 +152,7 @@ internal class LocalGemmaLitertLmLlmProvider(
     }
 
     private fun createEngine(candidateBackend: LocalGemmaBackend): Engine {
-        warnIfBackendModelMismatch(candidateBackend)
+        rejectUnsupportedBackendModelMismatch(candidateBackend)
         val engineConfig = when (candidateBackend) {
             LocalGemmaBackend.NPU -> {
                 val nativeLibDir = appContext.applicationInfo.nativeLibraryDir
@@ -176,26 +176,39 @@ internal class LocalGemmaLitertLmLlmProvider(
             libDir.listFiles()?.any { it.name == GOOGLE_TENSOR_DISPATCH_LIB } == true
     }
 
-    private fun warnIfBackendModelMismatch(candidateBackend: LocalGemmaBackend) {
+    private fun rejectUnsupportedBackendModelMismatch(candidateBackend: LocalGemmaBackend) {
         if (
             candidateBackend != LocalGemmaBackend.NPU &&
-            modelPath.contains("Google_Tensor", ignoreCase = true)
+            isTensorCompiledModel()
         ) {
-            safeLogWarning(
-                LLM_LOG_TAG,
-                "Tensor-compiled Local Gemma model selected with backend=${candidateBackend.storageValue}; " +
-                    "GPU/CPU usually require a non-Tensor LiteRT-LM model"
+            throw IllegalArgumentException(
+                "Tensor-compiled Local Gemma model requires NPU backend. " +
+                    "Selected backend=${candidateBackend.storageValue}. " +
+                    "Use NPU for Google_Tensor/G5 models, or download a non-Tensor LiteRT-LM model for GPU/CPU."
             )
         }
     }
 
     private fun LocalGemmaBackend.candidates(): List<LocalGemmaBackend> {
         return when (this) {
-            LocalGemmaBackend.AUTO -> listOf(LocalGemmaBackend.NPU, LocalGemmaBackend.GPU, LocalGemmaBackend.CPU)
+            LocalGemmaBackend.AUTO -> if (isTensorCompiledModel()) {
+                safeLogInfo(
+                    LLM_LOG_TAG,
+                    "Local Gemma auto backend restricted to NPU for Tensor-compiled modelPath=$modelPath"
+                )
+                listOf(LocalGemmaBackend.NPU)
+            } else {
+                listOf(LocalGemmaBackend.NPU, LocalGemmaBackend.GPU, LocalGemmaBackend.CPU)
+            }
             LocalGemmaBackend.NPU -> listOf(LocalGemmaBackend.NPU)
             LocalGemmaBackend.GPU -> listOf(LocalGemmaBackend.GPU)
             LocalGemmaBackend.CPU -> listOf(LocalGemmaBackend.CPU)
         }
+    }
+
+    private fun isTensorCompiledModel(): Boolean {
+        return modelPath.contains("Google_Tensor", ignoreCase = true) ||
+            modelPath.contains("Tensor_G", ignoreCase = true)
     }
 
     private companion object {
