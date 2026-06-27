@@ -38,8 +38,31 @@ internal object LocalGemmaRuntimeManager {
     @Volatile
     private var activeProvider: LocalGemmaLitertLmLlmProvider? = null
 
+    @Volatile
+    private var warmUpGeneration: Long = 0L
+
     private val _state = MutableStateFlow<LocalGemmaRuntimeState>(LocalGemmaRuntimeState.Idle)
     val state: StateFlow<LocalGemmaRuntimeState> = _state.asStateFlow()
+
+    private fun nextWarmUpGeneration(): Long = synchronized(this) {
+        warmUpGeneration += 1L
+        warmUpGeneration
+    }
+
+    private fun isCurrentWarmUpGeneration(generation: Long): Boolean = synchronized(this) {
+        warmUpGeneration == generation
+    }
+
+    fun cancelWarmUpForCloudFallback() {
+        synchronized(this) {
+            warmUpGeneration += 1L
+            _state.value = LocalGemmaRuntimeState.Idle
+        }
+        safeLogInfo(
+            LLM_LOG_TAG,
+            "Local Gemma warm-up cancelled by user; switching speaker LLM execution mode to cloud"
+        )
+    }
 
     fun getOrCreateProvider(
         context: Context,
@@ -85,6 +108,7 @@ internal object LocalGemmaRuntimeManager {
         context: Context,
         settings: UserSettings
     ): Result<Unit> {
+        val generation = nextWarmUpGeneration()
         val executionMode = SpeakerLlmExecutionMode.fromStorageValue(settings.speakerLlmExecutionMode)
         if (executionMode == SpeakerLlmExecutionMode.CLOUD) {
             _state.value = LocalGemmaRuntimeState.Idle
@@ -97,7 +121,9 @@ internal object LocalGemmaRuntimeManager {
 
         if (model == null) {
             if (executionMode == SpeakerLlmExecutionMode.AUTO_LOCAL) {
-                _state.value = LocalGemmaRuntimeState.Idle
+                if (isCurrentWarmUpGeneration(generation)) {
+                    _state.value = LocalGemmaRuntimeState.Idle
+                }
                 safeLogInfo(
                     LLM_LOG_TAG,
                     "Local Gemma warm-up skipped in auto mode: model=${settings.selectedLocalGemmaModelName} unavailable"
@@ -106,11 +132,13 @@ internal object LocalGemmaRuntimeManager {
             }
 
             val message = "Local Gemma model not found: ${settings.selectedLocalGemmaModelName}"
-            _state.value = LocalGemmaRuntimeState.Error(
-                modelName = settings.selectedLocalGemmaModelName,
-                backend = backend,
-                message = message
-            )
+            if (isCurrentWarmUpGeneration(generation)) {
+                _state.value = LocalGemmaRuntimeState.Error(
+                    modelName = settings.selectedLocalGemmaModelName,
+                    backend = backend,
+                    message = message
+                )
+            }
             safeLogWarning(LLM_LOG_TAG, message)
             return Result.failure(LlmError.ProviderFailure(message))
         }
@@ -120,7 +148,8 @@ internal object LocalGemmaRuntimeManager {
             modelName = model.name,
             modelPath = model.path,
             backend = backend,
-            executionMode = executionMode
+            executionMode = executionMode,
+            generation = generation
         )
     }
 
@@ -129,8 +158,16 @@ internal object LocalGemmaRuntimeManager {
         modelName: String,
         modelPath: String,
         backend: LocalGemmaBackend,
-        executionMode: SpeakerLlmExecutionMode
+        executionMode: SpeakerLlmExecutionMode,
+        generation: Long
     ): Result<Unit> {
+        if (!isCurrentWarmUpGeneration(generation)) {
+            safeLogInfo(
+                LLM_LOG_TAG,
+                "Local Gemma shared warm-up skipped stale request model=$modelName backend=${backend.storageValue}"
+            )
+            return Result.success(Unit)
+        }
         _state.value = LocalGemmaRuntimeState.Loading(modelName = modelName, backend = backend)
         safeLogInfo(
             LLM_LOG_TAG,
@@ -149,7 +186,14 @@ internal object LocalGemmaRuntimeManager {
                     LLM_LOG_TAG,
                     "Local Gemma shared warm-up ready model=$modelName backend=${backend.storageValue}"
                 )
-                _state.value = LocalGemmaRuntimeState.Ready(modelName = modelName, backend = backend)
+                if (isCurrentWarmUpGeneration(generation)) {
+                    _state.value = LocalGemmaRuntimeState.Ready(modelName = modelName, backend = backend)
+                } else {
+                    safeLogInfo(
+                        LLM_LOG_TAG,
+                        "Ignoring stale Local Gemma warm-up success model=$modelName backend=${backend.storageValue}"
+                    )
+                }
             }
             .onFailure { error ->
                 val message = error.message ?: error.javaClass.simpleName
@@ -158,6 +202,13 @@ internal object LocalGemmaRuntimeManager {
                     "Local Gemma shared warm-up failed model=$modelName backend=${backend.storageValue}",
                     error
                 )
+                if (!isCurrentWarmUpGeneration(generation)) {
+                    safeLogInfo(
+                        LLM_LOG_TAG,
+                        "Ignoring stale Local Gemma warm-up failure model=$modelName backend=${backend.storageValue}"
+                    )
+                    return@onFailure
+                }
                 _state.value = if (executionMode == SpeakerLlmExecutionMode.AUTO_LOCAL) {
                     safeLogWarning(
                         LLM_LOG_TAG,

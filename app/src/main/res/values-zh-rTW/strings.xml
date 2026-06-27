@@ -75,6 +75,7 @@
     <string name="speaker_local_gemma_delete_failed">模型刪除失敗。</string>
     <string name="local_gemma_loading_title">正在載入 Local Gemma</string>
     <string name="local_gemma_loading_message">正在用 %2$s warm up %1$s。首次啟動可能需要較久。</string>
+    <string name="local_gemma_continue_with_cloud">改用 Cloud LLM 繼續</string>
     <string name="local_gemma_error_title">Local Gemma 無法使用</string>
     <string name="local_gemma_error_message">模型：%1$s\nBackend：%2$s\n%3$s</string>
     <string name="speech_detection_mode_label">語音偵測模式</string>

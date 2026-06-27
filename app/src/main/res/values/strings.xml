@@ -80,6 +80,7 @@
     <string name="speaker_local_gemma_delete_failed">Failed to delete model.</string>
     <string name="local_gemma_loading_title">Loading Local Gemma</string>
     <string name="local_gemma_loading_message">Warming up %1$s on %2$s. This may take a while on first launch.</string>
+    <string name="local_gemma_continue_with_cloud">Continue with Cloud LLM</string>
     <string name="local_gemma_error_title">Local Gemma unavailable</string>
     <string name="local_gemma_error_message">Model: %1$s\nBackend: %2$s\n%3$s</string>
     <string name="speech_detection_mode_label">Speech detection mode</string>

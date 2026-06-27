@@ -77,6 +77,7 @@ import tw.com.johnnyhng.eztalk.asr.auth.GoogleSignInManager
 import tw.com.johnnyhng.eztalk.asr.auth.displayLabel
 import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaRuntimeManager
 import tw.com.johnnyhng.eztalk.asr.llm.LocalGemmaRuntimeState
+import tw.com.johnnyhng.eztalk.asr.llm.SpeakerLlmExecutionMode
 import tw.com.johnnyhng.eztalk.asr.utils.TLSExpireResolver
 import tw.com.johnnyhng.eztalk.asr.managers.HomeViewModel
 import tw.com.johnnyhng.eztalk.asr.managers.SettingsManager
@@ -293,7 +294,11 @@ fun MainScreen(
         state = localGemmaRuntimeState,
         dismissedErrorKey = dismissedLocalGemmaErrorKey,
         onOpenSettings = { navController.navigateSingleTopTo(NavRoutes.Settings.route) },
-        onDismissError = { dismissedLocalGemmaErrorKey = it }
+        onDismissError = { dismissedLocalGemmaErrorKey = it },
+        onContinueWithCloud = {
+            LocalGemmaRuntimeManager.cancelWarmUpForCloudFallback()
+            homeViewModel.updateSpeakerLlmExecutionMode(SpeakerLlmExecutionMode.CLOUD.storageValue)
+        }
     )
 
     Scaffold(
@@ -409,7 +414,8 @@ private fun LocalGemmaRuntimeDialog(
     state: LocalGemmaRuntimeState,
     dismissedErrorKey: String?,
     onOpenSettings: () -> Unit,
-    onDismissError: (String) -> Unit
+    onDismissError: (String) -> Unit,
+    onContinueWithCloud: () -> Unit
 ) {
     when (state) {
         LocalGemmaRuntimeState.Idle,
@@ -436,7 +442,11 @@ private fun LocalGemmaRuntimeDialog(
                         )
                     }
                 },
-                confirmButton = {}
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = onContinueWithCloud) {
+                        Text(text = stringResource(R.string.local_gemma_continue_with_cloud))
+                    }
+                }
             )
         }
 
