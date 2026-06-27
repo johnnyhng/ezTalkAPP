@@ -197,8 +197,7 @@ fun SettingsScreen(
     val localGemmaBackendOptions = listOf(
         LocalGemmaBackend.AUTO.storageValue to context.getString(R.string.local_gemma_backend_auto),
         LocalGemmaBackend.NPU.storageValue to context.getString(R.string.local_gemma_backend_npu),
-        LocalGemmaBackend.GPU.storageValue to context.getString(R.string.local_gemma_backend_gpu),
-        LocalGemmaBackend.CPU.storageValue to context.getString(R.string.local_gemma_backend_cpu)
+        LocalGemmaBackend.GPU.storageValue to context.getString(R.string.local_gemma_backend_gpu)
     )
     val selectedLocalGemmaBackendLabel = localGemmaBackendOptions
         .firstOrNull { it.first == userSettings.localGemmaBackend }

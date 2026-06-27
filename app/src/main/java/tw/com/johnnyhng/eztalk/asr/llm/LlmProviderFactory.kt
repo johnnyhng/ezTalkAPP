@@ -22,8 +22,7 @@ internal class LlmProviderFactory(
         val provider = when (executionMode) {
             SpeakerLlmExecutionMode.CLOUD -> createGeminiProvider(settings.geminiModel)
             SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM -> createLocalGemmaProvider(settings)
-            SpeakerLlmExecutionMode.AUTO_LOCAL -> createLocalGemmaProvider(settings)
-                ?: createGeminiProvider(settings.geminiModel)
+            SpeakerLlmExecutionMode.AUTO_LOCAL -> createAutoProvider(settings)
         }
         safeLogInfo(
             LLM_LOG_TAG,
@@ -32,6 +31,20 @@ internal class LlmProviderFactory(
                 "localBackend=${settings.localGemmaBackend}"
         )
         return provider
+    }
+
+    private fun createAutoProvider(settings: UserSettings): LlmProvider? {
+        val localProvider = createLocalGemmaProvider(settings)
+        val cloudProvider = createGeminiProvider(settings.geminiModel)
+        return when {
+            localProvider != null && cloudProvider != null -> FallbackLlmProvider(
+                primary = localProvider,
+                fallback = cloudProvider,
+                fallbackReason = "auto_local"
+            )
+            localProvider != null -> localProvider
+            else -> cloudProvider
+        }
     }
 
     fun createLocalGemmaProvider(settings: UserSettings): LlmProvider? {

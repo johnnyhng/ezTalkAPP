@@ -17,10 +17,12 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
 - Model layout: app-private files under `models/local_gemma/<modelName>/model.litertlm`.
 - Legacy model layout still resolves `models/gemma4_e2b/model.litertlm`.
 - Backend selection:
-  - `auto`: use LiteRT-LM default `EngineConfig(modelPath)` backend selection. This matches the Pixel NPU incident fix in commit `733c19420ffc78915feefe74f467090985aae661`.
+  - `auto`: try NPU, then GPU. CPU is disabled because it is too slow for the target UX.
   - `npu`: requires `libLiteRtDispatch_GoogleTensor.so` in `nativeLibraryDir`.
-  - `gpu` / `cpu`: use LiteRT-LM GPU / CPU backend directly.
-  - Tensor/G5 compiled models are restricted to NPU. Auto does not fallback to GPU/CPU for those models because LiteRT GPU/OpenGL cannot run the Tensor-compiled graph.
+  - `gpu`: use LiteRT-LM GPU backend directly.
+  - `cpu`: disabled.
+  - Tensor/G5 compiled models are restricted to NPU. Auto does not fallback to GPU for those models because LiteRT GPU/OpenGL cannot run the Tensor-compiled graph.
+  - In Auto mode, failed local initialization/generation falls back to Cloud LLM when Gemini is configured.
 - Native dispatch library:
   - `app/src/main/jniLibs/arm64-v8a/libLiteRtDispatch_GoogleTensor.so`
   - Required for Pixel Tensor NPU dispatch.

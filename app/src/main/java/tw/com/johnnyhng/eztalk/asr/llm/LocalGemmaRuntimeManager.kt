@@ -119,7 +119,8 @@ internal object LocalGemmaRuntimeManager {
             context = context,
             modelName = model.name,
             modelPath = model.path,
-            backend = backend
+            backend = backend,
+            executionMode = executionMode
         )
     }
 
@@ -127,7 +128,8 @@ internal object LocalGemmaRuntimeManager {
         context: Context,
         modelName: String,
         modelPath: String,
-        backend: LocalGemmaBackend
+        backend: LocalGemmaBackend,
+        executionMode: SpeakerLlmExecutionMode
     ): Result<Unit> {
         _state.value = LocalGemmaRuntimeState.Loading(modelName = modelName, backend = backend)
         safeLogInfo(
@@ -156,11 +158,19 @@ internal object LocalGemmaRuntimeManager {
                     "Local Gemma shared warm-up failed model=$modelName backend=${backend.storageValue}",
                     error
                 )
-                _state.value = LocalGemmaRuntimeState.Error(
-                    modelName = modelName,
-                    backend = backend,
-                    message = message
-                )
+                _state.value = if (executionMode == SpeakerLlmExecutionMode.AUTO_LOCAL) {
+                    safeLogWarning(
+                        LLM_LOG_TAG,
+                        "Local Gemma warm-up failed in auto mode; cloud LLM fallback remains available"
+                    )
+                    LocalGemmaRuntimeState.Idle
+                } else {
+                    LocalGemmaRuntimeState.Error(
+                        modelName = modelName,
+                        backend = backend,
+                        message = message
+                    )
+                }
             }
     }
 }
