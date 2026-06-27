@@ -452,6 +452,9 @@ fun SettingsScreen(
                 ),
                 Toast.LENGTH_SHORT
             ).show()
+            if (success) {
+                homeViewModel.updateSelectedLocalGemmaModelName("")
+            }
             homeViewModel.refreshLocalGemmaModels()
         }
     }
