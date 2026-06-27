@@ -122,6 +122,13 @@ internal class LocalGemmaLitertLmLlmProvider(
                 "Initializing LiteRT-LM Engine modelPath=$modelPath backend=${backend.storageValue}"
             )
 
+            if (backend == LocalGemmaBackend.AUTO) {
+                return createDefaultEngine().also { initialized ->
+                    engine = initialized
+                    safeLogInfo(LLM_LOG_TAG, "LiteRT-LM Engine initialized with default backend selection")
+                }
+            }
+
             var firstError: Throwable? = null
             for (candidateBackend in backend.candidates()) {
                 val initialized = runCatching {
@@ -149,6 +156,14 @@ internal class LocalGemmaLitertLmLlmProvider(
 
             throw firstError ?: IllegalStateException("Failed to initialize any LiteRT-LM backend")
         }
+    }
+
+    private fun createDefaultEngine(): Engine {
+        safeLogInfo(
+            LLM_LOG_TAG,
+            "Attempting LiteRT-LM default EngineConfig backend selection modelPath=$modelPath"
+        )
+        return Engine(EngineConfig(modelPath = modelPath)).also { it.initialize() }
     }
 
     private fun createEngine(candidateBackend: LocalGemmaBackend): Engine {
@@ -191,15 +206,7 @@ internal class LocalGemmaLitertLmLlmProvider(
 
     private fun LocalGemmaBackend.candidates(): List<LocalGemmaBackend> {
         return when (this) {
-            LocalGemmaBackend.AUTO -> if (isTensorCompiledModel()) {
-                safeLogInfo(
-                    LLM_LOG_TAG,
-                    "Local Gemma auto backend restricted to NPU for Tensor-compiled modelPath=$modelPath"
-                )
-                listOf(LocalGemmaBackend.NPU)
-            } else {
-                listOf(LocalGemmaBackend.NPU, LocalGemmaBackend.GPU, LocalGemmaBackend.CPU)
-            }
+            LocalGemmaBackend.AUTO -> emptyList()
             LocalGemmaBackend.NPU -> listOf(LocalGemmaBackend.NPU)
             LocalGemmaBackend.GPU -> listOf(LocalGemmaBackend.GPU)
             LocalGemmaBackend.CPU -> listOf(LocalGemmaBackend.CPU)
