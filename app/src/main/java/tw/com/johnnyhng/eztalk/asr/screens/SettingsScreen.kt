@@ -1053,6 +1053,57 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
+                        text = stringResource(R.string.local_gemma_settings_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = stringResource(R.string.local_gemma_settings_summary),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ExposedDropdownMenuBox(
+                        expanded = localGemmaBackendMenuExpanded,
+                        onExpandedChange = {
+                            if (!isDownloading && !isLocalGemmaDownloadRunning && !isLocalGemmaImportRunning) {
+                                localGemmaBackendMenuExpanded = !localGemmaBackendMenuExpanded
+                            }
+                        }
+                    ) {
+                        OutlinedTextField(
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            readOnly = true,
+                            value = selectedLocalGemmaBackendLabel,
+                            onValueChange = {},
+                            label = { Text(stringResource(R.string.local_gemma_backend_label)) },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = localGemmaBackendMenuExpanded)
+                            },
+                            enabled = !isDownloading && !isLocalGemmaDownloadRunning && !isLocalGemmaImportRunning
+                        )
+                        ExposedDropdownMenu(
+                            expanded = localGemmaBackendMenuExpanded,
+                            onDismissRequest = { localGemmaBackendMenuExpanded = false },
+                            modifier = Modifier.exposedDropdownSize()
+                        ) {
+                            localGemmaBackendOptions.forEach { (value, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        homeViewModel.updateLocalGemmaBackend(value)
+                                        localGemmaBackendMenuExpanded = false
+                                    },
+                                    leadingIcon = {
+                                        RadioButton(
+                                            selected = value == userSettings.localGemmaBackend,
+                                            onClick = null
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
                         text = stringResource(R.string.autoplay_label),
                         style = MaterialTheme.typography.titleMedium
                     )
@@ -1157,57 +1208,6 @@ fun SettingsScreen(
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.local_gemma_settings_title),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = stringResource(R.string.local_gemma_settings_summary),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ExposedDropdownMenuBox(
-                        expanded = localGemmaBackendMenuExpanded,
-                        onExpandedChange = {
-                            if (!isDownloading && !isLocalGemmaDownloadRunning && !isLocalGemmaImportRunning) {
-                                localGemmaBackendMenuExpanded = !localGemmaBackendMenuExpanded
-                            }
-                        }
-                    ) {
-                        OutlinedTextField(
-                            modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            readOnly = true,
-                            value = selectedLocalGemmaBackendLabel,
-                            onValueChange = {},
-                            label = { Text(stringResource(R.string.local_gemma_backend_label)) },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = localGemmaBackendMenuExpanded)
-                            },
-                            enabled = !isDownloading && !isLocalGemmaDownloadRunning && !isLocalGemmaImportRunning
-                        )
-                        ExposedDropdownMenu(
-                            expanded = localGemmaBackendMenuExpanded,
-                            onDismissRequest = { localGemmaBackendMenuExpanded = false },
-                            modifier = Modifier.exposedDropdownSize()
-                        ) {
-                            localGemmaBackendOptions.forEach { (value, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        homeViewModel.updateLocalGemmaBackend(value)
-                                        localGemmaBackendMenuExpanded = false
-                                    },
-                                    leadingIcon = {
-                                        RadioButton(
-                                            selected = value == userSettings.localGemmaBackend,
-                                            onClick = null
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
                     Text(stringResource(R.string.audio_routing_title), style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = stringResource(
