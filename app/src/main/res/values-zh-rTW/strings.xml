@@ -50,6 +50,7 @@
     <string name="local_gemma_model_name_label">Local Gemma 模型名稱</string>
     <string name="local_gemma_model">Local Gemma 模型</string>
     <string name="no_local_gemma_model_selected">未選取 Local Gemma 模型</string>
+    <string name="local_gemma_cloud_fallback_model">（empty）Cloud LLM fallback</string>
     <string name="local_gemma_backend_label">Local Gemma backend</string>
     <string name="local_gemma_backend_auto">Auto</string>
     <string name="local_gemma_backend_npu">NPU</string>
@@ -73,6 +74,7 @@
     <string name="speaker_local_gemma_delete">刪除 Local Gemma</string>
     <string name="speaker_local_gemma_delete_success">模型刪除成功。</string>
     <string name="speaker_local_gemma_delete_failed">模型刪除失敗。</string>
+    <string name="speaker_local_gemma_delete_empty_denied">empty Cloud LLM fallback 選項不可刪除。</string>
     <string name="local_gemma_loading_title">正在載入 Local Gemma</string>
     <string name="local_gemma_loading_message">正在用 %2$s warm up %1$s。首次啟動可能需要較久。</string>
     <string name="local_gemma_continue_with_cloud">改用 Cloud LLM 繼續</string>
@@ -102,6 +104,7 @@
     <string name="speaker_local_llm_download_progress">已下載 %1$d / %2$d 位元組</string>
     <string name="speaker_local_llm_download_progress_indeterminate">已下載 %1$d 位元組</string>
     <string name="speaker_local_llm_status_checking">檢查中…</string>
+    <string name="speaker_local_llm_status_cloud_fallback">Cloud LLM fallback</string>
     <string name="speaker_local_llm_status_available">可用</string>
     <string name="speaker_local_llm_status_downloadable">可下載</string>
     <string name="speaker_local_llm_status_downloading">下載中</string>

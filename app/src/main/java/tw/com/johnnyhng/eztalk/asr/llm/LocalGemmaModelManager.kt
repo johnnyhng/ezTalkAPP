@@ -23,6 +23,7 @@ internal class LocalGemmaModelManager(
     private val baseDir = File(appContext.filesDir, "models/local_gemma")
 
     companion object {
+        const val CLOUD_FALLBACK_MODEL_NAME = ""
         const val DEFAULT_LOCAL_GEMMA_URL =
             "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-litert-lm.litertlm"
         private const val MODEL_FILE_NAME = "model.litertlm"
@@ -35,7 +36,7 @@ internal class LocalGemmaModelManager(
             baseDir.mkdirs()
         }
 
-        val models = mutableListOf<LocalGemmaModel>()
+        val models = mutableListOf(LocalGemmaModel(name = CLOUD_FALLBACK_MODEL_NAME, path = ""))
         baseDir.listFiles()
             ?.asSequence()
             ?.filter { it.isDirectory }
@@ -75,6 +76,7 @@ internal class LocalGemmaModelManager(
     }
 
     fun check(modelName: String): SpeakerLocalLlmStatus {
+        if (modelName.isBlank()) return SpeakerLocalLlmStatus.CloudFallback
         return if (isUsableModelFile(getModelFile(modelName))) {
             SpeakerLocalLlmStatus.Available
         } else {
@@ -180,6 +182,7 @@ internal class LocalGemmaModelManager(
     }
 
     fun deleteModel(modelName: String): Boolean {
+        if (modelName.isBlank()) return false
         return try {
             val modelDir = if (modelName == LEGACY_MODEL_NAME) {
                 File(appContext.filesDir, "models/gemma4_e2b")

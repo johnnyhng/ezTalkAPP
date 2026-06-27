@@ -106,6 +106,7 @@ private fun localGemmaStatusText(
 ): String {
     return when (status) {
         SpeakerLocalLlmStatus.Checking -> context.getString(R.string.speaker_local_llm_status_checking)
+        SpeakerLocalLlmStatus.CloudFallback -> context.getString(R.string.speaker_local_llm_status_cloud_fallback)
         SpeakerLocalLlmStatus.Available -> context.getString(R.string.speaker_local_llm_status_available)
         SpeakerLocalLlmStatus.Downloadable -> context.getString(R.string.speaker_local_llm_status_downloadable)
         is SpeakerLocalLlmStatus.Downloading -> context.getString(R.string.speaker_local_llm_status_downloading)
@@ -372,20 +373,28 @@ fun SettingsScreen(
     }
 
     launchLocalGemmaDelete = { modelName ->
-        val success = localGemmaModelManager.deleteModel(modelName)
-        Toast.makeText(
-            context,
-            context.getString(
-                if (success) {
-                    R.string.speaker_local_gemma_delete_success
-                } else {
-                    R.string.speaker_local_gemma_delete_failed
-                }
-            ),
-            Toast.LENGTH_SHORT
-        ).show()
-        homeViewModel.refreshLocalGemmaModels()
-        refreshLocalGemmaStatus()
+        if (modelName.isBlank()) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.speaker_local_gemma_delete_empty_denied),
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            val success = localGemmaModelManager.deleteModel(modelName)
+            Toast.makeText(
+                context,
+                context.getString(
+                    if (success) {
+                        R.string.speaker_local_gemma_delete_success
+                    } else {
+                        R.string.speaker_local_gemma_delete_failed
+                    }
+                ),
+                Toast.LENGTH_SHORT
+            ).show()
+            homeViewModel.refreshLocalGemmaModels()
+            refreshLocalGemmaStatus()
+        }
     }
 
     LaunchedEffect(signInManager, context, userSettings.userId) {
@@ -692,7 +701,7 @@ fun SettingsScreen(
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
                     readOnly = true,
                     value = userSettings.selectedLocalGemmaModelName.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.no_local_gemma_model_selected),
+                        ?: stringResource(R.string.local_gemma_cloud_fallback_model),
                     onValueChange = {},
                     label = { Text(stringResource(R.string.local_gemma_model)) },
                     trailingIcon = {
@@ -707,7 +716,12 @@ fun SettingsScreen(
                 ) {
                     localGemmaModels.forEach { model ->
                         DropdownMenuItem(
-                            text = { Text(model.name) },
+                            text = {
+                                Text(
+                                    model.name.takeIf { it.isNotBlank() }
+                                        ?: stringResource(R.string.local_gemma_cloud_fallback_model)
+                                )
+                            },
                             onClick = {
                                 homeViewModel.updateSelectedLocalGemmaModelName(model.name)
                                 localGemmaMenuExpanded = false
@@ -1146,6 +1160,7 @@ fun SettingsScreen(
                             },
                             enabled = !isDownloading &&
                                 !isLocalGemmaDownloadRunning &&
+                                userSettings.selectedLocalGemmaModelName.isNotBlank() &&
                                 localGemmaStatus == SpeakerLocalLlmStatus.Available
                         ) {
                             Text(stringResource(R.string.speaker_local_gemma_delete))

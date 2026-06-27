@@ -55,6 +55,7 @@
     <string name="local_gemma_model_name_label">Local Gemma model name</string>
     <string name="local_gemma_model">Local Gemma model</string>
     <string name="no_local_gemma_model_selected">No Local Gemma model selected</string>
+    <string name="local_gemma_cloud_fallback_model">(empty) Cloud LLM fallback</string>
     <string name="local_gemma_backend_label">Local Gemma backend</string>
     <string name="local_gemma_backend_auto">Auto</string>
     <string name="local_gemma_backend_npu">NPU</string>
@@ -78,6 +79,7 @@
     <string name="speaker_local_gemma_delete">Delete Local Gemma</string>
     <string name="speaker_local_gemma_delete_success">Model deleted successfully.</string>
     <string name="speaker_local_gemma_delete_failed">Failed to delete model.</string>
+    <string name="speaker_local_gemma_delete_empty_denied">The empty Cloud LLM fallback option cannot be deleted.</string>
     <string name="local_gemma_loading_title">Loading Local Gemma</string>
     <string name="local_gemma_loading_message">Warming up %1$s on %2$s. This may take a while on first launch.</string>
     <string name="local_gemma_continue_with_cloud">Continue with Cloud LLM</string>
@@ -107,6 +109,7 @@
     <string name="speaker_local_llm_download_progress">Downloaded %1$d / %2$d bytes</string>
     <string name="speaker_local_llm_download_progress_indeterminate">Downloaded %1$d bytes</string>
     <string name="speaker_local_llm_status_checking">Checking…</string>
+    <string name="speaker_local_llm_status_cloud_fallback">Cloud LLM fallback</string>
     <string name="speaker_local_llm_status_available">Available</string>
     <string name="speaker_local_llm_status_downloadable">Downloadable</string>
     <string name="speaker_local_llm_status_downloading">Downloading</string>

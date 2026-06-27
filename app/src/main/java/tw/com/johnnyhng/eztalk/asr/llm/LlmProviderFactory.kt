@@ -21,7 +21,17 @@ internal class LlmProviderFactory(
         val executionMode = SpeakerLlmExecutionMode.fromStorageValue(settings.speakerLlmExecutionMode)
         val provider = when (executionMode) {
             SpeakerLlmExecutionMode.CLOUD -> createGeminiProvider(settings.geminiModel)
-            SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM -> createLocalGemmaProvider(settings)
+            SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM -> {
+                if (settings.selectedLocalGemmaModelName.isBlank()) {
+                    safeLogInfo(
+                        LLM_LOG_TAG,
+                        "Local Gemma model is empty; using Cloud LLM fallback"
+                    )
+                    createGeminiProvider(settings.geminiModel)
+                } else {
+                    createLocalGemmaProvider(settings)
+                }
+            }
             SpeakerLlmExecutionMode.AUTO_LOCAL -> createAutoProvider(settings)
         }
         safeLogInfo(
@@ -48,6 +58,13 @@ internal class LlmProviderFactory(
     }
 
     fun createLocalGemmaProvider(settings: UserSettings): LlmProvider? {
+        if (settings.selectedLocalGemmaModelName.isBlank()) {
+            safeLogInfo(
+                LLM_LOG_TAG,
+                "Local Gemma provider skipped: empty model selection uses Cloud LLM fallback"
+            )
+            return null
+        }
         val model = localGemmaModelManager.resolveModel(settings.selectedLocalGemmaModelName)
         if (model == null) {
             safeLogWarning(

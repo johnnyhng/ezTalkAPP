@@ -2,6 +2,7 @@ package tw.com.johnnyhng.eztalk.asr.llm
 
 internal sealed interface SpeakerLocalLlmStatus {
     data object Checking : SpeakerLocalLlmStatus
+    data object CloudFallback : SpeakerLocalLlmStatus
     data object Available : SpeakerLocalLlmStatus
     data object Downloadable : SpeakerLocalLlmStatus
     data class Downloading(

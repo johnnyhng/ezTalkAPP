@@ -110,8 +110,16 @@ internal object LocalGemmaRuntimeManager {
     ): Result<Unit> {
         val generation = nextWarmUpGeneration()
         val executionMode = SpeakerLlmExecutionMode.fromStorageValue(settings.speakerLlmExecutionMode)
-        if (executionMode == SpeakerLlmExecutionMode.CLOUD) {
+        if (executionMode == SpeakerLlmExecutionMode.CLOUD ||
+            settings.selectedLocalGemmaModelName.isBlank()
+        ) {
             _state.value = LocalGemmaRuntimeState.Idle
+            if (settings.selectedLocalGemmaModelName.isBlank()) {
+                safeLogInfo(
+                    LLM_LOG_TAG,
+                    "Local Gemma warm-up skipped: empty model selection uses Cloud LLM fallback"
+                )
+            }
             return Result.success(Unit)
         }
 

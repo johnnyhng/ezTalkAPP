@@ -51,6 +51,14 @@ internal class SpeakerLlmProviderFactory(
             }
 
             SpeakerLlmExecutionMode.LOCAL_GEMMA_LITERT_LM -> {
+                if (localGemmaModelName.isBlank()) {
+                    return SpeakerLlmRuntimeSelection(
+                        provider = cloudProvider,
+                        sourceLabel = "cloud",
+                        localStatus = localStatus,
+                        executionMode = executionMode
+                    )
+                }
                 SpeakerLlmRuntimeSelection(
                     provider = localGemmaProvider,
                     sourceLabel = if (localGemmaProvider != null) {
@@ -78,6 +86,10 @@ internal class SpeakerLlmProviderFactory(
         modelName: String,
         backendValue: String
     ): LlmProvider? {
+        if (modelName.isBlank()) {
+            safeLogInfo(LLM_LOG_TAG, "Speaker Local Gemma skipped: empty model selection uses Cloud LLM fallback")
+            return null
+        }
         val model = LocalGemmaModelManager(appContext).resolveModel(modelName)
         if (model == null) {
             safeLogWarning(LLM_LOG_TAG, "Speaker Local Gemma unavailable model=$modelName")

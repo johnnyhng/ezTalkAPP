@@ -18,7 +18,7 @@ data class UserSettings(
     val geminiModel: String = "gemini-2.5-flash",
     val speakerLlmExecutionMode: String = "cloud",
     val localGemmaBackend: String = "auto",
-    val selectedLocalGemmaModelName: String = "gemma-4-E2B-it_Google_Tensor_G5",
+    val selectedLocalGemmaModelName: String = "",
     val localGemmaModelUrl: String = "",
     val localGemmaModelAccessToken: String = "",
     val useTseDetection: Boolean = false,
