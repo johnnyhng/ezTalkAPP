@@ -8,8 +8,38 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
 2. Shared Gemini provider abstraction + centralized request logging: done.
 3. Settings page for LLM mode and Local Gemma management: done.
 4. Local Gemma LiteRT-LM manual runtime: done.
-5. App-level shared runtime + loading UX: in progress / current implementation.
+5. App-level shared runtime + loading UX: done / current implementation.
 6. Feature integration and A/B validation: in progress / current implementation.
+
+## Current status snapshot
+
+Date: 2026-06-27
+
+Branch: `on-device-llm-v2`
+
+Recent commits:
+
+- `c731e182 Use empty Local Gemma model as cloud fallback`
+- `89177eed Add cloud fallback action to Gemma loading`
+
+Current Local Gemma model selection behavior:
+
+- The default `selectedLocalGemmaModelName` is now empty.
+- Empty model selection is a first-class sentinel meaning `(empty) Cloud LLM fallback`.
+- The Settings Local Gemma dropdown always includes the empty fallback option.
+- The empty fallback option cannot be deleted.
+- If the selected Local Gemma model is empty:
+  - app startup warm-up is skipped;
+  - Local Gemma mode uses Cloud LLM fallback;
+  - Auto mode uses Cloud LLM fallback unless another local model is selected;
+  - Settings status shows Cloud LLM fallback.
+
+Current loading UX:
+
+- Local Gemma loading dialog includes `Continue with Cloud LLM`.
+- Pressing the button immediately switches speaker LLM execution mode to Cloud.
+- The active warm-up state is invalidated so stale LiteRT-LM success/failure callbacks are ignored by the UI.
+- Native LiteRT-LM initialization may still finish in the background if already inside JNI, but the app no longer treats that stale result as active runtime state.
 
 ## Phase 4 LiteRT-LM solution
 
@@ -51,6 +81,8 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
 - Error UX:
   - Missing model or runtime initialization failure is surfaced through an app-level dialog.
   - The user can continue or jump to Settings.
+  - While loading, the user can switch to Cloud LLM and stop waiting for Local Gemma.
+  - Empty model selection is not an error; it intentionally skips Local Gemma and uses Cloud LLM fallback.
 
 ## Phase 6 validation hooks
 
@@ -62,5 +94,6 @@ Baseline: `v3.0` correction flow stays intact. Prompt behavior is intentionally 
 ## Known constraints
 
 - Tensor-compiled models such as `*_Google_Tensor_G5` should run on NPU. GPU/CPU fallback generally needs a non-Tensor LiteRT-LM model.
-- First local request may be slow because engine initialization happens on demand in Phase 4.
+- First local request or app warm-up may be slow because LiteRT-LM engine initialization is expensive.
 - The current prompt formatting follows the previous Local Gemma implementation and does not change the transcript correction prompt text.
+- CPU execution remains disabled because observed latency is not acceptable for UX.

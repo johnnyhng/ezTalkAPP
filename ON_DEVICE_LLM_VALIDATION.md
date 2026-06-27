@@ -37,6 +37,21 @@ Local Gemma warm-up skipped in auto mode ...
 LLM provider selected mode=auto_local provider=gemini ...
 ```
 
+Empty Local Gemma model selection:
+
+```text
+Local Gemma warm-up skipped: empty model selection uses Cloud LLM fallback
+LLM provider selected mode=<local_gemma_litert_lm|auto_local> provider=gemini ...
+```
+
+Loading dialog Cloud fallback:
+
+```text
+Local Gemma warm-up cancelled by user; switching speaker LLM execution mode to cloud
+Ignoring stale Local Gemma warm-up <success|failure> ...
+LLM provider selected mode=cloud provider=gemini ...
+```
+
 ## Expected request/response metrics
 
 Every LLM request should emit:
@@ -61,8 +76,10 @@ Compare these fields for A/B:
 2. Local Gemma mode + Home LLM correction.
 3. Auto mode with local model present.
 4. Auto mode with selected local model missing.
-5. Translate LLM correction.
-6. Experiment Zhuyin suggestions.
-7. Speaker semantic fallback.
+5. Local Gemma mode with empty model selected: should skip local warm-up and use Cloud LLM.
+6. Local Gemma loading dialog: press Continue with Cloud LLM; UI should leave loading state and Settings should show Cloud mode.
+7. Translate LLM correction.
+8. Experiment Zhuyin suggestions.
+9. Speaker semantic fallback.
 
 Prompt text should remain unchanged across Cloud and Local Gemma runs unless explicitly changed in a later prompt-tuning phase.
