@@ -3,7 +3,7 @@ package tw.com.johnnyhng.eztalk.asr.tse
 import android.util.Log
 
 /**
- * NativeTSE: Kotlin wrapper for the stateful realtime TSE NDK core.
+ * NativeTSE: Kotlin wrapper for the stateful realtime SOUL Filter (EAT Engine) NDK core.
  *
  * Input contract:
  * - `processFrame()` expects exactly 160 float samples (10 ms @ 16 kHz)
@@ -46,12 +46,6 @@ class NativeTSE {
         }
     }
 
-    /**
-     * Initialize the TSE Engine with model and d-vector
-     * @param modelPath Absolute path to .onnx model
-     * @param dvectorPath Absolute path to .bin d-vector
-     * @return Boolean success
-     */
     external fun init(modelPath: String, dvectorPath: String): Boolean
 
     /**
@@ -102,6 +96,11 @@ class NativeTSE {
      * Reset internal state (buffers and history) for a new utterance
      */
     external fun reset()
+
+    /**
+     * Return the number of speakers configured in the current native engine.
+     */
+    external fun getNumSpeakers(): Int
 
     /**
      * Stop the audio engine and release resources
